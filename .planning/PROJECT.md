@@ -105,8 +105,8 @@ Tradeoff anchor: nếu phải chọn giữa "nhiều tính năng" và "trải ng
 
 ## Constraints
 
-- **Tech stack**: Next.js 15 (App Router) + React 19 + TypeScript + Tailwind + shadcn/ui + Supabase (Postgres/Auth/Storage) + Vercel deploy. Em chọn để tối ưu DX, ecosystem, và time-to-ship.
-- **STT/Translation API**: Soniox WebSocket (real-time + translation). API key giữ ở server, không expose client. Anh đã OK với chi phí ~$0.10/phút.
+- **Tech stack**: Next.js 16 (App Router) + React 19 + TypeScript 5.6 + Tailwind 4 + shadcn/ui + Supabase (Postgres/Auth/Storage) + `@soniox/react` 2.1 + Dexie 4 (IndexedDB) + `@react-pdf/renderer` + `@serwist/next` PWA + Vercel deploy.
+- **STT/Translation API**: Soniox WebSocket (real-time + translation, model `stt-rt-v4`, mode `two_way`). Browser kết nối trực tiếp tới Soniox qua **temporary API key** (mint từ Next.js Route Handler) — không proxy qua server. Chi phí thực tế: **$0.12/giờ** (rẻ hơn 60× so với ước tính ban đầu; 30ph ≈ $0.06).
 - **Latency target**: end-to-end ≤ 2s từ lúc đối tác nói xong cụm từ đến lúc text hiện lên khung. Streaming partial transcript chấp nhận flicker nhẹ.
 - **Performance**: app phải chạy mượt trên mid-range mobile (Android 2-3 năm tuổi). Tránh heavy compute client-side.
 - **Privacy**: không lưu audio file. Transcript là dữ liệu nhạy cảm — cần Row-Level Security trên Supabase, access code phải khó đoán.
