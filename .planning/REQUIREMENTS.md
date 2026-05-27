@@ -150,6 +150,21 @@
 
 ---
 
-## Traceability (filled by roadmap)
+## Traceability
 
-(Will be populated when ROADMAP.md is created with phase mappings.)
+| Category | Phase |
+|----------|-------|
+| AUTH-01..08 | Phase 1 — Foundation |
+| OPS-01..04 | Phase 1 — Foundation |
+| STT-01..07 | Phase 2 — Streaming spike |
+| LANG-01..05 | Phase 2 — Streaming spike |
+| REL-01..03 | Phase 2 — Streaming spike |
+| SESS-01..06 | Phase 3 — Session lifecycle + autosave |
+| PERSIST-01..05 | Phase 3 — Session lifecycle + autosave |
+| REL-04 | Phase 3 — Session lifecycle + autosave |
+| HIST-01..06 | Phase 4 — History + edit + PDF export |
+| EXPORT-01..04 | Phase 4 — History + edit + PDF export |
+| UI-01..06 | Phase 5 — Layout switcher + polish |
+| REL-05 | Phase 5 — Layout switcher + polish |
+| ADMIN-01..08 | Phase 6 — Admin panel |
+| OPS-05 | Phase 7 — PWA wrap-up + launch |
