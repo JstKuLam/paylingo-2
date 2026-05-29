@@ -165,7 +165,7 @@ export default function SharedSummaryPage({ params }: PageProps) {
 
   if (loading && !summary) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#03000a] text-white">
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background text-white">
         <Loader2 className="w-8 h-8 animate-spin text-host" />
         <span className="text-slate-400 mt-4 text-xs font-semibold">Đang tải bản tóm tắt cuộc họp...</span>
       </div>
@@ -174,7 +174,7 @@ export default function SharedSummaryPage({ params }: PageProps) {
 
   if (error && !locked) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#03000a] px-4 text-center">
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background px-4 text-center">
         <div className="p-4 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 mb-4">
           <Lock className="w-8 h-8" />
         </div>
@@ -191,7 +191,7 @@ export default function SharedSummaryPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col p-4 md:p-6 bg-[#03000a] text-foreground relative overflow-y-auto">
+    <div className="min-h-screen w-full flex flex-col p-4 md:p-6 bg-background text-foreground relative overflow-y-auto">
       {/* Decorative Blob */}
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-host/5 rounded-full blur-3xl pointer-events-none z-0"></div>
       <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-partner/5 rounded-full blur-3xl pointer-events-none z-0"></div>
