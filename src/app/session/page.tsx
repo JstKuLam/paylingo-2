@@ -498,6 +498,16 @@ export default function SessionPage() {
             </p>
           </div>
         </div>
+
+        {/* Small version and build timestamp on the right */}
+        <div className="text-right flex flex-col justify-center">
+          <span className="text-[8px] md:text-[9px] text-slate-500 font-extrabold uppercase tracking-widest leading-none">
+            v1.2.8
+          </span>
+          <span className="text-[7px] md:text-[8px] text-slate-600 font-bold mt-0.5 leading-none">
+            2026-05-29 11:53
+          </span>
+        </div>
       </header>
 
       {/* Main Translation Container with Layout switching transitions */}

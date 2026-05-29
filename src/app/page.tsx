@@ -149,6 +149,9 @@ export default function Home() {
         <div className="mt-8 text-center text-xs text-slate-500 font-medium relative z-10 flex flex-col gap-1">
           <span>Hỗ trợ đàm thoại đa ngôn ngữ với độ trễ tối thiểu.</span>
           <span>Dành cho Host người Việt & đối tác nước ngoài.</span>
+          <span className="text-[10px] text-slate-600 font-semibold mt-1">
+            Phiên bản v1.2.8 • Cập nhật: 2026-05-29 11:53 (GMT+7)
+          </span>
         </div>
       </div>
     </div>
