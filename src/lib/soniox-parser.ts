@@ -23,70 +23,14 @@ const FILLER_WORDS = new Set([
   'ờ', 'ừm', 'ừ', 'ơ', 'hơ'
 ])
 
-function appendTokenText(currentText: string, tokenText: string, gap: number, isVietnamese: boolean): string {
-  const cleanTokenText = tokenText.trim()
-  if (!cleanTokenText) return currentText
-
-  const needsSpace = (str: string, wordStr: string) => {
-    if (!str) return false
-    if (str.endsWith(' ') || wordStr.startsWith(' ')) return false
-    
-    // No space for CJK languages or Thai
-    const isCJKOrThai = /[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff\u0e00-\u0e7f]/
-    if (isCJKOrThai.test(str) && isCJKOrThai.test(wordStr)) return false
-    
-    // For non-Vietnamese languages (like English), always add space between separate words!
-    if (!isVietnamese) {
-      const isPunctuation = /^[.,!?;:]/.test(wordStr)
-      if (isPunctuation) return false
-      return true
-    }
-
-    // For Vietnamese:
-    const lastWord = str.split(' ').pop() || ''
-    const cleanLast = lastWord.toLowerCase().replace(/[^a-zà-ỹđ]/g, '')
-    const cleanCurr = wordStr.toLowerCase().replace(/[^a-zà-ỹđ]/g, '')
-    
-    if (!cleanLast || !cleanCurr) return false
-
-    // Initial consonants that cannot stand alone as words
-    const INITIAL_CONSONANTS = new Set([
-      'b', 'c', 'ch', 'd', 'đ', 'g', 'gh', 'gi', 'h', 'k', 'kh', 'l', 'm', 'n', 'nh', 'p', 'ph', 'q', 'r', 's', 't', 'th', 'tr', 'v', 'x', 'ng'
-    ])
-
-    // Final consonants that cannot stand alone as words
-    const FINAL_CONSONANTS = new Set([
-      'ng', 'nh', 'ch'
-    ])
-
-    // Standalone single-letter words in Vietnamese
-    const STANDALONE_SINGLE_LETTERS = new Set([
-      'a', 'y', 'ở', 'o', 'à'
-    ])
-
-    // Rule 1: Always glue if the previous word is a standalone initial consonant fragment (e.g., ch, đ, m, t, n)
-    if (INITIAL_CONSONANTS.has(cleanLast)) {
-      return false // GLUE!
-    }
-
-    // Rule 2: Glue if the current token is a final consonant or a split vowel/rime fragment spoken within a syllable window
-    if (gap <= 150) {
-      // 2a. If current token is a final consonant
-      if (FINAL_CONSONANTS.has(cleanCurr)) {
-        return false // GLUE!
-      }
-      
-      // 2b. If current token is a single vowel/rime fragment and is NOT a standalone single-letter word
-      if (cleanCurr.length === 1 && !STANDALONE_SINGLE_LETTERS.has(cleanCurr)) {
-        return false // GLUE!
-      }
-    }
-    
-    return true
-  }
-
-  const space = needsSpace(currentText, cleanTokenText) ? ' ' : ''
-  return (currentText + space + cleanTokenText).normalize('NFC')
+function cleanTranscriptText(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/\s+/g, ' ')                  // collapse multiple spaces
+    .replace(/\s+([.,!?;:])$/g, '$1')      // remove space before end punctuation
+    .replace(/\s+([.,!?;:])\s+/g, '$1 ')   // remove space before punctuation but keep one after
+    .trim()
+    .normalize('NFC')
 }
 
 /**
@@ -112,7 +56,7 @@ export function parseTokensToMessages(
   const SILENCE_THRESHOLD_MS = 1500 // 1.5 seconds gap starts a new message
 
   for (const token of allTokens) {
-    if (!token.text || !token.text.trim()) continue
+    if (!token.text) continue
 
     // Filter out filler words ("uh", "ờ", "ừm", etc.)
     const cleanTokenText = token.text.trim().toLowerCase().replace(/[.,!?;:]/g, '')
@@ -139,11 +83,6 @@ export function parseTokensToMessages(
     const isOriginal = token.translation_status !== 'translation'
     const tokenText = token.text
 
-    // Check if the current token language is Vietnamese
-    const isVietnamese = token.translation_status === 'translation' 
-      ? token.source_language !== 'vi' // translation is to 'vi'
-      : token.language === 'vi'
-
     if (isOriginal) {
       const startMs = token.start_ms ?? 0
       const endMs = token.end_ms ?? 0
@@ -156,10 +95,11 @@ export function parseTokensToMessages(
         SENTENCE_END_REGEX.test(lastMsg.original_text.trim())
 
       if (shouldStartNew) {
+        const initialText = tokenText.startsWith(' ') ? tokenText.slice(1) : tokenText
         const newMsg: TranscriptMessage = {
           id: `msg-${speaker}-${startMs}`,
           speaker,
-          original_text: tokenText.trim(),
+          original_text: initialText,
           translated_text: '',
           start_ms: startMs,
           end_ms: endMs,
@@ -174,8 +114,7 @@ export function parseTokensToMessages(
           lastPartnerMessage = newMsg
         }
       } else {
-        const gap = startMs - lastMsg.end_ms
-        lastMsg.original_text = appendTokenText(lastMsg.original_text, tokenText, gap, isVietnamese)
+        lastMsg.original_text += tokenText
         lastMsg.end_ms = Math.max(lastMsg.end_ms, endMs)
         if (!token.is_final) {
           lastMsg.is_final = false
@@ -188,11 +127,12 @@ export function parseTokensToMessages(
       if (!lastMsg) {
         // Fallback: if no original message exists yet, create a placeholder
         const startMs = Date.now()
+        const initialText = tokenText.startsWith(' ') ? tokenText.slice(1) : tokenText
         const newMsg: TranscriptMessage = {
           id: `msg-${speaker}-${startMs}`,
           speaker,
           original_text: '',
-          translated_text: tokenText.trim(),
+          translated_text: initialText,
           start_ms: startMs,
           end_ms: startMs,
           is_final: !!token.is_final,
@@ -206,9 +146,7 @@ export function parseTokensToMessages(
           lastPartnerMessage = newMsg
         }
       } else {
-        // Append translation text (gap is 9999 as it's a translation and not acoustically connected)
-        const isTranslationVietnamese = speaker === 'partner' // partner translation is into 'vi'
-        lastMsg.translated_text = appendTokenText(lastMsg.translated_text, tokenText, 9999, isTranslationVietnamese)
+        lastMsg.translated_text += tokenText
         if (!token.is_final) {
           lastMsg.is_final = false
         }
@@ -216,6 +154,13 @@ export function parseTokensToMessages(
     }
   }
 
+  // Clean up spacing for all generated messages
+  const allMessages = [...hostMessages, ...partnerMessages]
+  for (const msg of allMessages) {
+    msg.original_text = cleanTranscriptText(msg.original_text)
+    msg.translated_text = cleanTranscriptText(msg.translated_text)
+  }
+
   // Combine and sort chronologically by start_ms
-  return [...hostMessages, ...partnerMessages].sort((a, b) => a.start_ms - b.start_ms)
+  return allMessages.sort((a, b) => a.start_ms - b.start_ms)
 }
