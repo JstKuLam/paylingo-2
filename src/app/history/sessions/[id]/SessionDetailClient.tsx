@@ -237,7 +237,11 @@ export default function SessionDetailPage({ params }: PageProps) {
       const res = await fetch('/api/ai/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: session.id })
+        body: JSON.stringify({ 
+          sessionId: session.id,
+          sessions: [session],
+          entries: entries
+        })
       })
 
       const data = await res.json()
@@ -249,6 +253,7 @@ export default function SessionDetailPage({ params }: PageProps) {
 
       setAiSummary(data.summary)
     } catch (err) {
+      console.error('Error during AI summarize:', err)
       alert('Không thể kết nối AI tóm tắt')
       setShowSummaryModal(false)
     } finally {

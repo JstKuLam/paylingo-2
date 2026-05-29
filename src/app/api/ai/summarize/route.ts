@@ -18,17 +18,21 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { sessionId, folderId } = body
+    const { sessionId, folderId, sessions, entries } = body
 
-    if (!sessionId && !folderId) {
-      return NextResponse.json({ error: 'Thiếu sessionId hoặc folderId' }, { status: 400 })
+    if (!sessionId && !folderId && !entries) {
+      return NextResponse.json({ error: 'Thiếu thông tin cuộc hội thoại' }, { status: 400 })
     }
 
     let sessionsToSummarize = []
     let allEntries = []
 
-    if (sessionId) {
-      // Fetch single session
+    // Local-first fallback: If client sends the sessions and entries directly, use them
+    if (sessions && entries) {
+      sessionsToSummarize = sessions
+      allEntries = entries
+    } else if (sessionId) {
+      // Fetch single session from Supabase
       const { data: sessionData, error: sessError } = await supabase
         .from('sessions')
         .select('*')
@@ -45,7 +49,7 @@ export async function POST(req: Request) {
 
       sessionsToSummarize.push(sessionData)
 
-      const { data: entries, error: entriesError } = await supabase
+      const { data: dbEntries, error: entriesError } = await supabase
         .from('transcript_entries')
         .select('*')
         .eq('session_id', sessionId)
@@ -55,9 +59,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Không thể tải transcript entries' }, { status: 500 })
       }
 
-      allEntries = entries || []
+      allEntries = dbEntries || []
     } else if (folderId) {
-      // Fetch folder details and all sessions in folder
+      // Fetch folder details and all sessions in folder from Supabase
       const { data: folderData, error: folderError } = await supabase
         .from('folders')
         .select('*')
@@ -85,14 +89,14 @@ export async function POST(req: Request) {
       sessionsToSummarize = folderSessions
 
       for (const sess of folderSessions) {
-        const { data: entries, error: entriesError } = await supabase
+        const { data: dbEntries, error: entriesError } = await supabase
           .from('transcript_entries')
           .select('*')
           .eq('session_id', sess.id)
           .order('start_ms', { ascending: true })
 
-        if (!entriesError && entries) {
-          allEntries.push(...entries.map(e => ({ ...e, sessionName: sess.name })))
+        if (!entriesError && dbEntries) {
+          allEntries.push(...dbEntries.map(e => ({ ...e, sessionName: sess.name })))
         }
       }
     }
@@ -103,13 +107,13 @@ export async function POST(req: Request) {
 
     // Format transcripts for AI model
     let formattedTranscript = ''
-    if (sessionId) {
+    if (sessionsToSummarize.length === 1 && !folderId) {
       const sess = sessionsToSummarize[0]
       formattedTranscript += `TÊN CUỘC HỘI THOẠI: ${sess.name}\n`
       formattedTranscript += `Ngôn ngữ đối tác: ${sess.partner_language}\n`
       formattedTranscript += `Bắt đầu lúc: ${sess.started_at}\n\n`
       
-      allEntries.forEach((entry) => {
+      allEntries.forEach((entry: any) => {
         const timeStr = new Date(entry.start_ms).toLocaleTimeString('vi-VN', { hour12: false })
         const speaker = entry.speaker === 'host' ? 'Host (Bạn - Tiếng Việt)' : `Partner (Đối tác - ${sess.partner_language})`
         formattedTranscript += `[${timeStr}] ${speaker}:\n`

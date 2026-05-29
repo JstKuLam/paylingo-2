@@ -313,7 +313,11 @@ export default function HistoryPage() {
       const res = await fetch('/api/ai/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: selectedSession.id })
+        body: JSON.stringify({ 
+          sessionId: selectedSession.id,
+          sessions: [selectedSession],
+          entries: sessionEntries
+        })
       })
 
       const data = await res.json()
@@ -325,6 +329,7 @@ export default function HistoryPage() {
 
       setAiSummary(data.summary)
     } catch (err) {
+      console.error('Error during AI summarize:', err)
       alert('Không thể kết nối AI tóm tắt')
       setShowSummaryModal(false)
     } finally {

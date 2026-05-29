@@ -233,10 +233,30 @@ export default function FolderDetailPage({ params }: PageProps) {
     setShowSummaryModal(true)
 
     try {
+      // Load sessions in folder from local IndexedDB
+      const localSessions = await db.sessions
+        .where('folder_id')
+        .equals(folder.id)
+        .toArray()
+
+      // Load all transcript entries for these sessions from IndexedDB
+      const allLocalEntries = []
+      for (const sess of localSessions) {
+        const ent = await db.transcriptEntries
+          .where('session_id')
+          .equals(sess.id)
+          .sortBy('start_ms')
+        allLocalEntries.push(...ent.map(e => ({ ...e, sessionName: sess.name })))
+      }
+
       const res = await fetch('/api/ai/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderId: folder.id })
+        body: JSON.stringify({ 
+          folderId: folder.id,
+          sessions: localSessions,
+          entries: allLocalEntries
+        })
       })
 
       const data = await res.json()
@@ -248,6 +268,7 @@ export default function FolderDetailPage({ params }: PageProps) {
 
       setAiSummary(data.summary)
     } catch (err) {
+      console.error('Error during AI summarize:', err)
       alert('Không thể kết nối AI tóm tắt')
       setShowSummaryModal(false)
     } finally {
