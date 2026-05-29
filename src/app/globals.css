@@ -36,7 +36,7 @@ body {
   position: relative;
 }
 
-/* Stunning iOS 26 Dynamic Mesh Auroras */
+/* PayPay Brand-derived Subtle Ambient Auroras (Only active on Dark background) */
 body::before {
   content: "";
   position: absolute;
@@ -44,7 +44,7 @@ body::before {
   left: -25%;
   width: 90%;
   height: 90%;
-  background: radial-gradient(circle at 30% 30%, rgba(94, 92, 230, 0.16) 0%, rgba(0, 0, 0, 0) 65%);
+  background: radial-gradient(circle at 30% 30%, rgba(var(--accent-host-rgb), 0.05) 0%, rgba(0, 0, 0, 0) 65%);
   z-index: -1;
   pointer-events: none;
 }
@@ -56,7 +56,7 @@ body::after {
   right: -25%;
   width: 90%;
   height: 90%;
-  background: radial-gradient(circle at 70% 70%, rgba(100, 210, 255, 0.12) 0%, rgba(0, 0, 0, 0) 65%);
+  background: radial-gradient(circle at 70% 70%, rgba(var(--accent-partner-rgb), 0.03) 0%, rgba(0, 0, 0, 0) 65%);
   z-index: -1;
   pointer-events: none;
 }
@@ -135,64 +135,64 @@ body::after {
   animation: shimmer 2.5s infinite;
 }
 
-/* ========== iOS 26 Light Themes (Dynamic Theme Ecosystem) ========== */
+/* ========== Solid + Brand Family Light Themes (shadcn UI aesthetic) ========== */
 
 [data-theme="light"],
 [data-theme="light-ios"] {
-  --background: #f2f2f7; /* Apple Dynamic System Background (Light Gray) */
-  --foreground: #1c1c1e; /* Apple Primary Dark Label */
+  --background: #f9fafb; /* Solid Crisp Light Zinc (shadcn-like gray background) */
+  --foreground: #09090b; /* Solid zinc-950 text */
   --accent-host: #5427d4; /* PayPay Deep Violet-Purple branding */
   --accent-host-rgb: 84, 39, 212;
   --accent-partner: #859eff; /* PayPay Light Slate-Purple branding */
   --accent-partner-rgb: 133, 158, 255;
-  --accent-amber: #ff9500; /* Apple Light Mode Orange */
-  --border-glass: rgba(84, 39, 212, 0.08); /* Soft brand-tinted boundary */
-  --bg-glass: rgba(255, 255, 255, 0.85); /* Apple Light Liquid Glass */
+  --accent-amber: #f97316; /* Solid bright orange */
+  --border-glass: #e4e4e7; /* Solid crisp zinc-200 border */
+  --bg-glass: #ffffff; /* Solid white panels */
   
-  --text-secondary: #3c3c43;
-  --bg-secondary: #e5e5ea;
-  --bg-secondary-hover: #d1d1d6;
-  --bg-glass-input: rgba(84, 39, 212, 0.03);
-  --border-input: rgba(84, 39, 212, 0.12);
-  --placeholder: #8e8e93;
+  --text-secondary: #71717a; /* zinc-500 secondary label */
+  --bg-secondary: #f4f4f5; /* zinc-100 secondary background */
+  --bg-secondary-hover: #e4e4e7; /* zinc-200 hover */
+  --bg-glass-input: #ffffff; /* solid white inputs */
+  --border-input: #d4d4d8; /* zinc-300 input border */
+  --placeholder: #a1a1aa; /* zinc-400 placeholder */
 }
 
 [data-theme="light-glass"] {
-  --background: #f0f2f8; /* Liquid Glass White-Blue dynamic background */
-  --foreground: #1c1917; /* Apple Dark Stone Label */
+  --background: #f1f5f9; /* Solid Slate Light Gray backdrop */
+  --foreground: #0f172a; /* Slate-900 Primary label */
   --accent-host: #5427d4; /* PayPay Deep Violet-Purple branding */
   --accent-host-rgb: 84, 39, 212;
   --accent-partner: #859eff; /* PayPay Light Slate-Purple branding */
   --accent-partner-rgb: 133, 158, 255;
-  --accent-amber: #ffd60a; /* Premium Gold Accent */
-  --border-glass: rgba(84, 39, 212, 0.1);
-  --bg-glass: rgba(255, 255, 255, 0.65); /* High frosted translucency */
+  --accent-amber: #f59e0b; /* Amber accent */
+  --border-glass: #cbd5e1; /* Solid slate-300 border */
+  --bg-glass: rgba(255, 255, 255, 0.95); /* Ultra frosted high-opacity white */
   
-  --text-secondary: #4b5563;
-  --bg-secondary: #e2e8f0;
-  --bg-secondary-hover: #cbd5e1;
-  --bg-glass-input: rgba(84, 39, 212, 0.04);
-  --border-input: rgba(84, 39, 212, 0.1);
-  --placeholder: #9ca3af;
+  --text-secondary: #64748b; /* slate-500 secondary label */
+  --bg-secondary: #e2e8f0; /* slate-200 secondary background */
+  --bg-secondary-hover: #cbd5e1; /* slate-300 hover */
+  --bg-glass-input: #ffffff;
+  --border-input: #cbd5e1;
+  --placeholder: #94a3b8;
 }
 
 [data-theme="light-warm"] {
-  --background: #fdfaf2; /* Apple Premium Warm Vintage Paper background */
-  --foreground: #3a2e2b; /* Warm Dark Espresso Label */
-  --accent-host: #752570; /* Warm Plum (Warm tone of PayPay Purple) */
+  --background: #faf6f0; /* Solid Warm vintage parchment backdrop */
+  --foreground: #3c2f2f; /* Dark Warm Espresso Label */
+  --accent-host: #752570; /* Warm Plum (Warm shade of PayPay Purple) */
   --accent-host-rgb: 117, 37, 112;
   --accent-partner: #8e709a; /* Warm Slate-Purple Partner */
   --accent-partner-rgb: 142, 112, 154;
-  --accent-amber: #d97706; /* Soft Amber */
-  --border-glass: rgba(117, 37, 112, 0.08);
-  --bg-glass: rgba(253, 251, 247, 0.88); /* Rich opaque dynamic ivory */
+  --accent-amber: #d97706; /* Solid Amber */
+  --border-glass: #ebdcc6; /* Solid warm clay border */
+  --bg-glass: #ffffff; /* Solid white panels */
   
-  --text-secondary: #5c4f4a;
-  --bg-secondary: #f0e6d2;
-  --bg-secondary-hover: #e5d5be;
-  --bg-glass-input: rgba(117, 37, 112, 0.03);
-  --border-input: rgba(117, 37, 112, 0.1);
-  --placeholder: #a89a93;
+  --text-secondary: #6e5e58; /* Warm secondary label */
+  --bg-secondary: #f3eae0; /* Warm secondary background */
+  --bg-secondary-hover: #ebdcc6; /* Warm hover */
+  --bg-glass-input: #ffffff;
+  --border-input: #ebdcc6;
+  --placeholder: #bca8a0;
 }
 
 /* Master Selector for all light-based theme ecosystems */
@@ -201,37 +201,28 @@ body::after {
 [data-theme="light-glass"],
 [data-theme="light-warm"] {
   
-  /* Soft, clean, crisp shadows for light themes instead of muddy dark shadows */
-  .glass-panel {
-    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.03), 0 1px 3px 0 rgba(0, 0, 0, 0.01) !important;
-  }
-  
-  .shadow-2xl {
-    box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.04) !important;
-  }
-
-  .shadow-xl {
-    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.03) !important;
-  }
-
-  .shadow-lg {
-    box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.02) !important;
-  }
-
-  .shadow-partner\/5 {
-    box-shadow: 0 10px 30px -10px rgba(var(--accent-partner-rgb), 0.03) !important;
-  }
-
-  .shadow-host\/30 {
-    box-shadow: 0 10px 25px -5px rgba(var(--accent-host-rgb), 0.12) !important;
-  }
-  
-  /* Aurora blobs for light themes */
-  body::before {
-    background: radial-gradient(circle at 30% 30%, rgba(var(--accent-host-rgb), 0.08) 0%, rgba(0, 0, 0, 0) 65%) !important;
-  }
+  /* Pure Solid backgrounds for light themes - remove dynamic aurora blobs completely */
+  body::before,
   body::after {
-    background: radial-gradient(circle at 70% 70%, rgba(var(--accent-partner-rgb), 0.06) 0%, rgba(0, 0, 0, 0) 65%) !important;
+    background: none !important;
+    display: none !important;
+  }
+  
+  /* Clean, crisp shadcn-style solid panel borders and soft shadow elimination */
+  .glass-panel {
+    background: var(--bg-glass) !important;
+    border: 1px solid var(--border-glass) !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  
+  .shadow-2xl,
+  .shadow-xl,
+  .shadow-lg,
+  .shadow-partner\/5,
+  .shadow-host\/30 {
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
   }
 
   /* Exquisite high-fidelity light theme visual compatibility overrides */
@@ -247,7 +238,7 @@ body::after {
   .text-slate-400, 
   .text-slate-500 {
     color: var(--text-secondary) !important;
-    opacity: 0.8;
+    opacity: 0.9;
   }
   
   .bg-slate-950, 
@@ -259,7 +250,7 @@ body::after {
   
   .bg-white\/5, 
   .bg-white\/\[0\.03\] {
-    background-color: var(--bg-glass-input) !important;
+    background-color: var(--bg-secondary) !important;
   }
   
   .bg-white\/10 {
@@ -287,7 +278,7 @@ body::after {
   .glass-input:focus {
     background: var(--bg-glass-input) !important;
     border-color: var(--accent-host) !important;
-    box-shadow: 0 0 20px rgba(var(--accent-host-rgb), 0.15) !important;
+    box-shadow: 0 0 0 2px rgba(var(--accent-host-rgb), 0.15) !important;
   }
   
   /* Lucide icon overrides */
