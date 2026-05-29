@@ -1,8 +1,18 @@
 import Dexie, { Table } from 'dexie'
 
+export interface LocalFolder {
+  id: string
+  username: string
+  name: string
+  created_at: string
+  updated_at: string
+  sync_status: 'synced' | 'pending' | 'failed'
+}
+
 export interface LocalSession {
   id: string
   username: string
+  folder_id?: string | null
   name: string
   partner_language: string
   started_at: string
@@ -28,6 +38,7 @@ export interface LocalTranscriptEntry {
 class PayLingoDatabase extends Dexie {
   sessions!: Table<LocalSession>
   transcriptEntries!: Table<LocalTranscriptEntry>
+  folders!: Table<LocalFolder>
 
   constructor() {
     super('PayLingoDatabase')
@@ -36,6 +47,12 @@ class PayLingoDatabase extends Dexie {
     this.version(1).stores({
       sessions: 'id, username, started_at, sync_status, updated_at',
       transcriptEntries: 'id, session_id, [session_id+start_ms], sync_status, updated_at'
+    })
+
+    this.version(2).stores({
+      sessions: 'id, username, folder_id, started_at, sync_status, updated_at',
+      transcriptEntries: 'id, session_id, [session_id+start_ms], sync_status, updated_at',
+      folders: 'id, username, sync_status, updated_at'
     })
   }
 }

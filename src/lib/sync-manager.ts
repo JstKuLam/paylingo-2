@@ -5,9 +5,9 @@ import { createClient } from './supabase/client'
  * Sweeps the local IndexedDB and pushes all 'pending' sessions and transcript entries to Supabase.
  * Handles network connection checking and error states gracefully.
  */
-export async function syncPendingData(): Promise<{ success: boolean; syncedSessions: number; syncedEntries: number; error?: string }> {
+export async function syncPendingData(): Promise<{ success: boolean; syncedFolders?: number; syncedSessions: number; syncedEntries: number; error?: string }> {
   if (typeof window !== 'undefined' && !navigator.onLine) {
-    return { success: false, syncedSessions: 0, syncedEntries: 0, error: 'Offline' }
+    return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Offline' }
   }
 
   const supabase = createClient()
@@ -15,12 +15,38 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedSessi
 
   const username = session?.user?.user_metadata?.username
   if (!session || !username) {
-    return { success: false, syncedSessions: 0, syncedEntries: 0, error: 'Unauthenticated' }
+    return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Unauthenticated' }
   }
+  let syncedFolders = 0
   let syncedSessions = 0
   let syncedEntries = 0
 
   try {
+    // 0. Sync pending folders
+    const pendingFolders = await db.folders.where('sync_status').equals('pending').toArray()
+
+    for (const localFolder of pendingFolders) {
+      if (localFolder.username !== username) continue
+
+      const { error: folderError } = await supabase
+        .from('folders')
+        .upsert({
+          id: localFolder.id,
+          username: localFolder.username,
+          name: localFolder.name,
+          created_at: localFolder.created_at,
+          updated_at: localFolder.updated_at
+        })
+
+      if (!folderError) {
+        await db.folders.update(localFolder.id, { sync_status: 'synced' })
+        syncedFolders++
+      } else {
+        console.error(`Failed to sync folder ${localFolder.id}:`, folderError.message)
+        await db.folders.update(localFolder.id, { sync_status: 'failed' })
+      }
+    }
+
     // 1. Sync pending sessions
     const pendingSessions = await db.sessions.where('sync_status').equals('pending').toArray()
 
@@ -34,6 +60,7 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedSessi
         .upsert({
           id: localSess.id,
           username: localSess.username,
+          folder_id: localSess.folder_id || null,
           name: localSess.name,
           partner_language: localSess.partner_language,
           started_at: localSess.started_at,
@@ -119,9 +146,9 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedSessi
       }
     }
 
-    return { success: true, syncedSessions, syncedEntries }
+    return { success: true, syncedFolders, syncedSessions, syncedEntries }
   } catch (error: any) {
-    return { success: false, syncedSessions, syncedEntries, error: error.message }
+    return { success: false, syncedFolders, syncedSessions, syncedEntries, error: error.message }
   }
 }
 

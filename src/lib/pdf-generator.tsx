@@ -258,3 +258,86 @@ export async function downloadSessionPDF(
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
+
+/**
+ * Trigger client-side TXT file compilation and download.
+ */
+export async function downloadSessionTXT(
+  sessionName: string,
+  partnerLangName: string,
+  startedAt: string,
+  entries: LocalTranscriptEntry[]
+) {
+  const formattedDate = new Date(startedAt).toLocaleString('vi-VN')
+  let txtContent = `==================================================\n`
+  txtContent += `HỘI THOẠI: ${sessionName}\n`
+  txtContent += `Thời gian bắt đầu: ${formattedDate}\n`
+  txtContent += `Ngôn ngữ đối tác: ${partnerLangName}\n`
+  txtContent += `==================================================\n\n`
+
+  entries.forEach((entry) => {
+    const timestamp = new Date(entry.start_ms).toLocaleTimeString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+
+    const speaker = entry.speaker === 'host' ? 'BẠN' : partnerLangName.toUpperCase()
+    txtContent += `[${timestamp}] ${speaker}:\n`
+    txtContent += `- Gốc: ${entry.original_text}\n`
+    txtContent += `- Dịch: ${entry.translated_text}\n`
+    txtContent += `--------------------------------------------------\n`
+  })
+
+  const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${sessionName.replace(/\s+/g, '_')}.txt`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * Trigger client-side JSON file compilation and download.
+ */
+export async function downloadSessionJSON(
+  sessionName: string,
+  partnerLang: string,
+  partnerLangName: string,
+  startedAt: string,
+  entries: LocalTranscriptEntry[]
+) {
+  const exportData = {
+    appName: 'PayLingo',
+    sessionName,
+    partnerLang,
+    partnerLangName,
+    startedAt,
+    exportedAt: new Date().toISOString(),
+    entriesCount: entries.length,
+    entries: entries.map(entry => ({
+      id: entry.id,
+      speaker: entry.speaker,
+      original_text: entry.original_text,
+      translated_text: entry.translated_text,
+      start_ms: entry.start_ms,
+      end_ms: entry.end_ms,
+      created_at: entry.created_at
+    }))
+  }
+
+  const jsonString = JSON.stringify(exportData, null, 2)
+  const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${sessionName.replace(/\s+/g, '_')}.json`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}

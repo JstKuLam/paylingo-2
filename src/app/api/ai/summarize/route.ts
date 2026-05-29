@@ -1,0 +1,195 @@
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+export async function POST(req: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+    }
+
+    const username = user.user_metadata?.username
+    if (!username) {
+      return NextResponse.json({ error: 'Không tìm thấy username của người dùng' }, { status: 400 })
+    }
+
+    const body = await req.json()
+    const { sessionId, folderId } = body
+
+    if (!sessionId && !folderId) {
+      return NextResponse.json({ error: 'Thiếu sessionId hoặc folderId' }, { status: 400 })
+    }
+
+    let sessionsToSummarize = []
+    let allEntries = []
+
+    if (sessionId) {
+      // Fetch single session
+      const { data: sessionData, error: sessError } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single()
+
+      if (sessError || !sessionData) {
+        return NextResponse.json({ error: 'Không tìm thấy cuộc hội thoại' }, { status: 404 })
+      }
+
+      if (sessionData.username !== username) {
+        return NextResponse.json({ error: 'Bạn không có quyền truy cập cuộc hội thoại này' }, { status: 403 })
+      }
+
+      sessionsToSummarize.push(sessionData)
+
+      const { data: entries, error: entriesError } = await supabase
+        .from('transcript_entries')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('start_ms', { ascending: true })
+
+      if (entriesError) {
+        return NextResponse.json({ error: 'Không thể tải transcript entries' }, { status: 500 })
+      }
+
+      allEntries = entries || []
+    } else if (folderId) {
+      // Fetch folder details and all sessions in folder
+      const { data: folderData, error: folderError } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('id', folderId)
+        .single()
+
+      if (folderError || !folderData) {
+        return NextResponse.json({ error: 'Không tìm thấy thư mục' }, { status: 404 })
+      }
+
+      if (folderData.username !== username) {
+        return NextResponse.json({ error: 'Bạn không có quyền truy cập thư mục này' }, { status: 403 })
+      }
+
+      const { data: folderSessions, error: sessError } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('folder_id', folderId)
+        .order('started_at', { ascending: true })
+
+      if (sessError || !folderSessions) {
+        return NextResponse.json({ error: 'Không thể tải các cuộc hội thoại trong thư mục' }, { status: 500 })
+      }
+
+      sessionsToSummarize = folderSessions
+
+      for (const sess of folderSessions) {
+        const { data: entries, error: entriesError } = await supabase
+          .from('transcript_entries')
+          .select('*')
+          .eq('session_id', sess.id)
+          .order('start_ms', { ascending: true })
+
+        if (!entriesError && entries) {
+          allEntries.push(...entries.map(e => ({ ...e, sessionName: sess.name })))
+        }
+      }
+    }
+
+    if (allEntries.length === 0) {
+      return NextResponse.json({ error: 'Hội thoại trống, không có dữ liệu để tóm tắt' }, { status: 400 })
+    }
+
+    // Format transcripts for Gemini
+    let formattedTranscript = ''
+    if (sessionId) {
+      const sess = sessionsToSummarize[0]
+      formattedTranscript += `TÊN CUỘC HỘI THOẠI: ${sess.name}\n`
+      formattedTranscript += `Ngôn ngữ đối tác: ${sess.partner_language}\n`
+      formattedTranscript += `Bắt đầu lúc: ${sess.started_at}\n\n`
+      
+      allEntries.forEach((entry, i) => {
+        const timeStr = new Date(entry.start_ms).toLocaleTimeString('vi-VN', { hour12: false })
+        const speaker = entry.speaker === 'host' ? 'Host (Bạn - Tiếng Việt)' : `Partner (Đối tác - ${sess.partner_language})`
+        formattedTranscript += `[${timeStr}] ${speaker}:\n`
+        formattedTranscript += `- Gốc: ${entry.original_text}\n`
+        formattedTranscript += `- Dịch: ${entry.translated_text}\n\n`
+      })
+    } else {
+      formattedTranscript += `THƯ MỤC HỘI THOẠI CHUNG\n\n`
+      let currentSessionName = ''
+      allEntries.forEach((entry: any) => {
+        if (entry.sessionName !== currentSessionName) {
+          currentSessionName = entry.sessionName
+          formattedTranscript += `--- PHÂN ĐOẠN HỘI THOẠI: ${currentSessionName} ---\n\n`
+        }
+        const timeStr = new Date(entry.start_ms).toLocaleTimeString('vi-VN', { hour12: false })
+        const speaker = entry.speaker === 'host' ? 'Host (Bạn - Tiếng Việt)' : `Partner (Đối tác)`
+        formattedTranscript += `[${timeStr}] ${speaker}:\n`
+        formattedTranscript += `- Gốc: ${entry.original_text}\n`
+        formattedTranscript += `- Dịch: ${entry.translated_text}\n\n`
+      })
+    }
+
+    // Call Gemini 2.5 Flash using direct fetch
+    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyFakeKeyForBuild'
+    const model = 'gemini-2.5-flash'
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+
+    const prompt = `Bạn là một trợ lý AI chuyên nghiệp có nhiệm vụ tóm tắt cuộc họp/cuộc trò chuyện dựa trên bản dịch hội thoại song ngữ của hai người (Host là người Việt, Partner là người nước ngoài). Hãy tạo ra một bản tóm tắt cực kỳ chuyên nghiệp bằng tiếng Việt với các phần sau:
+1. **Text sạch (Clean Text)**: Chuyển đổi cuộc hội thoại thành một đoạn văn trôi chảy, kết nối logic các câu nói của hai bên, loại bỏ các từ đệm, từ lặp, ngắc ngứ.
+2. **Nhận diện người nói (Speaker Identification)**: Nêu rõ vai trò, mục tiêu chính của từng người nói (Host và Partner) trong buổi đàm thoại.
+3. **Tóm tắt điều hành (Executive Summary)**: Mô tả ngắn gọn chủ đề, mục đích, bối cảnh và kết quả tổng quan của cuộc hội thoại (2-3 câu).
+4. **Hành động kế tiếp (Action Items)**: Danh sách các việc cần làm, ai chịu trách nhiệm, thời hạn (nếu có).
+5. **Quyết định (Decisions)**: Các quyết định quan trọng đã được thống nhất giữa hai bên.
+6. **Rủi ro (Risks)**: Các vấn đề, khó khăn, rủi ro hoặc điểm chưa đồng thuận được đề cập.
+7. **Sơ đồ tư duy cuộc họp (Mind Map)**: Biểu diễn cấu trúc nội dung thảo luận dưới dạng sơ đồ hình cây văn bản thụt lề rõ ràng (sử dụng ký tự dạng cây như ├─, └─ hoặc các dấu gạch đầu dòng lồng nhau chuyên nghiệp).
+
+Yêu cầu định dạng: Định dạng Markdown cực kỳ đẹp mắt, sử dụng các tiêu đề lớn rõ ràng, các biểu tượng emoji phù hợp để trực quan hóa, tối ưu hóa giao diện hiển thị xuất sắc cả trên máy tính và thiết bị di động (Mobile).
+
+Dưới đây là transcript cuộc đàm thoại:
+${formattedTranscript}
+`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 8192,
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      console.error('Gemini API Error Response:', errText)
+      return NextResponse.json({ error: `Lỗi kết nối AI: ${response.statusText}` }, { status: 500 })
+    }
+
+    const resData = await response.json()
+    const summaryText = resData?.candidates?.[0]?.content?.parts?.[0]?.text
+
+    if (!summaryText) {
+      return NextResponse.json({ error: 'AI không trả về kết quả tóm tắt' }, { status: 500 })
+    }
+
+    return NextResponse.json({ summary: summaryText })
+  } catch (error: any) {
+    console.error('Error in summarize API:', error)
+    return NextResponse.json({ error: error.message || 'Lỗi hệ thống khi tóm tắt' }, { status: 500 })
+  }
+}
