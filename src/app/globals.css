@@ -3,10 +3,10 @@
 :root, [data-theme="dark"] {
   --background: #09090b; /* Apple Space Black */
   --foreground: #f2f2f7; /* Apple Primary Light Label */
-  --accent-host: #5e5ce6; /* Apple Dark Mode Indigo (vibrant, rich purple-blue) */
-  --accent-host-rgb: 94, 92, 230;
-  --accent-partner: #64d2ff; /* Apple Dark Mode Cyan/Teal (vibrant, rich light-blue) */
-  --accent-partner-rgb: 100, 210, 255;
+  --accent-host: #6339f0; /* PayPay Deep Violet-Purple branding (vibrant digital match of #5427D4) */
+  --accent-host-rgb: 99, 57, 240;
+  --accent-partner: #859eff; /* PayPay Light Slate-Purple branding (#859EFF) */
+  --accent-partner-rgb: 133, 158, 255;
   --accent-amber: #ffd60a; /* Apple Dark Mode Yellow/Amber (pure gold glow) */
   --border-glass: rgba(255, 255, 255, 0.08); /* Chromatic hairline boundary */
   --bg-glass: rgba(22, 22, 23, 0.72); /* Apple's official Dark Liquid Glass material */
@@ -141,57 +141,57 @@ body::after {
 [data-theme="light-ios"] {
   --background: #f2f2f7; /* Apple Dynamic System Background (Light Gray) */
   --foreground: #1c1c1e; /* Apple Primary Dark Label */
-  --accent-host: #007aff; /* Apple Light Mode Blue */
-  --accent-host-rgb: 0, 122, 255;
-  --accent-partner: #34c759; /* Apple Light Mode Green */
-  --accent-partner-rgb: 52, 199, 89;
+  --accent-host: #5427d4; /* PayPay Deep Violet-Purple branding */
+  --accent-host-rgb: 84, 39, 212;
+  --accent-partner: #859eff; /* PayPay Light Slate-Purple branding */
+  --accent-partner-rgb: 133, 158, 255;
   --accent-amber: #ff9500; /* Apple Light Mode Orange */
-  --border-glass: rgba(60, 60, 67, 0.12); /* Apple light border */
-  --bg-glass: rgba(255, 255, 255, 0.75); /* Apple Light Liquid Glass */
+  --border-glass: rgba(84, 39, 212, 0.08); /* Soft brand-tinted boundary */
+  --bg-glass: rgba(255, 255, 255, 0.85); /* Apple Light Liquid Glass */
   
   --text-secondary: #3c3c43;
   --bg-secondary: #e5e5ea;
   --bg-secondary-hover: #d1d1d6;
-  --bg-glass-input: rgba(60, 60, 67, 0.04);
-  --border-input: rgba(60, 60, 67, 0.15);
+  --bg-glass-input: rgba(84, 39, 212, 0.03);
+  --border-input: rgba(84, 39, 212, 0.12);
   --placeholder: #8e8e93;
 }
 
 [data-theme="light-glass"] {
   --background: #f0f2f8; /* Liquid Glass White-Blue dynamic background */
   --foreground: #1c1917; /* Apple Dark Stone Label */
-  --accent-host: #5e5ce6; /* Apple Liquid Glass Indigo */
-  --accent-host-rgb: 94, 92, 230;
-  --accent-partner: #af52de; /* Apple Liquid Glass Purple */
-  --accent-partner-rgb: 175, 82, 222;
+  --accent-host: #5427d4; /* PayPay Deep Violet-Purple branding */
+  --accent-host-rgb: 84, 39, 212;
+  --accent-partner: #859eff; /* PayPay Light Slate-Purple branding */
+  --accent-partner-rgb: 133, 158, 255;
   --accent-amber: #ffd60a; /* Premium Gold Accent */
-  --border-glass: rgba(94, 92, 230, 0.12);
+  --border-glass: rgba(84, 39, 212, 0.1);
   --bg-glass: rgba(255, 255, 255, 0.65); /* High frosted translucency */
   
   --text-secondary: #4b5563;
   --bg-secondary: #e2e8f0;
   --bg-secondary-hover: #cbd5e1;
-  --bg-glass-input: rgba(94, 92, 230, 0.05);
-  --border-input: rgba(94, 92, 230, 0.12);
+  --bg-glass-input: rgba(84, 39, 212, 0.04);
+  --border-input: rgba(84, 39, 212, 0.1);
   --placeholder: #9ca3af;
 }
 
 [data-theme="light-warm"] {
   --background: #fdfaf2; /* Apple Premium Warm Vintage Paper background */
   --foreground: #3a2e2b; /* Warm Dark Espresso Label */
-  --accent-host: #c2593f; /* Apple Warm Terracotta Host */
-  --accent-host-rgb: 194, 89, 63;
-  --accent-partner: #5f7464; /* Warm Sage Partner */
-  --accent-partner-rgb: 95, 116, 100;
+  --accent-host: #752570; /* Warm Plum (Warm tone of PayPay Purple) */
+  --accent-host-rgb: 117, 37, 112;
+  --accent-partner: #8e709a; /* Warm Slate-Purple Partner */
+  --accent-partner-rgb: 142, 112, 154;
   --accent-amber: #d97706; /* Soft Amber */
-  --border-glass: rgba(194, 89, 63, 0.12);
-  --bg-glass: rgba(253, 251, 247, 0.85); /* Rich opaque dynamic ivory */
+  --border-glass: rgba(117, 37, 112, 0.08);
+  --bg-glass: rgba(253, 251, 247, 0.88); /* Rich opaque dynamic ivory */
   
   --text-secondary: #5c4f4a;
   --bg-secondary: #f0e6d2;
   --bg-secondary-hover: #e5d5be;
-  --bg-glass-input: rgba(194, 89, 63, 0.04);
-  --border-input: rgba(194, 89, 63, 0.12);
+  --bg-glass-input: rgba(117, 37, 112, 0.03);
+  --border-input: rgba(117, 37, 112, 0.1);
   --placeholder: #a89a93;
 }
 
@@ -200,6 +200,31 @@ body::after {
 [data-theme="light-ios"],
 [data-theme="light-glass"],
 [data-theme="light-warm"] {
+  
+  /* Soft, clean, crisp shadows for light themes instead of muddy dark shadows */
+  .glass-panel {
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.03), 0 1px 3px 0 rgba(0, 0, 0, 0.01) !important;
+  }
+  
+  .shadow-2xl {
+    box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .shadow-xl {
+    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.03) !important;
+  }
+
+  .shadow-lg {
+    box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.02) !important;
+  }
+
+  .shadow-partner\/5 {
+    box-shadow: 0 10px 30px -10px rgba(var(--accent-partner-rgb), 0.03) !important;
+  }
+
+  .shadow-host\/30 {
+    box-shadow: 0 10px 25px -5px rgba(var(--accent-host-rgb), 0.12) !important;
+  }
   
   /* Aurora blobs for light themes */
   body::before {
