@@ -44,14 +44,40 @@ function appendTokenText(currentText: string, tokenText: string, gap: number, is
 
     // For Vietnamese:
     const lastWord = str.split(' ').pop() || ''
-    const cleanLastWord = lastWord.replace(/[^a-zA-ZÀ-ỹđĐ]/g, '')
-    const cleanWordStr = wordStr.replace(/[^a-zA-ZÀ-ỹđĐ]/g, '')
+    const cleanLast = lastWord.toLowerCase().replace(/[^a-zà-ỹđ]/g, '')
+    const cleanCurr = wordStr.toLowerCase().replace(/[^a-zà-ỹđ]/g, '')
     
-    if (!cleanLastWord || !cleanWordStr) return false
+    if (!cleanLast || !cleanCurr) return false
 
-    // Only glue if they are part of a decomposed syllable (extremely small gap <= 80ms AND either has length 1)
-    if (gap <= 80) {
-      if (cleanLastWord.length === 1 || cleanWordStr.length === 1) {
+    // Initial consonants that cannot stand alone as words
+    const INITIAL_CONSONANTS = new Set([
+      'b', 'c', 'ch', 'd', 'đ', 'g', 'gh', 'gi', 'h', 'k', 'kh', 'l', 'm', 'n', 'nh', 'p', 'ph', 'q', 'r', 's', 't', 'th', 'tr', 'v', 'x', 'ng'
+    ])
+
+    // Final consonants that cannot stand alone as words
+    const FINAL_CONSONANTS = new Set([
+      'ng', 'nh', 'ch'
+    ])
+
+    // Standalone single-letter words in Vietnamese
+    const STANDALONE_SINGLE_LETTERS = new Set([
+      'a', 'y', 'ở', 'o', 'à'
+    ])
+
+    // Rule 1: Always glue if the previous word is a standalone initial consonant fragment (e.g., ch, đ, m, t, n)
+    if (INITIAL_CONSONANTS.has(cleanLast)) {
+      return false // GLUE!
+    }
+
+    // Rule 2: Glue if the current token is a final consonant or a split vowel/rime fragment spoken within a syllable window
+    if (gap <= 150) {
+      // 2a. If current token is a final consonant
+      if (FINAL_CONSONANTS.has(cleanCurr)) {
+        return false // GLUE!
+      }
+      
+      // 2b. If current token is a single vowel/rime fragment and is NOT a standalone single-letter word
+      if (cleanCurr.length === 1 && !STANDALONE_SINGLE_LETTERS.has(cleanCurr)) {
         return false // GLUE!
       }
     }
