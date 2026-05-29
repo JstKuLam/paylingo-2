@@ -62,6 +62,7 @@ export default function SessionDetailPage({ params }: PageProps) {
   const [shareLink, setShareLink] = useState('')
   const [copied, setCopied] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
+  const [selectedStyle, setSelectedStyle] = useState<'default' | 'formal' | 'casual' | 'very_casual'>('default')
 
   // Load Session and Entries
   useEffect(() => {
@@ -226,12 +227,13 @@ export default function SessionDetailPage({ params }: PageProps) {
   }
 
   // AI Summarization
-  const handleAiSummarize = async () => {
+  const handleAiSummarize = async (styleToUse = selectedStyle) => {
     if (!session) return
     setAiLoading(true)
     setShareLink('')
     setSharePassword('')
     setShowSummaryModal(true)
+    setSelectedStyle(styleToUse)
 
     try {
       const res = await fetch('/api/ai/summarize', {
@@ -240,7 +242,8 @@ export default function SessionDetailPage({ params }: PageProps) {
         body: JSON.stringify({ 
           sessionId: session.id,
           sessions: [session],
-          entries: entries
+          entries: entries,
+          style: styleToUse
         })
       })
 
@@ -259,6 +262,11 @@ export default function SessionDetailPage({ params }: PageProps) {
     } finally {
       setAiLoading(false)
     }
+  }
+
+  const handleStyleChange = (newStyle: 'default' | 'formal' | 'casual' | 'very_casual') => {
+    setSelectedStyle(newStyle)
+    handleAiSummarize(newStyle)
   }
 
   // Create Shared Link
@@ -365,7 +373,7 @@ export default function SessionDetailPage({ params }: PageProps) {
         <div className="flex items-center gap-2 z-30">
           {/* AI Summary Button */}
           <button
-            onClick={handleAiSummarize}
+            onClick={() => handleAiSummarize()}
             className="h-10 px-4 rounded-full border border-host/30 bg-host/5 hover:bg-host/10 text-host transition-all duration-300 cursor-pointer flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider active:scale-95"
             title="Tóm tắt AI cuộc họp"
           >
@@ -549,6 +557,38 @@ export default function SessionDetailPage({ params }: PageProps) {
                 </div>
               ) : (
                 <>
+                  {/* Smart Formatting Selector Panel */}
+                  <div className="glass-panel p-4 rounded-3xl border border-white/5 shrink-0 flex flex-col gap-2 bg-white/[0.01]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Định dạng thông minh (AI Smart Formatting)</span>
+                      <span className="text-[9px] bg-host/10 text-host px-2 py-0.5 rounded-full font-black uppercase tracking-wider">cx/gpt-5.5</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
+                      {[
+                        { id: 'default', name: 'Mặc định', desc: 'Dịch tự nhiên, lịch sự', dot: 'bg-blue-500' },
+                        { id: 'formal', name: 'Trang trọng', desc: 'Doanh nghiệp, câu chuẩn', dot: 'bg-indigo-600' },
+                        { id: 'casual', name: 'Thân mật', desc: 'Thoải mái, tự nhiên', dot: 'bg-emerald-500' },
+                        { id: 'very_casual', name: 'Chat nhanh', desc: 'Chữ thường, tối giản', dot: 'bg-amber-500' },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => handleStyleChange(item.id as any)}
+                          disabled={aiLoading}
+                          className={`p-2.5 rounded-2xl border text-left active:scale-[0.98] transition-all cursor-pointer flex flex-col gap-1 ${
+                            selectedStyle === item.id 
+                              ? 'border-host bg-host/5 ring-1 ring-host' 
+                              : 'border-white/5 bg-white/[0.02] hover:bg-white/5 hover:border-white/10'
+                          }`}
+                        >
+                          <span className="text-[10px] font-black text-white flex items-center gap-1.5 leading-none">
+                            <span className={`w-1.5 h-1.5 rounded-full ${item.dot}`}></span>
+                            {item.name}
+                          </span>
+                          <span className="text-[8px] text-slate-400 font-bold leading-tight truncate">{item.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   {/* Share Setup Section */}
                   <div className="glass-panel bg-white/[0.01] border border-white/5 p-5 rounded-3xl space-y-3.5">
                     <h3 className="text-xs font-black text-slate-200 flex items-center gap-1.5 uppercase tracking-wide">

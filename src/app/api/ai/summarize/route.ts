@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { sessionId, folderId, sessions, entries } = body
+    const { sessionId, folderId, sessions, entries, style } = body
 
     if (!sessionId && !folderId && !entries) {
       return NextResponse.json({ error: 'Thiếu thông tin cuộc hội thoại' }, { status: 400 })
@@ -149,8 +149,18 @@ export async function POST(req: Request) {
     const endpoint = settings?.endpoint || 'https://9r.9phut.org/v1'
     const apiKey = settings?.api_key || ''
 
+    // Define tone and formatting instructions based on selected style
+    let toneInstruction = "Giữ nguyên ý chính, câu từ tự nhiên, lịch sự và trôi chảy."
+    if (style === 'formal') {
+      toneInstruction = "Giọng điệu cực kỳ trang trọng, chuyên nghiệp, sử dụng cấu trúc câu chuẩn mực ngữ pháp doanh nghiệp, thay thế các từ ngữ nói suồng sã bằng thuật ngữ lịch thiệp, lịch sự."
+    } else if (style === 'casual') {
+      toneInstruction = "Giọng điệu thân mật, thoải mái, tự nhiên, giữ nguyên phong cách trò chuyện hằng ngày nhưng vẫn trôi chảy và dễ đọc."
+    } else if (style === 'very_casual') {
+      toneInstruction = "Sử dụng chữ viết thường (lowercase) ở mức tối đa, tối giản hóa dấu câu, câu từ cực kỳ ngắn gọn giống như phong cách gửi tin nhắn nhanh (quick chat) trên các ứng dụng trò chuyện."
+    }
+
     const prompt = `Bạn là một trợ lý AI chuyên nghiệp có nhiệm vụ tóm tắt cuộc họp/cuộc trò chuyện dựa trên bản dịch hội thoại song ngữ của hai người (Host là người Việt, Partner là người nước ngoài). Hãy tạo ra một bản tóm tắt cực kỳ chuyên nghiệp bằng tiếng Việt với các phần sau:
-1. **Text sạch (Clean Text)**: Chuyển đổi cuộc hội thoại thành một đoạn văn trôi chảy, kết nối logic các câu nói của hai bên, loại bỏ các từ đệm, từ lặp, ngắc ngứ.
+1. **Text sạch (Clean Text)**: Chuyển đổi cuộc hội thoại thành một đoạn văn trôi chảy, kết nối logic các câu nói của hai bên, loại bỏ các từ đệm, từ lặp, ngắc ngứ. Đặc biệt, hãy viết phần này và toàn bộ bản tóm tắt theo phong cách: "${toneInstruction}".
 2. **Nhận diện người nói (Speaker Identification)**: Nêu rõ vai trò, mục tiêu chính của từng người nói (Host và Partner) trong buổi đàm thoại.
 3. **Tóm tắt điều hành (Executive Summary)**: Mô tả ngắn gọn chủ đề, mục đích, bối cảnh và kết quả tổng quan của cuộc hội thoại (2-3 câu).
 4. **Hành động kế tiếp (Action Items)**: Danh sách các việc cần làm, ai chịu trách nhiệm, thời hạn (nếu có).
