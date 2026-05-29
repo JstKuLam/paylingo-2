@@ -1,0 +1,24 @@
+{
+  "name": "PayLingo - Dịch song ngữ real-time",
+  "short_name": "PayLingo",
+  "description": "Ứng dụng dịch song ngữ hội thoại trực tiếp 2 chiều độ trễ tối thiểu.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#03000a",
+  "theme_color": "#03000a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
