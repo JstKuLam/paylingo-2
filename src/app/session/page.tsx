@@ -686,7 +686,7 @@ export default function SessionPage() {
       </main>
 
       {/* Control Navigation Dashboard */}
-      <footer className="w-full flex flex-col md:flex-row items-center justify-between mt-2.5 py-2 px-3 md:py-4 md:px-5 glass-panel rounded-xl md:rounded-2xl gap-2.5 md:gap-4 z-20 shrink-0">
+      <footer className="w-full flex flex-col md:flex-row items-center justify-between mt-2.5 py-2 px-3 md:py-4 md:px-5 glass-panel rounded-xl md:rounded-2xl gap-2.5 md:gap-4 relative z-20 shrink-0">
         
         {/* Left Column: Connection & Recording Status Details + Language Selector */}
         <div className="flex items-center justify-between md:justify-start gap-3 md:gap-6 w-full md:w-auto shrink-0 pb-2 md:pb-0 border-b border-white/5 md:border-none">
@@ -731,12 +731,12 @@ export default function SessionPage() {
           </div>
 
           {/* Language translation indicator (English <---> Việt Nam) */}
-          <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-xl px-2 py-1 md:px-4 md:py-2 text-[10px] md:text-xs font-bold text-white transition-all shadow-inner shrink-0">
+          <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl px-1.5 py-0.5 md:px-3 md:py-1 text-[10px] md:text-xs font-bold text-white transition-all shadow-inner shrink-0">
             <select
               disabled={isActive}
               value={partnerLang}
               onChange={(e) => setPartnerLang(e.target.value)}
-              className="bg-transparent text-[10px] md:text-xs font-bold text-white transition-all cursor-pointer outline-none border-none py-0 px-0.5"
+              className="bg-transparent text-[10px] md:text-xs font-bold text-white transition-all cursor-pointer outline-none border-none py-1.5 px-1 min-h-[36px] flex items-center"
             >
               {PARTNER_LANGUAGES.map(lang => (
                 <option key={lang.code} value={lang.code} className="bg-slate-900 text-white">
@@ -745,7 +745,7 @@ export default function SessionPage() {
               ))}
             </select>
             <span className="text-slate-500 font-extrabold text-[9px] md:text-[11px] mx-0.5">⇆</span>
-            <span className="flex items-center gap-1 text-slate-300 text-[10px] md:text-xs">
+            <span className="flex items-center gap-1 text-slate-300 text-[10px] md:text-xs py-1 px-1 shrink-0">
               🇻🇳 VI
             </span>
           </div>
