@@ -304,6 +304,8 @@ export default function SessionPage() {
     partialTokens,
     isPaused,
     isSourceMuted,
+    isReconnecting,
+    reconnectAttempt,
     start,
     stop,
     pause,
@@ -315,7 +317,11 @@ export default function SessionPage() {
     enable_endpoint_detection: true,
     language_hints: recordingConfig.language_hints,
     language_hints_strict: recordingConfig.language_hints_strict,
-    translation: recordingConfig.translation
+    translation: recordingConfig.translation,
+    auto_reconnect: true,
+    max_reconnect_attempts: 10,
+    reconnect_base_delay_ms: 1000,
+    reset_transcript_on_reconnect: false
   })
 
   // 3. Sync and parse tokens into conversation messages in real-time
@@ -686,14 +692,15 @@ export default function SessionPage() {
         {/* Left Column: Connection & Recording Status Details */}
         <div className="flex items-center gap-3 w-full xl:w-auto shrink-0 justify-center xl:justify-start">
           <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${
+            isReconnecting || state === 'connecting' || state === 'starting' ? 'bg-yellow-500 animate-pulse' :
             state === 'recording' ? 'bg-red-500 animate-pulse-glowing' : 
-            state === 'connecting' || state === 'starting' ? 'bg-yellow-500 animate-pulse' : 
             'bg-slate-600'
           }`} />
           
           <div className="flex flex-col">
             <span className="text-xs font-bold text-white capitalize leading-tight">
               Trạng thái: {
+                isReconnecting ? `Mất kết nối! Đang thử lại (Lần ${reconnectAttempt}/10)...` :
                 state === 'idle' ? 'Đang chờ' :
                 state === 'starting' ? 'Đang khởi động...' :
                 state === 'connecting' ? 'Đang kết nối...' :
@@ -705,7 +712,12 @@ export default function SessionPage() {
               }
             </span>
             <span className="text-[10px] text-slate-400 font-semibold mt-0.5 flex items-center gap-1">
-              {state === 'recording' ? (
+              {isReconnecting ? (
+                <>
+                  <WifiOff className="w-3 h-3 text-yellow-500 shrink-0" />
+                  Mạng không ổn định. Đang tự động khôi phục hội thoại...
+                </>
+              ) : state === 'recording' ? (
                 <>
                   <Wifi className="w-3 h-3 text-green-400 shrink-0" />
                   Kết nối Soniox WebSocket ổn định
@@ -746,13 +758,21 @@ export default function SessionPage() {
         <div className="flex flex-wrap items-center justify-center xl:justify-end gap-2 w-full xl:w-auto">
           
           {/* Start/Stop Button */}
-          {!isActive ? (
+          {state === 'idle' || state === 'stopped' || state === 'canceled' || state === 'error' ? (
             <button
               onClick={handleStart}
               className="py-2.5 px-6 rounded-xl font-bold bg-gradient-to-r from-host to-partner hover:scale-[1.02] text-white shadow-lg shadow-host/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs animate-pulse-glowing"
             >
               <Mic className="w-4 h-4 text-white" />
               Bắt đầu Dịch (Start)
+            </button>
+          ) : state === 'starting' || state === 'connecting' ? (
+            <button
+              disabled
+              className="py-2.5 px-6 rounded-xl font-bold bg-slate-700 text-slate-400 border border-white/5 transition-all flex items-center justify-center gap-2 text-xs cursor-not-allowed"
+            >
+              <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+              Đang kết nối...
             </button>
           ) : (
             <button
