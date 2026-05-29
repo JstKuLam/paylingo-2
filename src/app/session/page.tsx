@@ -503,13 +503,13 @@ export default function SessionPage() {
       {/* Main Translation Container with Layout switching transitions */}
       <main className={`flex-1 w-full relative z-10 min-h-0 ${
         layoutMode === 'split' 
-          ? 'grid grid-cols-1 grid-rows-[2fr_3fr] md:grid-rows-none md:grid-cols-2 gap-2.5 md:gap-4' 
+          ? 'grid grid-cols-1 grid-rows-[3.5fr_6.5fr] md:grid-rows-none md:grid-cols-[3.5fr_6.5fr] gap-2.5 md:gap-4' 
           : 'flex flex-col gap-2.5 md:gap-4'
       }`}>
         
         {/* PANEL A - PARTNER PANEL (Always shows partner's language) */}
         <section className={`glass-panel rounded-2xl md:rounded-3xl p-3 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-partner/30 shadow-partner/5 shadow-2xl transition-all duration-500 min-h-0 ${
-          layoutMode === 'flipped' ? 'transform rotate-180 flex-[2_2_0%] md:flex-1 order-1' : 'flex-[2_2_0%] md:flex-1'
+          layoutMode === 'flipped' ? 'transform rotate-180 flex-[7_7_0%] md:flex-[7_7_0%] order-1' : 'flex-[7_7_0%] md:flex-[7_7_0%]'
         }`}>
           <div className="absolute inset-0 bg-partner/[0.005] pointer-events-none"></div>
 
@@ -599,7 +599,7 @@ export default function SessionPage() {
 
         {/* PANEL B - HOST PANEL (Always shows Vietnamese) */}
         <section className={`glass-panel rounded-2xl md:rounded-3xl p-3 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-host/30 shadow-host/5 shadow-2xl transition-all duration-500 min-h-0 ${
-          layoutMode === 'flipped' ? 'flex-[3_3_0%] md:flex-1 order-2' : 'flex-[3_3_0%] md:flex-1'
+          layoutMode === 'flipped' ? 'flex-[13_13_0%] md:flex-[13_13_0%] order-2' : 'flex-[13_13_0%] md:flex-[13_13_0%]'
         }`}>
           <div className="absolute inset-0 bg-host/[0.005] pointer-events-none"></div>
 

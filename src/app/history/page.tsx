@@ -26,6 +26,7 @@ import { createClient } from '@/lib/supabase/client'
 import { downloadSessionPDF } from '@/lib/pdf-generator'
 
 const PARTNER_LANGUAGES = [
+  { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐' },
   { code: 'en', name: 'English', flag: '🇬🇧' },
   { code: 'zh', name: '中文', flag: '🇨🇳' },
   { code: 'ja', name: '日本語', flag: '🇯🇵' },
