@@ -85,7 +85,7 @@ export default function Home() {
 
         {/* Logo / Header */}
         <div className="flex flex-col items-center text-center mb-8 relative z-10">
-          <PayPayLogo className="h-16 w-auto text-white mb-4 animate-pulse-glowing shrink-0" width={180} height={68} />
+          <PayPayLogo className="h-16 w-auto text-white mb-4 hover:scale-[1.02] transition-transform duration-300 ease-out cursor-pointer shrink-0" width={180} height={68} />
           <p className="text-slate-400 mt-2 text-sm max-w-xs font-medium">
             Giải pháp dịch song ngữ hội thoại song song real-time trực tiếp 2 chiều
           </p>
