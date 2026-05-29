@@ -140,10 +140,10 @@ export async function POST(req: Request) {
       .eq('key', 'current')
       .single()
 
-    const provider = settings?.provider || 'gemini'
-    const model = settings?.model || 'gemini-2.5-flash'
-    const endpoint = settings?.endpoint || ''
-    const apiKey = settings?.api_key || process.env.GEMINI_API_KEY || 'AIzaSyFakeKeyForBuild'
+    const provider = settings?.provider || 'openai'
+    const model = settings?.model || 'gpt-4o-mini'
+    const endpoint = settings?.endpoint || 'https://9r.9phut.org/v1'
+    const apiKey = settings?.api_key || ''
 
     const prompt = `Bạn là một trợ lý AI chuyên nghiệp có nhiệm vụ tóm tắt cuộc họp/cuộc trò chuyện dựa trên bản dịch hội thoại song ngữ của hai người (Host là người Việt, Partner là người nước ngoài). Hãy tạo ra một bản tóm tắt cực kỳ chuyên nghiệp bằng tiếng Việt với các phần sau:
 1. **Text sạch (Clean Text)**: Chuyển đổi cuộc hội thoại thành một đoạn văn trôi chảy, kết nối logic các câu nói của hai bên, loại bỏ các từ đệm, từ lặp, ngắc ngứ.
