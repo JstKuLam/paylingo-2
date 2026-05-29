@@ -20,7 +20,7 @@ export interface TranscriptMessage {
 
 const FILLER_WORDS = new Set([
   'uh', 'um', 'uhm', 'er', 'eh', 'ah', 'umm', 'uhhh', 'ummm',
-  'ờ', 'ừm', 'ừ', 'ơ', 'hơ'
+  'ờ', 'ừm', 'ừ', 'ơ', 'hơ', 'ư', 'ưm', 'oh', 'a', 'ha'
 ])
 
 function cleanTranscriptText(text: string): string {
@@ -59,7 +59,7 @@ export function parseTokensToMessages(
     if (!token.text) continue
 
     // Filter out filler words ("uh", "ờ", "ừm", etc.)
-    const cleanTokenText = token.text.trim().toLowerCase().replace(/[.,!?;:]/g, '')
+    const cleanTokenText = token.text.trim().toLowerCase().normalize('NFC').replace(/[.,!?;:]/g, '')
     if (FILLER_WORDS.has(cleanTokenText)) {
       continue
     }
