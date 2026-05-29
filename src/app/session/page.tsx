@@ -42,6 +42,7 @@ import { useSessionLifecycle } from '@/hooks/useSessionLifecycle'
 import { initAutoSync, syncPendingData } from '@/lib/sync-manager'
 import { db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
 import { downloadSessionPDF } from '@/lib/pdf-generator'
+import PayPayLogo from '@/components/PayPayLogo'
 
 const PARTNER_LANGUAGES = [
   { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐', label: 'Any' },
@@ -451,7 +452,7 @@ export default function SessionPage() {
   const selectedPartner = PARTNER_LANGUAGES.find(l => l.code === partnerLang)
 
   return (
-    <div className="h-screen h-[100dvh] w-full flex flex-col p-4 relative overflow-hidden bg-background">
+    <div className="h-screen h-[100dvh] w-full flex flex-col p-2 md:p-4 relative overflow-hidden bg-background">
       {/* Decorative Blur Blobs */}
       <div className="absolute top-1/3 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-host/5 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-1/3 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-partner/5 rounded-full blur-3xl pointer-events-none"></div>
@@ -459,21 +460,21 @@ export default function SessionPage() {
       {/* Warning/Status Banners */}
       <div className="w-full space-y-2 mb-3 relative z-30">
         {offlineIndicator && (
-          <div className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2.5 px-4 rounded-xl text-xs font-bold flex items-center gap-2 animate-pulse">
+          <div className="w-full bg-amber-500/15 border border-amber-500/30 text-amber-400 py-2 px-3.5 rounded-xl text-xs font-bold flex items-center gap-2 animate-pulse">
             <WifiOff className="w-4 h-4 shrink-0" />
             <span>Mất kết nối mạng. Đang lưu tạm bản dịch vào bộ nhớ máy (Offline-first)...</span>
           </div>
         )}
 
         {silenceWarning && (
-          <div className="w-full bg-red-500/15 border border-red-500/30 text-red-400 py-2.5 px-4 rounded-xl text-xs font-bold flex items-center gap-2 animate-bounce">
+          <div className="w-full bg-red-500/15 border border-red-500/30 text-red-400 py-2 px-3.5 rounded-xl text-xs font-bold flex items-center gap-2 animate-bounce">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>Không phát hiện âm thanh trong 4 phút. Cuộc họp sẽ tự động dừng sau 1 phút nữa để tiết kiệm chi phí!</span>
           </div>
         )}
 
         {wakeLockError && isActive && (
-          <div className="w-full bg-slate-500/15 border border-slate-500/30 text-slate-400 py-2 px-4 rounded-xl text-[10px] font-semibold flex items-center gap-2">
+          <div className="w-full bg-slate-500/15 border border-slate-500/30 text-slate-400 py-2 px-3 rounded-xl text-[10px] font-semibold flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             <span>Trình duyệt không hỗ trợ Wake Lock. Hãy chỉnh tăng thời gian chờ tắt màn hình trên thiết bị.</span>
           </div>
@@ -481,20 +482,18 @@ export default function SessionPage() {
       </div>
 
       {/* Dynamic Header */}
-      <header className="w-full flex items-center justify-between py-3 px-4 glass-panel rounded-2xl mb-4 relative z-20 shrink-0">
+      <header className="w-full flex items-center justify-between py-2 px-3.5 md:py-3 md:px-4 glass-panel rounded-xl md:rounded-2xl mb-2.5 md:mb-4 relative z-20 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-host to-partner flex items-center justify-center shadow-lg shadow-host/15">
-            <Languages className="w-5 h-5 text-white" />
-          </div>
+          <PayPayLogo className="h-7 md:h-8 w-auto text-white shrink-0" width={92} height={35} />
+          <div className="h-4 w-px bg-white/20 shrink-0" />
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-white leading-none">PayLingo</h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-host/10 border border-host/20 text-host flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider bg-host/10 border border-host/20 text-host flex items-center gap-1">
                 <UserCheck className="w-2.5 h-2.5" />
                 {userLabel}
               </span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1 font-semibold">
+            <p className="text-[9px] md:text-[10px] text-slate-400 mt-1 font-semibold">
               Hội thoại song ngữ trực tiếp 2 chiều
             </p>
           </div>
@@ -504,29 +503,29 @@ export default function SessionPage() {
       {/* Main Translation Container with Layout switching transitions */}
       <main className={`flex-1 w-full relative z-10 min-h-0 ${
         layoutMode === 'split' 
-          ? 'grid grid-cols-1 grid-rows-2 md:grid-rows-none md:grid-cols-2 gap-4' 
-          : 'flex flex-col gap-4'
+          ? 'grid grid-cols-1 grid-rows-2 md:grid-rows-none md:grid-cols-2 gap-2.5 md:gap-4' 
+          : 'flex flex-col gap-2.5 md:gap-4'
       }`}>
         
         {/* PANEL A - PARTNER PANEL (Always shows partner's language) */}
-        <section className={`glass-panel rounded-3xl p-5 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-partner/30 shadow-partner/5 shadow-2xl transition-all duration-500 min-h-0 ${
+        <section className={`glass-panel rounded-2xl md:rounded-3xl p-3 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-partner/30 shadow-partner/5 shadow-2xl transition-all duration-500 min-h-0 ${
           layoutMode === 'flipped' ? 'transform rotate-180 flex-1 order-1' : 'flex-1'
         }`}>
           <div className="absolute inset-0 bg-partner/[0.005] pointer-events-none"></div>
 
           {/* Panel A Header */}
-          <div className="flex items-center justify-between pb-4 border-b border-white/5 relative z-10 shrink-0">
+          <div className="flex items-center justify-between pb-2.5 md:pb-4 border-b border-white/5 relative z-10 shrink-0">
             <div className="flex items-center gap-2">
-              <span className="text-xl">{selectedPartner?.flag}</span>
+              <span className="text-base md:text-xl">{selectedPartner?.flag}</span>
               <div>
-                <h3 className="font-extrabold text-sm text-slate-200">KHUNG ĐỐI TÁC</h3>
-                <p className="text-[10px] text-partner font-semibold uppercase tracking-wider">
+                <h3 className="font-extrabold text-xs md:text-sm text-slate-200">KHUNG ĐỐI TÁC</h3>
+                <p className="text-[9px] md:text-[10px] text-partner font-semibold uppercase tracking-wider">
                   {selectedPartner?.name} Only
                 </p>
               </div>
             </div>
 
-            <div className="text-xs font-bold text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+            <div className="hidden sm:block text-xs font-bold text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
               {selectedPartner?.name}
             </div>
           </div>
@@ -535,7 +534,7 @@ export default function SessionPage() {
           <div 
             ref={partnerScrollRef}
             onScroll={handlePartnerScroll}
-            className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 scroll-smooth"
+            className="flex-1 overflow-y-auto py-2.5 space-y-3.5 md:py-4 md:space-y-4 pr-1 scroll-smooth"
           >
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center opacity-30 select-none px-4">
@@ -554,13 +553,13 @@ export default function SessionPage() {
                 return (
                   <div key={msg.id} className="flex flex-col w-full items-start gap-1">
                     {/* Speaker Label */}
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-1 text-slate-400">
+                    <span className="text-[9px] md:text-[10px] font-extrabold uppercase tracking-wider px-1 text-slate-400">
                       {msg.speaker === 'partner' ? selectedPartner?.name : 'Bạn (Dịch)'}
                     </span>
                     
                     {/* Message Bubble */}
                     <div 
-                      className={`rounded-2xl px-4 py-3 font-medium max-w-[85%] ${
+                      className={`rounded-xl px-3 py-2 text-sm md:text-base font-medium max-w-[88%] md:max-w-[85%] ${
                         msg.speaker === 'partner' 
                           ? 'bg-partner/10 border border-partner/20 text-partner-foreground' 
                           : 'bg-white/5 border border-white/10 text-slate-300'
@@ -579,7 +578,7 @@ export default function SessionPage() {
           {showPartnerScrollBottom && (
             <button
               onClick={scrollToBottomPartner}
-              className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-partner/90 hover:bg-partner text-slate-950 py-2 px-4 rounded-full text-xs font-black shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 z-20 cursor-pointer animate-bounce border border-white/10"
+              className="absolute bottom-12 py-1.5 px-3 text-[10px] md:bottom-16 md:py-2 md:px-4 md:text-xs left-1/2 -translate-x-1/2 bg-partner/90 hover:bg-partner text-slate-950 rounded-full font-black shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 z-20 cursor-pointer animate-bounce border border-white/10"
             >
               <ArrowDown className="w-3.5 h-3.5 stroke-[2.5]" />
               Cuộn xuống (Scroll to bottom)
@@ -599,24 +598,24 @@ export default function SessionPage() {
         </section>
 
         {/* PANEL B - HOST PANEL (Always shows Vietnamese) */}
-        <section className={`glass-panel rounded-3xl p-5 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-host/30 shadow-host/5 shadow-2xl transition-all duration-500 min-h-0 ${
+        <section className={`glass-panel rounded-2xl md:rounded-3xl p-3 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-host/30 shadow-host/5 shadow-2xl transition-all duration-500 min-h-0 ${
           layoutMode === 'flipped' ? 'flex-1 order-2' : 'flex-1'
         }`}>
           <div className="absolute inset-0 bg-host/[0.005] pointer-events-none"></div>
 
           {/* Panel B Header */}
-          <div className="flex items-center justify-between pb-4 border-b border-white/5 relative z-10 shrink-0">
+          <div className="flex items-center justify-between pb-2.5 md:pb-4 border-b border-white/5 relative z-10 shrink-0">
             <div className="flex items-center gap-2">
-              <span className="text-xl">🇻🇳</span>
+              <span className="text-base md:text-xl">🇻🇳</span>
               <div>
-                <h3 className="font-extrabold text-sm text-slate-200">KHUNG CỦA BẠN</h3>
-                <p className="text-[10px] text-host font-semibold uppercase tracking-wider">
+                <h3 className="font-extrabold text-xs md:text-sm text-slate-200">KHUNG CỦA BẠN</h3>
+                <p className="text-[9px] md:text-[10px] text-host font-semibold uppercase tracking-wider">
                   TIẾNG VIỆT ONLY
                 </p>
               </div>
             </div>
             
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+            <div className="hidden sm:block text-xs font-bold text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
               Khóa Tiếng Việt
             </div>
           </div>
@@ -625,7 +624,7 @@ export default function SessionPage() {
           <div 
             ref={hostScrollRef}
             onScroll={handleHostScroll}
-            className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 scroll-smooth"
+            className="flex-1 overflow-y-auto py-2.5 space-y-3.5 md:py-4 md:space-y-4 pr-1 scroll-smooth"
           >
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center opacity-30 select-none px-4">
@@ -641,13 +640,13 @@ export default function SessionPage() {
                 return (
                   <div key={msg.id} className="flex flex-col w-full items-start gap-1">
                     {/* Speaker Label */}
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-1 text-slate-400">
+                    <span className="text-[9px] md:text-[10px] font-extrabold uppercase tracking-wider px-1 text-slate-400">
                       {msg.speaker === 'host' ? 'Bạn' : `${selectedPartner?.name} (Dịch)`}
                     </span>
                     
                     {/* Message Bubble */}
                     <div 
-                      className={`rounded-2xl px-4 py-3 font-medium max-w-[85%] ${
+                      className={`rounded-xl px-3 py-2 text-sm md:text-base font-medium max-w-[88%] md:max-w-[85%] ${
                         msg.speaker === 'host' 
                           ? 'bg-host/10 border border-host/20 text-host-foreground' 
                           : 'bg-white/5 border border-white/10 text-slate-300'
@@ -666,7 +665,7 @@ export default function SessionPage() {
           {showHostScrollBottom && (
             <button
               onClick={scrollToBottomHost}
-              className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-host/90 hover:bg-host text-white py-2 px-4 rounded-full text-xs font-black shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 z-20 cursor-pointer animate-bounce border border-white/10"
+              className="absolute bottom-12 py-1.5 px-3 text-[10px] md:bottom-16 md:py-2 md:px-4 md:text-xs left-1/2 -translate-x-1/2 bg-host/90 hover:bg-host text-slate-950 rounded-full font-black shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 z-20 cursor-pointer animate-bounce border border-white/10"
             >
               <ArrowDown className="w-3.5 h-3.5 stroke-[2.5]" />
               Cuộn xuống (Scroll to bottom)
@@ -687,59 +686,57 @@ export default function SessionPage() {
       </main>
 
       {/* Control Navigation Dashboard */}
-      <footer className="w-full flex flex-col xl:flex-row items-center justify-between mt-4 py-4 px-5 glass-panel rounded-2xl gap-4 z-20 shrink-0">
+      <footer className="w-full flex flex-col md:flex-row items-center justify-between mt-2.5 py-2 px-3 md:py-4 md:px-5 glass-panel rounded-xl md:rounded-2xl gap-2.5 md:gap-4 z-20 shrink-0">
         
-        {/* Left Column: Connection & Recording Status Details */}
-        <div className="flex items-center gap-3 w-full xl:w-auto shrink-0 justify-center xl:justify-start">
-          <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${
-            isReconnecting || state === 'connecting' || state === 'starting' ? 'bg-yellow-500 animate-pulse' :
-            state === 'recording' ? 'bg-red-500 animate-pulse-glowing' : 
-            'bg-slate-600'
-          }`} />
-          
-          <div className="flex flex-col">
-            <span className="text-xs font-bold text-white capitalize leading-tight">
-              Trạng thái: {
-                isReconnecting ? `Mất kết nối! Đang thử lại (Lần ${reconnectAttempt}/10)...` :
-                state === 'idle' ? 'Đang chờ' :
-                state === 'starting' ? 'Đang khởi động...' :
-                state === 'connecting' ? 'Đang kết nối...' :
-                state === 'recording' ? 'Đang dịch trực tiếp' :
-                state === 'paused' ? 'Tạm dừng' :
-                state === 'stopping' ? 'Đang dừng...' :
-                state === 'stopped' ? 'Đã dừng' :
-                state === 'error' ? 'Có lỗi kết nối' : 'Đang chờ'
-              }
-            </span>
-            <span className="text-[10px] text-slate-400 font-semibold mt-0.5 flex items-center gap-1">
-              {isReconnecting ? (
-                <>
-                  <WifiOff className="w-3 h-3 text-yellow-500 shrink-0" />
-                  Mạng không ổn định. Đang tự động khôi phục hội thoại...
-                </>
-              ) : state === 'recording' ? (
-                <>
-                  <Wifi className="w-3 h-3 text-green-400 shrink-0" />
-                  Kết nối Soniox WebSocket ổn định
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3 h-3 text-slate-500 shrink-0" />
-                  Chưa mở kết nối audio
-                </>
-              )}
-            </span>
+        {/* Left Column: Connection & Recording Status Details + Language Selector */}
+        <div className="flex items-center justify-between md:justify-start gap-3 md:gap-6 w-full md:w-auto shrink-0 pb-2 md:pb-0 border-b border-white/5 md:border-none">
+          {/* Status Details */}
+          <div className="flex items-center gap-2 text-left">
+            <div className={`w-2.5 h-2.5 rounded-full flex items-center justify-center shrink-0 ${
+              isReconnecting || state === 'connecting' || state === 'starting' ? 'bg-yellow-500 animate-pulse' :
+              state === 'recording' ? 'bg-red-500 animate-pulse-glowing' : 
+              'bg-slate-600'
+            }`} />
+            
+            <div className="flex flex-col">
+              <span className="text-[10px] md:text-xs font-bold text-white capitalize leading-tight">
+                {isReconnecting ? 'Mất mạng...' :
+                 state === 'idle' ? 'Đang chờ' :
+                 state === 'starting' ? 'Khởi động...' :
+                 state === 'connecting' ? 'Kết nối...' :
+                 state === 'recording' ? 'Đang dịch' :
+                 state === 'paused' ? 'Tạm dừng' :
+                 state === 'stopping' ? 'Đang dừng...' :
+                 state === 'stopped' ? 'Đã dừng' : 'Đang chờ'}
+              </span>
+              <span className="text-[8px] md:text-[10px] text-slate-400 font-semibold mt-0.5 hidden sm:inline-flex items-center gap-1">
+                {isReconnecting ? (
+                  <>
+                    <WifiOff className="w-2.5 h-2.5 text-yellow-500 shrink-0" />
+                    Đang kết nối lại...
+                  </>
+                ) : state === 'recording' ? (
+                  <>
+                    <Wifi className="w-2.5 h-2.5 text-green-400 shrink-0" />
+                    Kết nối Soniox ổn định
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                    Chưa mở kết nối audio
+                  </>
+                )}
+              </span>
+            </div>
           </div>
-        </div>
 
-        {/* Center Column: Language translation indicator (English <---> Việt Nam) */}
-        <div className="flex items-center justify-center w-full xl:w-auto">
-          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold text-white transition-all shadow-inner">
+          {/* Language translation indicator (English <---> Việt Nam) */}
+          <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-xl px-2 py-1 md:px-4 md:py-2 text-[10px] md:text-xs font-bold text-white transition-all shadow-inner shrink-0">
             <select
               disabled={isActive}
               value={partnerLang}
               onChange={(e) => setPartnerLang(e.target.value)}
-              className="bg-transparent text-xs font-bold text-white transition-all cursor-pointer outline-none border-none py-0 px-1"
+              className="bg-transparent text-[10px] md:text-xs font-bold text-white transition-all cursor-pointer outline-none border-none py-0 px-0.5"
             >
               {PARTNER_LANGUAGES.map(lang => (
                 <option key={lang.code} value={lang.code} className="bg-slate-900 text-white">
@@ -747,52 +744,52 @@ export default function SessionPage() {
                 </option>
               ))}
             </select>
-            <span className="text-slate-500 font-extrabold mx-1">⇆</span>
-            <span className="flex items-center gap-1.5 text-slate-300">
-              🇻🇳 Việt Nam
+            <span className="text-slate-500 font-extrabold text-[9px] md:text-[11px] mx-0.5">⇆</span>
+            <span className="flex items-center gap-1 text-slate-300 text-[10px] md:text-xs">
+              🇻🇳 VI
             </span>
           </div>
         </div>
 
         {/* Right Column: Actions (Start/Stop, Font Size, Layout, History, Sign Out) */}
-        <div className="flex flex-wrap items-center justify-center xl:justify-end gap-2 w-full xl:w-auto">
+        <div className="flex items-center justify-between md:justify-end gap-1.5 md:gap-2 w-full md:w-auto mt-1 md:mt-0">
           
           {/* Start/Stop Button */}
           {state === 'idle' || state === 'stopped' || state === 'canceled' || state === 'error' ? (
             <button
               onClick={handleStart}
-              className="py-2.5 px-6 rounded-xl font-bold bg-gradient-to-r from-host to-partner hover:scale-[1.02] text-white shadow-lg shadow-host/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs animate-pulse-glowing"
+              className="flex-1 md:flex-none py-2 px-3 md:py-2.5 md:px-6 rounded-xl font-bold bg-gradient-to-r from-host to-partner hover:scale-[1.02] text-white shadow-lg shadow-host/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs animate-pulse-glowing"
             >
-              <Mic className="w-4 h-4 text-white" />
-              Bắt đầu Dịch (Start)
+              <Mic className="w-3.5 h-3.5 text-white shrink-0" />
+              <span>Bắt đầu</span>
             </button>
           ) : state === 'starting' || state === 'connecting' ? (
             <button
               disabled
-              className="py-2.5 px-6 rounded-xl font-bold bg-slate-700 text-slate-400 border border-white/5 transition-all flex items-center justify-center gap-2 text-xs cursor-not-allowed"
+              className="flex-1 md:flex-none py-2 px-3 md:py-2.5 md:px-6 rounded-xl font-bold bg-slate-700 text-slate-400 border border-white/5 transition-all flex items-center justify-center gap-1.5 text-xs cursor-not-allowed"
             >
-              <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-              Đang kết nối...
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400 shrink-0" />
+              <span>Kết nối...</span>
             </button>
           ) : (
             <button
               onClick={handleStop}
-              className="py-2.5 px-6 rounded-xl font-bold bg-gradient-to-r from-red-500 to-red-600 hover:scale-[1.02] text-white shadow-lg shadow-red-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs"
+              className="flex-1 md:flex-none py-2 px-3 md:py-2.5 md:px-6 rounded-xl font-bold bg-gradient-to-r from-red-500 to-red-600 hover:scale-[1.02] text-white shadow-lg shadow-red-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs"
             >
-              <Square className="w-4 h-4 text-white fill-white" />
-              Kết thúc (Stop)
+              <Square className="w-3.5 h-3.5 text-white fill-white shrink-0" />
+              <span>Dừng</span>
             </button>
           )}
 
           {/* Font Size Menu Dropdown */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => setShowFontSizeDropdown(!showFontSizeDropdown)}
-              className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+              className="p-2 md:p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
               title="Chỉnh cỡ chữ dịch"
             >
-              <span className="font-extrabold text-[10px] bg-slate-800 px-1 py-0.5 rounded leading-none">AA</span>
-              <span>{fontSize}%</span>
+              <span className="font-extrabold text-[8px] md:text-[10px] bg-slate-800 px-1 py-0.5 rounded leading-none">AA</span>
+              <span className="text-[11px] md:text-xs">{fontSize}%</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showFontSizeDropdown ? 'rotate-180' : ''}`} />
             </button>
 
@@ -805,7 +802,7 @@ export default function SessionPage() {
                 />
                 
                 {/* Dropdown Menu */}
-                <div className="absolute bottom-full right-0 mb-2 w-32 glass-panel rounded-xl py-1.5 z-50 border border-white/10 shadow-2xl flex flex-col animate-fadeIn">
+                <div className="absolute bottom-full right-0 mb-2 w-28 glass-panel rounded-xl py-1 z-50 border border-white/10 shadow-2xl flex flex-col animate-fadeIn">
                   {([75, 100, 120, 150, 200] as const).map((size) => (
                     <button
                       key={size}
@@ -814,12 +811,12 @@ export default function SessionPage() {
                         localStorage.setItem('paylingo_font_size', size.toString())
                         setShowFontSizeDropdown(false)
                       }}
-                      className={`w-full px-3 py-2 text-left text-xs font-bold transition-all hover:bg-white/5 flex items-center justify-between cursor-pointer ${
+                      className={`w-full px-2.5 py-1.5 text-left text-xs font-bold transition-all hover:bg-white/5 flex items-center justify-between cursor-pointer ${
                         fontSize === size ? 'text-host bg-host/5' : 'text-slate-300'
                       }`}
                     >
                       <span>Cỡ {size}%</span>
-                      {fontSize === size && <Check className="w-3.5 h-3.5 text-host" />}
+                      {fontSize === size && <Check className="w-3 text-host" />}
                     </button>
                   ))}
                 </div>
@@ -830,12 +827,12 @@ export default function SessionPage() {
           {/* Layout switcher */}
           <button
             onClick={handleToggleLayout}
-            className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            className="p-2 md:p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold shrink-0"
             title="Chuyển đổi giao diện"
           >
-            {layoutMode === 'stacked' && <LayoutGrid className="w-4 h-4 text-host" />}
-            {layoutMode === 'split' && <Columns className="w-4 h-4 text-partner" />}
-            {layoutMode === 'flipped' && <Rotate3d className="w-4 h-4 text-amber-500 animate-spin" style={{ animationDuration: '3s' }} />}
+            {layoutMode === 'stacked' && <LayoutGrid className="w-3.5 h-3.5 text-host" />}
+            {layoutMode === 'split' && <Columns className="w-3.5 h-3.5 text-partner" />}
+            {layoutMode === 'flipped' && <Rotate3d className="w-3.5 h-3.5 text-amber-500 animate-spin" style={{ animationDuration: '3s' }} />}
             <span className="hidden md:inline">
               {layoutMode === 'stacked' && 'Xếp chồng'}
               {layoutMode === 'split' && 'Song song'}
@@ -846,19 +843,19 @@ export default function SessionPage() {
           {/* History Page Trigger */}
           <button
             onClick={() => setShowHistory(true)}
-            className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            className="p-2 md:p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold shrink-0"
           >
-            <History className="w-4 h-4" />
-            Lịch sử
+            <History className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Lịch sử</span>
           </button>
 
           {/* Sign Out */}
           <button
             onClick={handleLogout}
-            className="p-2.5 rounded-xl border border-red-500/10 hover:border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all cursor-pointer"
+            className="p-2 md:p-2.5 rounded-xl border border-red-500/10 hover:border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all cursor-pointer shrink-0"
             title="Đăng xuất"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-3.5 h-3.5" />
           </button>
 
         </div>
