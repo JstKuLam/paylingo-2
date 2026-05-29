@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Languages, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
+import { User, ArrowRight, Loader2, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+
+import PayPayLogo from '@/components/PayPayLogo'
 
 export default function Home() {
   const router = useRouter()
@@ -83,12 +85,7 @@ export default function Home() {
 
         {/* Logo / Header */}
         <div className="flex flex-col items-center text-center mb-8 relative z-10">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-host to-partner flex items-center justify-center shadow-lg shadow-host/20 mb-4 animate-pulse-glowing">
-            <Languages className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
-            PayLingo
-          </h1>
+          <PayPayLogo className="h-16 w-auto text-white mb-4 animate-pulse-glowing shrink-0" width={180} height={68} />
           <p className="text-slate-400 mt-2 text-sm max-w-xs font-medium">
             Giải pháp dịch song ngữ hội thoại song song real-time trực tiếp 2 chiều
           </p>
