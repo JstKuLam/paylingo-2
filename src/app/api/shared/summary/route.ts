@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
+export const runtime = 'edge'
+
 // Simple helper to hash the password securely on the server
 async function hashPassword(password: string): Promise<string | null> {
   if (!password) return null

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+export const runtime = 'edge'
 
 export async function POST(req: Request) {
   try {
@@ -99,7 +101,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Hội thoại trống, không có dữ liệu để tóm tắt' }, { status: 400 })
     }
 
-    // Format transcripts for Gemini
+    // Format transcripts for AI model
     let formattedTranscript = ''
     if (sessionId) {
       const sess = sessionsToSummarize[0]
@@ -107,7 +109,7 @@ export async function POST(req: Request) {
       formattedTranscript += `Ngôn ngữ đối tác: ${sess.partner_language}\n`
       formattedTranscript += `Bắt đầu lúc: ${sess.started_at}\n\n`
       
-      allEntries.forEach((entry, i) => {
+      allEntries.forEach((entry) => {
         const timeStr = new Date(entry.start_ms).toLocaleTimeString('vi-VN', { hour12: false })
         const speaker = entry.speaker === 'host' ? 'Host (Bạn - Tiếng Việt)' : `Partner (Đối tác - ${sess.partner_language})`
         formattedTranscript += `[${timeStr}] ${speaker}:\n`
@@ -130,10 +132,18 @@ export async function POST(req: Request) {
       })
     }
 
-    // Call Gemini 2.5 Flash using direct fetch
-    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyFakeKeyForBuild'
-    const model = 'gemini-2.5-flash'
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+    // Fetch active API configurations from Supabase securely
+    const adminSupa = createAdminClient()
+    const { data: settings } = await adminSupa
+      .from('api_settings')
+      .select('*')
+      .eq('key', 'current')
+      .single()
+
+    const provider = settings?.provider || 'gemini'
+    const model = settings?.model || 'gemini-2.5-flash'
+    const endpoint = settings?.endpoint || ''
+    const apiKey = settings?.api_key || process.env.GEMINI_API_KEY || 'AIzaSyFakeKeyForBuild'
 
     const prompt = `Bạn là một trợ lý AI chuyên nghiệp có nhiệm vụ tóm tắt cuộc họp/cuộc trò chuyện dựa trên bản dịch hội thoại song ngữ của hai người (Host là người Việt, Partner là người nước ngoài). Hãy tạo ra một bản tóm tắt cực kỳ chuyên nghiệp bằng tiếng Việt với các phần sau:
 1. **Text sạch (Clean Text)**: Chuyển đổi cuộc hội thoại thành một đoạn văn trôi chảy, kết nối logic các câu nói của hai bên, loại bỏ các từ đệm, từ lặp, ngắc ngứ.
@@ -150,41 +160,94 @@ Dưới đây là transcript cuộc đàm thoại:
 ${formattedTranscript}
 `
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 8192,
+    let summaryText = ''
+    let promptTokens = 0
+    let completionTokens = 0
+    let estimatedCost = 0.0
+
+    if (provider === 'gemini') {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      }),
-    })
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192,
+          },
+        }),
+      })
 
-    if (!response.ok) {
-      const errText = await response.text()
-      console.error('Gemini API Error Response:', errText)
-      return NextResponse.json({ error: `Lỗi kết nối AI: ${response.statusText}` }, { status: 500 })
+      if (!response.ok) {
+        const errText = await response.text()
+        console.error('Gemini API Error:', errText)
+        return NextResponse.json({ error: `Lỗi Gemini API: ${response.statusText}` }, { status: 500 })
+      }
+
+      const resData = await response.json()
+      summaryText = resData?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      promptTokens = resData?.usageMetadata?.promptTokenCount || 0
+      completionTokens = resData?.usageMetadata?.candidatesTokenCount || 0
+
+      // Gemini 2.5 Flash estimated pricing: Prompt: $0.075 / 1M, Completion: $0.30 / 1M
+      estimatedCost = (promptTokens * 0.000000075) + (completionTokens * 0.00000030)
+    } else if (provider === 'openai') {
+      const baseUrl = endpoint.trim().replace(/\/$/, '') || 'https://api.openai.com/v1'
+      const url = `${baseUrl}/chat/completions`
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { role: 'system', content: 'You are a professional meeting summary assistant.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.2
+        })
+      })
+
+      if (!response.ok) {
+        const errText = await response.text()
+        console.error('OpenAI compatible API Error:', errText)
+        return NextResponse.json({ error: `Lỗi OpenAI API: ${response.statusText}` }, { status: 500 })
+      }
+
+      const resData = await response.json()
+      summaryText = resData?.choices?.[0]?.message?.content || ''
+      promptTokens = resData?.usage?.prompt_tokens || 0
+      completionTokens = resData?.usage?.completion_tokens || 0
+
+      // Standard OpenAI mini compatible pricing estimation: Prompt: $0.150 / 1M, Completion: $0.600 / 1M
+      estimatedCost = (promptTokens * 0.00000015) + (completionTokens * 0.00000060)
     }
-
-    const resData = await response.json()
-    const summaryText = resData?.candidates?.[0]?.content?.parts?.[0]?.text
 
     if (!summaryText) {
       return NextResponse.json({ error: 'AI không trả về kết quả tóm tắt' }, { status: 500 })
+    }
+
+    // Write token usage to system logs securely inside admin table
+    const { error: logError } = await adminSupa
+      .from('ai_usage_logs')
+      .insert({
+        username,
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        model,
+        cost_usd: estimatedCost
+      })
+
+    if (logError) {
+      console.error('Failed to log token usage:', logError.message)
     }
 
     return NextResponse.json({ summary: summaryText })
