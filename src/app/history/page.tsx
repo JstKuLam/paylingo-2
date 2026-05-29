@@ -25,11 +25,15 @@ import {
   ExternalLink,
   ChevronDown,
   Copy,
-  Share2
+  Share2,
+  Sun,
+  Moon,
+  SunDim
 } from 'lucide-react'
 import { db, LocalSession, LocalTranscriptEntry, LocalFolder } from '@/lib/db'
 import { syncPendingData } from '@/lib/sync-manager'
 import { createClient } from '@/lib/supabase/client'
+import { useTheme } from '@/hooks/useTheme'
 
 const PARTNER_LANGUAGES = [
   { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐' },
@@ -45,6 +49,7 @@ const PARTNER_LANGUAGES = [
 
 export default function HistoryPage() {
   const router = useRouter()
+  const { theme, changeTheme } = useTheme()
   const [username, setUsername] = useState<string>('')
   const [sessions, setSessions] = useState<LocalSession[]>([])
   const [folders, setFolders] = useState<LocalFolder[]>([])
@@ -423,7 +428,46 @@ export default function HistoryPage() {
             </button>
           )}
 
-          <div className="h-11 border border-white/10 px-4 rounded-full hidden sm:flex items-center gap-2 text-xs font-black text-slate-400 bg-white/5">
+          <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 bg-black/10 rounded-full border border-white/5 h-11 shrink-0">
+            <button
+              onClick={() => changeTheme('dark')}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'dark' ? 'bg-host text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Space Dark - Giao diện tối huyền bí"
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => changeTheme('light-ios')}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'light-ios' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
+              }`}
+              title="iOS Light - Giao diện sáng Apple HIG"
+            >
+              <Sun className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => changeTheme('light-glass')}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'light-glass' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
+              }`}
+              title="Liquid Glass - Giao diện kính mờ cao cấp"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => changeTheme('light-warm')}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'light-warm' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
+              }`}
+              title="Warm Amber - Giao diện ấm áp cổ kính"
+            >
+              <SunDim className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="h-11 border border-white/10 px-4 rounded-full hidden sm:flex items-center gap-2 text-xs font-black text-slate-400 bg-white/5 shrink-0">
             <Database className="w-4 h-4 text-host" />
             LOCAL-FIRST
           </div>

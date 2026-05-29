@@ -34,9 +34,14 @@ import {
   Clock,
   FolderOpen,
   CloudLightning,
-  Database
+  Database,
+  Sun,
+  Moon,
+  Sparkles,
+  SunDim
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useTheme } from '@/hooks/useTheme'
 import { parseTokensToMessages, TranscriptMessage } from '@/lib/soniox-parser'
 import { useSessionLifecycle } from '@/hooks/useSessionLifecycle'
 import { initAutoSync, syncPendingData } from '@/lib/sync-manager'
@@ -57,6 +62,7 @@ const PARTNER_LANGUAGES = [
 
 export default function SessionPage() {
   const router = useRouter()
+  const { theme, changeTheme } = useTheme()
   const [partnerLang, setPartnerLang] = useState('any')
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
   const [userLabel, setUserLabel] = useState<string>('Khách')
@@ -497,14 +503,56 @@ export default function SessionPage() {
           </div>
         </div>
 
-        {/* Small version and build timestamp on the right */}
-        <div className="text-right flex flex-col justify-center leading-none pr-1">
-          <span className="text-[9px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest">
-            v1.2.8
-          </span>
-          <span className="text-[7px] md:text-[8px] text-slate-600 font-bold mt-1">
-            2026-05-29 11:53
-          </span>
+        {/* Premium Theme Selector Pill inside header */}
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 bg-black/10 rounded-full border border-white/5">
+            <button
+              onClick={() => changeTheme('dark')}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'dark' ? 'bg-host text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Space Dark - Giao diện tối huyền bí"
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => changeTheme('light-ios')}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'light-ios' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
+              }`}
+              title="iOS Light - Giao diện sáng Apple HIG"
+            >
+              <Sun className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => changeTheme('light-glass')}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'light-glass' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
+              }`}
+              title="Liquid Glass - Giao diện kính mờ cao cấp"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => changeTheme('light-warm')}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'light-warm' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
+              }`}
+              title="Warm Amber - Giao diện ấm áp cổ kính"
+            >
+              <SunDim className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Small version and build timestamp on the right */}
+          <div className="text-right flex flex-col justify-center leading-none pr-1">
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest">
+              v2.4.0
+            </span>
+            <span className="text-[7px] md:text-[8px] text-slate-600 font-bold mt-1">
+              2026-05-29 16:30
+            </span>
+          </div>
         </div>
       </header>
 

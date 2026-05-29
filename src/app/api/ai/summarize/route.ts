@@ -141,7 +141,7 @@ export async function POST(req: Request) {
       .single()
 
     const provider = settings?.provider || 'openai'
-    const model = settings?.model || 'gpt-4o-mini'
+    const model = settings?.model || 'cx/gpt-5.5'
     const endpoint = settings?.endpoint || 'https://9r.9phut.org/v1'
     const apiKey = settings?.api_key || ''
 

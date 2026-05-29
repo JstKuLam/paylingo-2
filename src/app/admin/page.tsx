@@ -792,7 +792,7 @@ export default function AdminPage() {
                   value={apiProvider}
                   onChange={(e: any) => {
                     setApiProvider(e.target.value)
-                    setApiModel(e.target.value === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini')
+                    setApiModel(e.target.value === 'gemini' ? 'gemini-2.5-flash' : 'cx/gpt-5.5')
                   }}
                   className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white outline-none select-none"
                 >
@@ -825,7 +825,7 @@ export default function AdminPage() {
                   required
                   value={apiModel}
                   onChange={(e) => setApiModel(e.target.value)}
-                  placeholder={apiProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini'}
+                  placeholder={apiProvider === 'gemini' ? 'gemini-2.5-flash' : 'cx/gpt-5.5'}
                   className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none"
                 />
               </div>
