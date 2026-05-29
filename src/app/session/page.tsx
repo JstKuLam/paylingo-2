@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useRecording } from '@soniox/react'
 import { 
@@ -8,6 +8,8 @@ import {
   MicOff, 
   Square, 
   ChevronRight, 
+  ChevronDown,
+  ArrowDown,
   Languages, 
   LogOut, 
   Loader2, 
@@ -42,6 +44,7 @@ import { db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
 import { downloadSessionPDF } from '@/lib/pdf-generator'
 
 const PARTNER_LANGUAGES = [
+  { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐', label: 'Any' },
   { code: 'en', name: 'English', flag: '🇬🇧', label: 'English' },
   { code: 'zh', name: '中文', flag: '🇨🇳', label: 'Chinese' },
   { code: 'ja', name: '日本語', flag: '🇯🇵', label: 'Japanese' },
@@ -54,13 +57,13 @@ const PARTNER_LANGUAGES = [
 
 export default function SessionPage() {
   const router = useRouter()
-  const [partnerLang, setPartnerLang] = useState('en')
+  const [partnerLang, setPartnerLang] = useState('any')
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
   const [userLabel, setUserLabel] = useState<string>('Khách')
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
   
   // Phase 5 Layout Switcher states
-  const [layoutMode, setLayoutMode] = useState<'stacked' | 'split' | 'flipped'>('stacked')
+  const [layoutMode, setLayoutMode] = useState<'stacked' | 'split' | 'flipped'>('split')
 
   // History Overlay states
   const [showHistory, setShowHistory] = useState(false)
@@ -77,6 +80,11 @@ export default function SessionPage() {
 
   // Font Size state (75%, 100%, 120%, 150%, 200%)
   const [fontSize, setFontSize] = useState<75 | 100 | 120 | 150 | 200>(100)
+  const [showFontSizeDropdown, setShowFontSizeDropdown] = useState(false)
+  
+  // Scroll to bottom helper states
+  const [showPartnerScrollBottom, setShowPartnerScrollBottom] = useState(false)
+  const [showHostScrollBottom, setShowHostScrollBottom] = useState(false)
 
   const partnerScrollRef = useRef<HTMLDivElement>(null)
   const hostScrollRef = useRef<HTMLDivElement>(null)
@@ -234,14 +242,7 @@ export default function SessionPage() {
     }
   }, [])
 
-  const handleToggleFontSize = () => {
-    const sizes: (75 | 100 | 120 | 150 | 200)[] = [75, 100, 120, 150, 200]
-    const currentIndex = sizes.indexOf(fontSize)
-    const nextIndex = (currentIndex + 1) % sizes.length
-    const nextSize = sizes[nextIndex]
-    setFontSize(nextSize)
-    localStorage.setItem('paylingo_font_size', nextSize.toString())
-  }
+
 
   // 1. Authenticate user by username
   useEffect(() => {
@@ -272,7 +273,30 @@ export default function SessionPage() {
     }
   }, [])
 
-  // 2. Configure Soniox Real-time Hook
+  // 2. Configure Soniox Real-time Hook and dynamic translation configuration
+  const recordingConfig = useMemo(() => {
+    if (partnerLang === 'any') {
+      return {
+        language_hints: ['vi', 'en', 'zh', 'ja', 'ko', 'es', 'ru', 'de', 'th'],
+        language_hints_strict: false,
+        translation: {
+          type: 'one_way' as const,
+          target_language: 'vi'
+        }
+      }
+    } else {
+      return {
+        language_hints: ['vi', partnerLang],
+        language_hints_strict: true,
+        translation: {
+          type: 'two_way' as const,
+          language_a: 'vi',
+          language_b: partnerLang
+        }
+      }
+    }
+  }, [partnerLang])
+
   const {
     isActive,
     state,
@@ -289,13 +313,9 @@ export default function SessionPage() {
     model: 'stt-rt-v4',
     enable_language_identification: true,
     enable_endpoint_detection: true,
-    language_hints: ['vi', partnerLang],
-    language_hints_strict: true,
-    translation: {
-      type: 'two_way',
-      language_a: 'vi',
-      language_b: partnerLang
-    }
+    language_hints: recordingConfig.language_hints,
+    language_hints_strict: recordingConfig.language_hints_strict,
+    translation: recordingConfig.translation
   })
 
   // 3. Sync and parse tokens into conversation messages in real-time
@@ -356,15 +376,52 @@ export default function SessionPage() {
 
 
 
-  // Auto-scroll panels on message update
+  // Scroll detectors to check if user has scrolled up to review history
+  const handlePartnerScroll = () => {
+    const el = partnerScrollRef.current
+    if (!el) return
+    // Show button if scrolled up by more than 80px from bottom
+    const isScrolledUp = el.scrollHeight - el.scrollTop - el.clientHeight > 80
+    setShowPartnerScrollBottom(isScrolledUp)
+  }
+
+  const handleHostScroll = () => {
+    const el = hostScrollRef.current
+    if (!el) return
+    // Show button if scrolled up by more than 80px from bottom
+    const isScrolledUp = el.scrollHeight - el.scrollTop - el.clientHeight > 80
+    setShowHostScrollBottom(isScrolledUp)
+  }
+
+  // Smooth scroll to bottom handlers
+  const scrollToBottomPartner = () => {
+    const el = partnerScrollRef.current
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+      setShowPartnerScrollBottom(false)
+    }
+  }
+
+  const scrollToBottomHost = () => {
+    const el = hostScrollRef.current
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+      setShowHostScrollBottom(false)
+    }
+  }
+
+  // Auto-scroll panels on message update - only if user is already at the bottom
   useEffect(() => {
-    if (partnerScrollRef.current) {
+    if (partnerScrollRef.current && !showPartnerScrollBottom) {
       partnerScrollRef.current.scrollTop = partnerScrollRef.current.scrollHeight
     }
-    if (hostScrollRef.current) {
+  }, [messages, showPartnerScrollBottom])
+
+  useEffect(() => {
+    if (hostScrollRef.current && !showHostScrollBottom) {
       hostScrollRef.current.scrollTop = hostScrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, showHostScrollBottom])
 
   // Handle Logout
   const handleLogout = async () => {
@@ -388,7 +445,7 @@ export default function SessionPage() {
   const selectedPartner = PARTNER_LANGUAGES.find(l => l.code === partnerLang)
 
   return (
-    <div className="min-h-screen w-full flex flex-col p-4 relative overflow-hidden bg-background">
+    <div className="h-screen h-[100dvh] w-full flex flex-col p-4 relative overflow-hidden bg-background">
       {/* Decorative Blur Blobs */}
       <div className="absolute top-1/3 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-host/5 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-1/3 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-partner/5 rounded-full blur-3xl pointer-events-none"></div>
@@ -441,12 +498,12 @@ export default function SessionPage() {
       {/* Main Translation Container with Layout switching transitions */}
       <main className={`flex-1 w-full relative z-10 min-h-0 ${
         layoutMode === 'split' 
-          ? 'grid grid-cols-1 md:grid-cols-2 gap-4' 
+          ? 'grid grid-cols-1 grid-rows-2 md:grid-rows-none md:grid-cols-2 gap-4' 
           : 'flex flex-col gap-4'
       }`}>
         
         {/* PANEL A - PARTNER PANEL (Always shows partner's language) */}
-        <section className={`glass-panel rounded-3xl p-5 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-partner/30 shadow-partner/5 shadow-2xl transition-all duration-500 ${
+        <section className={`glass-panel rounded-3xl p-5 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-partner/30 shadow-partner/5 shadow-2xl transition-all duration-500 min-h-0 ${
           layoutMode === 'flipped' ? 'transform rotate-180 flex-1 order-1' : 'flex-1'
         }`}>
           <div className="absolute inset-0 bg-partner/[0.005] pointer-events-none"></div>
@@ -471,6 +528,7 @@ export default function SessionPage() {
           {/* Panel A Messages Scroll Area */}
           <div 
             ref={partnerScrollRef}
+            onScroll={handlePartnerScroll}
             className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 scroll-smooth"
           >
             {messages.length === 0 ? (
@@ -480,31 +538,47 @@ export default function SessionPage() {
                 <p className="text-xs text-slate-400 mt-1 max-w-[200px]">Chọn ngôn ngữ, đặt thiết bị giữa bàn và bấm Start để dịch.</p>
               </div>
             ) : (
-              messages.map((msg) => (
-                <div 
-                  key={msg.id}
-                  className={`flex flex-col max-w-[85%] ${
-                    msg.speaker === 'partner' ? 'mr-auto items-start' : 'ml-auto items-end'
-                  }`}
-                >
-                  <div 
-                    className={`rounded-2xl px-4 py-3 font-medium ${
-                      msg.speaker === 'partner' 
-                        ? 'bg-partner/10 border border-partner/20 text-partner-foreground' 
-                        : 'bg-white/5 border border-white/10 text-slate-300'
-                    } ${!msg.is_final ? 'opacity-70 italic' : ''}`}
-                    style={{ fontSize: `${fontSize}%` }}
-                  >
-                    {/* Always show Partner's language (partner_text) */}
-                    {msg.speaker === 'partner' ? msg.original_text : msg.translated_text}
+              messages.map((msg) => {
+                // If partner language is 'any', do not show host speech (or its empty translation) in Panel A
+                if (partnerLang === 'any' && msg.speaker === 'host') return null
+
+                const displayText = msg.speaker === 'partner' ? msg.original_text : msg.translated_text
+                if (!displayText || !displayText.trim()) return null
+
+                return (
+                  <div key={msg.id} className="flex flex-col w-full items-start gap-1">
+                    {/* Speaker Label */}
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-1 text-slate-400">
+                      {msg.speaker === 'partner' ? selectedPartner?.name : 'Bạn (Dịch)'}
+                    </span>
+                    
+                    {/* Message Bubble */}
+                    <div 
+                      className={`rounded-2xl px-4 py-3 font-medium max-w-[85%] ${
+                        msg.speaker === 'partner' 
+                          ? 'bg-partner/10 border border-partner/20 text-partner-foreground' 
+                          : 'bg-white/5 border border-white/10 text-slate-300'
+                      } ${!msg.is_final ? 'opacity-70 italic' : ''}`}
+                      style={{ fontSize: `${fontSize}%` }}
+                    >
+                      {displayText}
+                    </div>
                   </div>
-                  <span className="text-[9px] text-slate-500 font-bold mt-1 uppercase tracking-widest px-1">
-                    {msg.speaker === 'partner' ? selectedPartner?.name : 'Host (Dịch)'}
-                  </span>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
+
+          {/* Scroll to Bottom Button */}
+          {showPartnerScrollBottom && (
+            <button
+              onClick={scrollToBottomPartner}
+              className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-partner/90 hover:bg-partner text-slate-950 py-2 px-4 rounded-full text-xs font-black shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 z-20 cursor-pointer animate-bounce border border-white/10"
+            >
+              <ArrowDown className="w-3.5 h-3.5 stroke-[2.5]" />
+              Cuộn xuống (Scroll to bottom)
+            </button>
+          )}
 
           {/* Panel A Active Speaker indicator */}
           {isActive && (
@@ -519,7 +593,7 @@ export default function SessionPage() {
         </section>
 
         {/* PANEL B - HOST PANEL (Always shows Vietnamese) */}
-        <section className={`glass-panel rounded-3xl p-5 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-host/30 shadow-host/5 shadow-2xl transition-all duration-500 ${
+        <section className={`glass-panel rounded-3xl p-5 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-host/30 shadow-host/5 shadow-2xl transition-all duration-500 min-h-0 ${
           layoutMode === 'flipped' ? 'flex-1 order-2' : 'flex-1'
         }`}>
           <div className="absolute inset-0 bg-host/[0.005] pointer-events-none"></div>
@@ -544,6 +618,7 @@ export default function SessionPage() {
           {/* Panel B Messages Scroll Area */}
           <div 
             ref={hostScrollRef}
+            onScroll={handleHostScroll}
             className="flex-1 overflow-y-auto py-4 space-y-4 pr-1 scroll-smooth"
           >
             {messages.length === 0 ? (
@@ -553,31 +628,44 @@ export default function SessionPage() {
                 <p className="text-xs text-slate-400 mt-1 max-w-[200px]">Mọi lời nói tiếng Việt và bản dịch tiếng Việt của đối tác sẽ hiện ở đây.</p>
               </div>
             ) : (
-              messages.map((msg) => (
-                <div 
-                  key={msg.id}
-                  className={`flex flex-col max-w-[85%] ${
-                    msg.speaker === 'host' ? 'mr-auto items-start' : 'ml-auto items-end'
-                  }`}
-                >
-                  <div 
-                    className={`rounded-2xl px-4 py-3 font-medium ${
-                      msg.speaker === 'host' 
-                        ? 'bg-host/10 border border-host/20 text-host-foreground' 
-                        : 'bg-white/5 border border-white/10 text-slate-300'
-                    } ${!msg.is_final ? 'opacity-70 italic' : ''}`}
-                    style={{ fontSize: `${fontSize}%` }}
-                  >
-                    {/* Always show Vietnamese (host_text) */}
-                    {msg.speaker === 'host' ? msg.original_text : msg.translated_text}
+              messages.map((msg) => {
+                const displayText = msg.speaker === 'host' ? msg.original_text : msg.translated_text
+                if (!displayText || !displayText.trim()) return null
+
+                return (
+                  <div key={msg.id} className="flex flex-col w-full items-start gap-1">
+                    {/* Speaker Label */}
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-1 text-slate-400">
+                      {msg.speaker === 'host' ? 'Bạn' : `${selectedPartner?.name} (Dịch)`}
+                    </span>
+                    
+                    {/* Message Bubble */}
+                    <div 
+                      className={`rounded-2xl px-4 py-3 font-medium max-w-[85%] ${
+                        msg.speaker === 'host' 
+                          ? 'bg-host/10 border border-host/20 text-host-foreground' 
+                          : 'bg-white/5 border border-white/10 text-slate-300'
+                      } ${!msg.is_final ? 'opacity-70 italic' : ''}`}
+                      style={{ fontSize: `${fontSize}%` }}
+                    >
+                      {displayText}
+                    </div>
                   </div>
-                  <span className="text-[9px] text-slate-500 font-bold mt-1 uppercase tracking-widest px-1">
-                    {msg.speaker === 'host' ? 'Bạn' : `${selectedPartner?.name} (Dịch)`}
-                  </span>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
+
+          {/* Scroll to Bottom Button */}
+          {showHostScrollBottom && (
+            <button
+              onClick={scrollToBottomHost}
+              className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-host/90 hover:bg-host text-white py-2 px-4 rounded-full text-xs font-black shadow-xl flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 z-20 cursor-pointer animate-bounce border border-white/10"
+            >
+              <ArrowDown className="w-3.5 h-3.5 stroke-[2.5]" />
+              Cuộn xuống (Scroll to bottom)
+            </button>
+          )}
 
           {/* Panel B Active Speaker indicator */}
           {isActive && (
@@ -676,15 +764,48 @@ export default function SessionPage() {
             </button>
           )}
 
-          {/* Font Size Button */}
-          <button
-            onClick={handleToggleFontSize}
-            className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
-            title="Chỉnh cỡ chữ dịch"
-          >
-            <span className="font-extrabold text-[10px] bg-slate-800 px-1 py-0.5 rounded leading-none">AA</span>
-            <span>{fontSize}%</span>
-          </button>
+          {/* Font Size Menu Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowFontSizeDropdown(!showFontSizeDropdown)}
+              className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+              title="Chỉnh cỡ chữ dịch"
+            >
+              <span className="font-extrabold text-[10px] bg-slate-800 px-1 py-0.5 rounded leading-none">AA</span>
+              <span>{fontSize}%</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showFontSizeDropdown ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showFontSizeDropdown && (
+              <>
+                {/* Click-away backdrop */}
+                <div 
+                  className="fixed inset-0 z-40 cursor-default" 
+                  onClick={() => setShowFontSizeDropdown(false)}
+                />
+                
+                {/* Dropdown Menu */}
+                <div className="absolute bottom-full right-0 mb-2 w-32 glass-panel rounded-xl py-1.5 z-50 border border-white/10 shadow-2xl flex flex-col animate-fadeIn">
+                  {([75, 100, 120, 150, 200] as const).map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => {
+                        setFontSize(size)
+                        localStorage.setItem('paylingo_font_size', size.toString())
+                        setShowFontSizeDropdown(false)
+                      }}
+                      className={`w-full px-3 py-2 text-left text-xs font-bold transition-all hover:bg-white/5 flex items-center justify-between cursor-pointer ${
+                        fontSize === size ? 'text-host bg-host/5' : 'text-slate-300'
+                      }`}
+                    >
+                      <span>Cỡ {size}%</span>
+                      {fontSize === size && <Check className="w-3.5 h-3.5 text-host" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Layout switcher */}
           <button
