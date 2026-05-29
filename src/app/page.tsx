@@ -79,14 +79,14 @@ export default function Home() {
       <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-host/10 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-80 h-80 bg-partner/10 rounded-full blur-3xl pointer-events-none"></div>
 
-      <div className="w-full max-w-md glass-panel rounded-3xl p-8 md:p-10 relative overflow-hidden">
+      <div className="w-full max-w-md glass-panel rounded-[32px] p-8 md:p-10 relative overflow-hidden">
         {/* Shimmer overlay */}
-        <div className="absolute inset-0 shimmer pointer-events-none rounded-3xl opacity-40"></div>
+        <div className="absolute inset-0 shimmer pointer-events-none rounded-[32px] opacity-40"></div>
 
         {/* Logo / Header */}
         <div className="flex flex-col items-center text-center mb-8 relative z-10">
           <PayPayLogo className="h-16 w-auto text-white mb-4 hover:scale-[1.02] transition-transform duration-300 ease-out cursor-pointer shrink-0" width={180} height={68} />
-          <p className="text-slate-400 mt-2 text-sm max-w-xs font-medium">
+          <p className="text-slate-400 mt-2 text-sm max-w-xs font-semibold tracking-wide">
             Giải pháp dịch song ngữ hội thoại song song real-time trực tiếp 2 chiều
           </p>
         </div>
@@ -94,7 +94,7 @@ export default function Home() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
           <div className="space-y-3">
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center justify-center gap-2">
               <User className="w-3.5 h-3.5 text-host" />
               Tên / Biệt danh của bạn
             </label>
@@ -109,15 +109,15 @@ export default function Home() {
               }}
               disabled={isLoading}
               autoComplete="off"
-              className="w-full py-4 px-5 rounded-xl glass-input text-base font-bold text-white transition-all placeholder:text-slate-600 focus:placeholder:text-slate-700 outline-none text-center"
+              className="w-full h-[54px] px-6 rounded-full glass-input text-base font-bold text-white transition-all placeholder:text-slate-600 focus:placeholder:text-slate-700 outline-none text-center border border-white/5 focus:border-host/40"
             />
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="flex items-start gap-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl p-3 text-sm animate-shake">
+            <div className="flex items-start gap-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full py-3 px-5 text-sm animate-shake">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-              <span>{error}</span>
+              <span className="font-semibold leading-none">{error}</span>
             </div>
           )}
 
@@ -125,21 +125,21 @@ export default function Home() {
           <button
             type="submit"
             disabled={isLoading || !username.trim()}
-            className={`w-full py-4 px-6 rounded-xl font-bold flex items-center justify-center gap-2.5 transition-all duration-300 ${
+            className={`w-full h-[54px] px-6 rounded-full font-bold flex items-center justify-center gap-2.5 transition-all duration-200 ease-out active:scale-[0.97] ${
               username.trim() && !isLoading
-                ? 'bg-gradient-to-r from-host to-host/80 hover:from-host/90 hover:to-host/70 text-white shadow-lg shadow-host/30 hover:scale-[1.02] cursor-pointer'
+                ? 'bg-gradient-to-r from-host to-host/80 hover:from-host/90 hover:to-host/70 text-white shadow-lg shadow-host/30 hover:scale-[1.01] cursor-pointer'
                 : 'bg-white/5 border border-white/10 text-slate-500 cursor-not-allowed'
             }`}
           >
             {isLoading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Đang kết nối...
+                <Loader2 className="w-5 h-5 animate-spin text-white" />
+                <span>Đang kết nối...</span>
               </>
             ) : (
               <>
-                Vào phòng dịch
-                <ArrowRight className="w-5 h-5" />
+                <span>Vào phòng dịch</span>
+                <ArrowRight className="w-5 h-5 transition-transform duration-200 group-hover:translate-x-1" />
               </>
             )}
           </button>

@@ -12,7 +12,6 @@ import {
   X, 
   Calendar, 
   Clock, 
-  Languages,
   Loader2,
   FolderOpen,
   CloudLightning,
@@ -31,7 +30,6 @@ import {
 import { db, LocalSession, LocalTranscriptEntry, LocalFolder } from '@/lib/db'
 import { syncPendingData } from '@/lib/sync-manager'
 import { createClient } from '@/lib/supabase/client'
-import { downloadSessionPDF, downloadSessionTXT, downloadSessionJSON } from '@/lib/pdf-generator'
 
 const PARTNER_LANGUAGES = [
   { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐' },
@@ -270,6 +268,8 @@ export default function HistoryPage() {
 
     setShowExportMenu(false)
 
+    const { downloadSessionPDF, downloadSessionTXT, downloadSessionJSON } = await import('@/lib/pdf-generator')
+
     if (format === 'pdf') {
       await downloadSessionPDF(
         selectedSession.name,
@@ -365,97 +365,97 @@ export default function HistoryPage() {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background">
         <Loader2 className="w-10 h-10 animate-spin text-host" />
-        <span className="text-slate-400 mt-4 text-sm font-medium">Đang tải lịch sử dịch...</span>
+        <span className="text-slate-400 mt-4 text-sm font-semibold tracking-wide">Đang tải lịch sử dịch...</span>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col p-4 relative overflow-hidden bg-background">
-      {/* Decorative Blob */}
+    <div className="min-h-screen w-full flex flex-col p-4 md:p-6 relative overflow-hidden bg-background">
+      {/* Dynamic Ambient Blur Blobs */}
       <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-host/5 rounded-full blur-3xl pointer-events-none"></div>
 
-      {/* Header */}
-      <header className="w-full flex items-center justify-between py-3 px-4 glass-panel rounded-2xl mb-4 relative z-20 shrink-0">
-        <div className="flex items-center gap-3">
+      {/* Apple-style Navigation Header */}
+      <header className="w-full flex items-center justify-between py-3 px-5 glass-panel rounded-3xl mb-4 relative z-20 shrink-0 border border-white/5">
+        <div className="flex items-center gap-3.5">
           <button
             onClick={() => router.push('/session')}
-            className="p-2 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer"
+            className="w-11 h-11 rounded-full border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all duration-300 cursor-pointer flex items-center justify-center active:scale-95"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-lg font-bold text-white leading-none">Lịch sử dịch</h1>
-            <p className="text-[10px] text-slate-400 mt-1 font-semibold">
+            <h1 className="text-base font-black text-white leading-tight tracking-tight">Lịch sử dịch</h1>
+            <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-wider">
               Quản lý và tóm tắt hội thoại AI
             </p>
           </div>
         </div>
 
-        {/* Dynamic Buttons */}
-        <div className="flex items-center gap-1.5 z-35">
+        {/* Dynamic Interactive Triggers */}
+        <div className="flex items-center gap-2">
           {isSelectMode ? (
             <>
               {selectedIds.length >= 2 && (
                 <button
                   onClick={() => setShowFolderModal(true)}
-                  className="p-2.5 rounded-xl border border-amber-glow/20 bg-amber-glow/5 hover:bg-amber-glow/10 text-amber-glow transition-all flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide cursor-pointer"
+                  className="h-11 px-5 rounded-full bg-gradient-to-r from-amber-glow to-amber-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-lg active:scale-95 transition-all duration-300 cursor-pointer"
                 >
-                  <FolderPlus className="w-3.5 h-3.5" />
-                  Thêm vào thư mục ({selectedIds.length})
+                  <FolderPlus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Thêm vào thư mục</span> ({selectedIds.length})
                 </button>
               )}
               <button
                 onClick={handleToggleSelectMode}
-                className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all flex items-center gap-1 text-[10px] font-extrabold cursor-pointer"
+                className="h-11 px-5 rounded-full border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all duration-300 cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
                 Hủy chọn
               </button>
             </>
           ) : (
             <button
               onClick={handleToggleSelectMode}
-              className="p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 text-slate-300 transition-all flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide cursor-pointer"
+              className="h-11 px-5 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-slate-200 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all duration-300 cursor-pointer"
             >
-              <ListChecks className="w-3.5 h-3.5 text-host" />
+              <ListChecks className="w-4 h-4 text-host" />
               Chọn mục
             </button>
           )}
 
-          <div className="text-xs font-bold text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl hidden sm:flex items-center gap-1.5">
-            <Database className="w-3.5 h-3.5 text-host" />
-            Local-first (Dexie)
+          <div className="h-11 border border-white/10 px-4 rounded-full hidden sm:flex items-center gap-2 text-xs font-black text-slate-400 bg-white/5">
+            <Database className="w-4 h-4 text-host" />
+            LOCAL-FIRST
           </div>
         </div>
       </header>
 
-      {/* Search Bar */}
+      {/* Search Input field */}
       <div className="w-full mb-4 relative z-20 shrink-0">
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Search className="absolute left-4.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
           <input
             type="text"
             placeholder="Tìm kiếm theo tên cuộc hội thoại..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full py-3.5 pl-11 pr-4 rounded-xl glass-input text-sm font-medium"
+            className="w-full py-4 pl-12.5 pr-5 rounded-2xl glass-input text-xs font-bold tracking-wide"
           />
         </div>
       </div>
 
-      {/* Content scroll area */}
-      <main className="flex-1 w-full relative z-10 overflow-y-auto min-h-0 space-y-6 pb-6">
+      {/* Main Content Area */}
+      <main className="flex-1 w-full relative z-10 overflow-y-auto min-h-0 space-y-6">
         
-        {/* SECTION 1: FOLDERS GRID */}
+        {/* SECTION 1: FOLDERS LIST */}
         {folders.length > 0 && !searchQuery && (
           <div className="space-y-3">
-            <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+            <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
               <Folder className="w-4 h-4 text-amber-glow fill-amber-glow/10" />
               Thư mục của bạn ({folders.length})
             </h2>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {folders.map(folder => {
                 const sessCount = sessions.filter(s => s.folder_id === folder.id).length
                 
@@ -463,12 +463,12 @@ export default function HistoryPage() {
                   <div
                     key={folder.id}
                     onClick={() => router.push(`/history/folders/${folder.id}`)}
-                    className="glass-panel hover:border-white/10 p-4 rounded-2xl flex flex-col justify-between cursor-pointer hover:scale-[1.02] hover:shadow-lg transition-all duration-300 relative group overflow-hidden"
+                    className="glass-panel p-5 rounded-3xl flex flex-col justify-between cursor-pointer hover:border-white/10 hover:shadow-2xl transition-all duration-300 relative group overflow-hidden border border-white/5 active:scale-[0.98]"
                   >
-                    <Folder className="w-8 h-8 text-amber-glow fill-amber-glow/10 mb-2 group-hover:scale-105 transition-transform" />
+                    <Folder className="w-10 h-10 text-amber-glow fill-amber-glow/10 mb-4 group-hover:scale-105 transition-transform duration-300" />
                     <div>
-                      <h3 className="text-xs font-bold text-slate-200 group-hover:text-white truncate">{folder.name}</h3>
-                      <p className="text-[9px] text-slate-500 mt-1 font-semibold">{sessCount} cuộc hội thoại</p>
+                      <h3 className="text-xs font-black text-slate-100 group-hover:text-white truncate tracking-wide">{folder.name}</h3>
+                      <p className="text-[9px] text-slate-500 mt-1.5 font-bold uppercase tracking-wider">{sessCount} cuộc hội thoại</p>
                     </div>
                   </div>
                 )
@@ -477,24 +477,24 @@ export default function HistoryPage() {
           </div>
         )}
 
-        {/* SECTION 2: CONVERSATIONS LIST */}
+        {/* SECTION 2: CONVERSATIONS GRID */}
         <div className="space-y-3">
-          <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">
+          <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
             {isSelectMode ? 'Chọn các cuộc hội thoại' : folders.length > 0 ? 'Các cuộc hội thoại độc lập' : 'Danh sách hội thoại'}
           </h2>
 
           {independentSessions.length === 0 && !isSelectMode ? (
             <div className="min-h-[200px] flex flex-col items-center justify-center text-center opacity-30 select-none">
-              <FolderOpen className="w-12 h-12 text-host mb-2" />
-              <p className="text-xs font-bold text-slate-300">Không có hội thoại độc lập nào</p>
+              <FolderOpen className="w-12 h-12 text-host mb-3 stroke-[1.5]" />
+              <p className="text-xs font-extrabold text-slate-400">Không có hội thoại độc lập nào</p>
             </div>
           ) : filteredSessions.length === 0 ? (
             <div className="min-h-[200px] flex flex-col items-center justify-center text-center opacity-30 select-none">
-              <FolderOpen className="w-12 h-12 text-host mb-2" />
-              <p className="text-xs font-bold text-slate-300">Không tìm thấy kết quả nào</p>
+              <FolderOpen className="w-12 h-12 text-host mb-3 stroke-[1.5]" />
+              <p className="text-xs font-extrabold text-slate-400">Không tìm thấy kết quả nào</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(isSelectMode ? filteredSessions : independentSessions).map((sess) => {
                 const dateStr = new Date(sess.started_at).toLocaleDateString('vi-VN')
                 const min = Math.floor(sess.duration_seconds / 60)
@@ -506,27 +506,27 @@ export default function HistoryPage() {
                   <div
                     key={sess.id}
                     onClick={() => handleOpenDetails(sess)}
-                    className={`glass-panel hover:border-white/10 rounded-2xl p-5 flex items-start justify-between cursor-pointer hover:scale-[1.01] hover:shadow-lg transition-all duration-300 relative overflow-hidden group ${
-                      isSelected ? 'border-host/50 bg-host/5 ring-1 ring-host/30' : ''
+                    className={`glass-panel rounded-3xl p-5 flex items-start justify-between cursor-pointer hover:border-white/10 hover:shadow-2xl active:scale-[0.98] transition-all duration-300 relative overflow-hidden group border ${
+                      isSelected ? 'border-host/50 bg-host/5 ring-1 ring-host/20' : 'border-white/5'
                     }`}
                   >
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <div className="flex items-start gap-4 min-w-0 flex-1">
                       {isSelectMode && (
                         <div 
-                          className={`w-4 h-4 rounded border mt-0.5 shrink-0 flex items-center justify-center transition-all ${
+                          className={`w-5 h-5 rounded-full border mt-0.5 shrink-0 flex items-center justify-center transition-all duration-300 ${
                             isSelected ? 'bg-host border-host text-white' : 'border-white/20 bg-white/5'
                           }`}
                         >
-                          {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                          {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                         </div>
                       )}
                       
                       <div className="flex flex-col min-w-0">
-                        <h3 className="text-sm font-bold text-slate-200 group-hover:text-white truncate">
+                        <h3 className="text-sm font-black text-slate-200 group-hover:text-white truncate tracking-wide leading-snug">
                           {sess.name}
                         </h3>
                         
-                        <div className="flex flex-wrap items-center gap-3 mt-3 text-[10px] text-slate-400 font-bold">
+                        <div className="flex flex-wrap items-center gap-3 mt-4 text-[10px] text-slate-400 font-extrabold tracking-wide">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5 text-host" />
                             {dateStr}
@@ -535,23 +535,23 @@ export default function HistoryPage() {
                             <Clock className="w-3.5 h-3.5 text-partner" />
                             {min}p {sec}s
                           </span>
-                          <span className="flex items-center gap-1">
-                            <span className="text-xs">{langObj?.flag}</span>
+                          <span className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
+                            <span className="text-[11px] mr-1">{langObj?.flag}</span>
                             {langObj?.name || sess.partner_language}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       {sess.sync_status === 'pending' && (
-                        <span className="px-2 py-0.5 rounded-full text-[8px] font-extrabold uppercase tracking-widest bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 flex items-center gap-1">
-                          <CloudLightning className="w-2.5 h-2.5" />
+                        <span className="px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 flex items-center gap-1">
+                          <CloudLightning className="w-2.5 h-2.5 animate-pulse" />
                           Chờ đồng bộ
                         </span>
                       )}
                       {!isSelectMode && (
-                        <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-all" />
+                        <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-all duration-300" />
                       )}
                     </div>
                   </div>
@@ -566,7 +566,7 @@ export default function HistoryPage() {
       {showFolderModal && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
           <div className="w-full max-w-sm glass-panel rounded-3xl p-6 flex flex-col shadow-2xl relative border border-white/5">
-            <h3 className="text-sm font-black text-white flex items-center gap-2 mb-3">
+            <h3 className="text-xs font-black text-white flex items-center gap-2 mb-3 uppercase tracking-wider">
               <FolderPlus className="w-4 h-4 text-amber-glow" />
               TẠO THƯ MỤC MỚI
             </h3>
@@ -579,23 +579,23 @@ export default function HistoryPage() {
               placeholder="Tên thư mục (ví dụ: Đàm phán, Ký hợp đồng...)"
               value={folderName}
               onChange={(e) => setFolderName(e.target.value)}
-              className="w-full py-2.5 px-3.5 rounded-xl glass-input text-xs font-bold text-white mb-4 focus:outline-none"
+              className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white mb-5 focus:outline-none"
               autoFocus
             />
 
-            <div className="flex justify-end gap-2 shrink-0">
+            <div className="flex justify-end gap-2.5 shrink-0">
               <button
                 onClick={() => setShowFolderModal(false)}
-                className="py-2 px-4 rounded-xl bg-white/5 border border-white/10 text-[10px] font-extrabold uppercase text-slate-400 hover:bg-white/10 cursor-pointer"
+                className="h-10 px-4 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:bg-white/10 transition-all cursor-pointer"
               >
                 Hủy
               </button>
               <button
                 onClick={handleCreateFolder}
                 disabled={!folderName.trim()}
-                className="py-2 px-5 rounded-xl bg-gradient-to-r from-host to-partner text-slate-950 font-extrabold text-[10px] uppercase cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
+                className="h-10 px-5 rounded-full bg-gradient-to-r from-host to-partner text-slate-950 font-black text-[10px] uppercase tracking-wider cursor-pointer disabled:opacity-30 disabled:pointer-events-none transition-all"
               >
-                Xác nhận tạo
+                Tạo thư mục
               </button>
             </div>
           </div>
@@ -605,7 +605,7 @@ export default function HistoryPage() {
       {/* DETAIL MODAL OVERLAY */}
       {selectedSession && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 md:p-6 animate-fadeIn">
-          <div className="w-full max-w-4xl h-[90vh] glass-panel rounded-3xl p-5 md:p-8 flex flex-col relative overflow-hidden max-h-[750px] shadow-2xl">
+          <div className="w-full max-w-4xl h-[90vh] glass-panel rounded-3xl p-5 md:p-8 flex flex-col relative overflow-hidden max-h-[750px] shadow-2xl border border-white/5">
             
             {/* Modal Header */}
             <div className="flex items-start justify-between pb-4 border-b border-white/5 shrink-0">
@@ -616,29 +616,29 @@ export default function HistoryPage() {
                       type="text"
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
-                      className="flex-1 py-1.5 px-3 rounded-lg bg-white/5 border border-white/10 text-sm font-bold text-white focus:outline-none"
+                      className="flex-1 py-2 px-4 rounded-full bg-slate-950 border border-white/10 text-xs font-bold text-white focus:outline-none focus:border-host/40"
                     />
                     <button
                       onClick={handleRename}
-                      className="p-2 rounded-lg bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30 transition-all cursor-pointer"
+                      className="w-8 h-8 rounded-full bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30 transition-all duration-200 active:scale-[0.95] cursor-pointer flex items-center justify-center shrink-0"
                     >
                       <Check className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setRenamingId(null)}
-                      className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 transition-all cursor-pointer"
+                      className="w-8 h-8 rounded-full bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 transition-all duration-200 active:scale-[0.95] cursor-pointer flex items-center justify-center shrink-0"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <h2 className="text-base md:text-lg font-black text-white leading-none truncate max-w-xs md:max-w-md">
+                    <h2 className="text-sm md:text-base font-black text-white leading-none truncate max-w-xs md:max-w-md tracking-wide">
                       {selectedSession.name}
                     </h2>
                     <button
                       onClick={() => setRenamingId(selectedSession.id)}
-                      className="p-1 rounded-lg hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
+                      className="p-1.5 rounded-full hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -649,7 +649,7 @@ export default function HistoryPage() {
                         handleCloseDetails()
                         router.push(`/history/sessions/${selectedSession.id}`)
                       }}
-                      className="p-1 rounded-lg hover:bg-white/5 text-host hover:text-host/80 cursor-pointer"
+                      className="p-1.5 rounded-full hover:bg-white/5 text-host hover:text-host/80 cursor-pointer flex items-center justify-center"
                       title="Mở toàn màn hình (Đường dẫn riêng)"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -657,21 +657,21 @@ export default function HistoryPage() {
                   </div>
                 )}
                 
-                <p className="text-[10px] text-slate-400 mt-2 font-bold flex items-center gap-3">
+                <p className="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider flex items-center gap-3">
                   <span>Khởi tạo: {new Date(selectedSession.started_at).toLocaleString('vi-VN')}</span>
-                  <span>Ngôn ngữ đối tác: {PARTNER_LANGUAGES.find(l => l.code === selectedSession.partner_language)?.name}</span>
+                  <span>Ngôn ngữ: {PARTNER_LANGUAGES.find(l => l.code === selectedSession.partner_language)?.name}</span>
                 </p>
               </div>
 
-              {/* Action triggers */}
-              <div className="flex items-center gap-1.5 shrink-0 z-40">
+              {/* Action triggers (Apple HIG layout - clean separation of destructives) */}
+              <div className="flex items-center gap-2 shrink-0 z-40">
                 {/* Tóm tắt AI */}
                 <button
                   onClick={handleAiSummarize}
-                  className="p-2 md:p-2.5 rounded-xl border border-host/20 bg-host/5 hover:bg-host/10 text-host transition-all cursor-pointer flex items-center gap-1 text-[10px] font-extrabold"
+                  className="h-10 px-4 rounded-full border border-host/30 bg-host/5 hover:bg-host/10 text-host transition-all duration-300 cursor-pointer flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider"
                   title="Tóm tắt AI cuộc họp"
                 >
-                  <Sparkles className="w-3.5 h-3.5 animate-pulse text-host" />
+                  <Sparkles className="w-4 h-4 text-host" />
                   <span className="hidden sm:inline">Tóm tắt AI</span>
                 </button>
 
@@ -679,48 +679,50 @@ export default function HistoryPage() {
                 <div className="relative">
                   <button
                     onClick={() => setShowExportMenu(!showExportMenu)}
-                    className="p-2 md:p-2.5 rounded-xl border border-partner/20 bg-partner/5 hover:bg-partner/10 text-partner transition-all cursor-pointer flex items-center gap-1 text-[10px] font-extrabold"
+                    className="h-10 px-4 rounded-full border border-partner/30 bg-partner/5 hover:bg-partner/10 text-partner transition-all duration-300 cursor-pointer flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider"
                   >
-                    <FileText className="w-3.5 h-3.5" />
+                    <FileText className="w-4 h-4" />
                     <span className="hidden sm:inline">Xuất File</span>
                     <ChevronDown className="w-3 h-3 opacity-60" />
                   </button>
 
                   {showExportMenu && (
-                    <div className="absolute right-0 mt-2 w-32 glass-panel rounded-xl py-1 z-50 border border-white/5 shadow-2xl animate-fadeIn">
+                    <div className="absolute right-0 mt-2 w-32 glass-panel rounded-2xl py-1.5 z-50 border border-white/5 shadow-2xl animate-fadeIn">
                       <button
                         onClick={() => handleExport('pdf')}
-                        className="w-full text-left px-3 py-2 text-xs font-bold text-slate-350 hover:text-white hover:bg-white/5 flex items-center gap-2 cursor-pointer"
+                        className="w-full text-left px-3.5 py-2.5 text-xs font-bold text-slate-350 hover:text-white hover:bg-white/5 flex items-center gap-2.5 cursor-pointer"
                       >
-                        <span className="text-red-400">PDF</span> Xuất PDF
+                        <span className="text-red-400 font-extrabold">PDF</span> Xuất PDF
                       </button>
                       <button
                         onClick={() => handleExport('txt')}
-                        className="w-full text-left px-3 py-2 text-xs font-bold text-slate-350 hover:text-white hover:bg-white/5 flex items-center gap-2 cursor-pointer"
+                        className="w-full text-left px-3.5 py-2.5 text-xs font-bold text-slate-350 hover:text-white hover:bg-white/5 flex items-center gap-2.5 cursor-pointer"
                       >
-                        <span className="text-blue-400">TXT</span> Xuất TXT
+                        <span className="text-blue-400 font-extrabold">TXT</span> Xuất TXT
                       </button>
                       <button
                         onClick={() => handleExport('json')}
-                        className="w-full text-left px-3 py-2 text-xs font-bold text-slate-355 hover:text-white hover:bg-white/5 flex items-center gap-2 cursor-pointer"
+                        className="w-full text-left px-3.5 py-2.5 text-xs font-bold text-slate-355 hover:text-white hover:bg-white/5 flex items-center gap-2.5 cursor-pointer"
                       >
-                        <span className="text-green-400">JSON</span> Xuất JSON
+                        <span className="text-green-400 font-extrabold">JSON</span> Xuất JSON
                       </button>
                     </div>
                   )}
                 </div>
                 
+                {/* Destructive Delete Button */}
                 <button
                   onClick={() => handleDeleteSession(selectedSession.id)}
-                  className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all cursor-pointer"
+                  className="w-10 h-10 rounded-full border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all duration-300 cursor-pointer flex items-center justify-center"
                   title="Xóa vĩnh viễn"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
 
+                {/* Close Button */}
                 <button
                   onClick={handleCloseDetails}
-                  className="p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
+                  className="w-10 h-10 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all duration-300 cursor-pointer flex items-center justify-center"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -742,7 +744,7 @@ export default function HistoryPage() {
                   return (
                     <div 
                       key={entry.id} 
-                      className={`flex flex-col p-3.5 rounded-2xl border transition-all ${
+                      className={`flex flex-col p-4 rounded-3xl border transition-all ${
                         entry.speaker === 'host' 
                           ? 'bg-host/5 border-host/15 max-w-[90%] mr-auto' 
                           : 'bg-partner/5 border-partner/15 max-w-[90%] ml-auto'
@@ -759,7 +761,7 @@ export default function HistoryPage() {
                                 if (entry.speaker === 'host') setEditOrigText(e.target.value)
                                 else setEditTransText(e.target.value)
                               }}
-                              className="w-full text-xs p-2 rounded-lg bg-slate-900 border border-white/10 text-white focus:outline-none"
+                              className="w-full text-xs p-3 rounded-[14px] bg-slate-900 border border-white/10 text-white focus:outline-none focus:border-host/40"
                             />
                           </div>
 
@@ -772,20 +774,20 @@ export default function HistoryPage() {
                                 if (entry.speaker === 'partner') setEditOrigText(e.target.value)
                                 else setEditTransText(e.target.value)
                               }}
-                              className="w-full text-xs p-2 rounded-lg bg-slate-900 border border-white/10 text-white focus:outline-none"
+                              className="w-full text-xs p-3 rounded-[14px] bg-slate-900 border border-white/10 text-white focus:outline-none focus:border-host/40"
                             />
                           </div>
 
-                          <div className="flex justify-end gap-1.5 pt-1">
+                          <div className="flex justify-end gap-2 pt-1">
                             <button
                               onClick={() => handleSaveEntryEdit(entry.id)}
-                              className="py-1 px-3 rounded-lg bg-host text-white hover:opacity-90 text-xs font-bold cursor-pointer"
+                              className="h-9 px-4 rounded-full bg-host text-white hover:opacity-90 text-xs font-bold cursor-pointer transition-all active:scale-95"
                             >
                               Lưu
                             </button>
                             <button
                               onClick={() => setEditingEntryId(null)}
-                              className="py-1 px-3 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 text-xs font-bold cursor-pointer"
+                              className="h-9 px-4 rounded-full bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 text-xs font-bold cursor-pointer transition-all active:scale-95"
                             >
                               Hủy
                             </button>
@@ -800,17 +802,17 @@ export default function HistoryPage() {
                               setEditOrigText(entry.original_text)
                               setEditTransText(entry.translated_text)
                             }}
-                            className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
+                            className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-all cursor-pointer flex items-center justify-center"
                             title="Sửa nội dung câu này"
                           >
-                            <Edit3 className="w-3 h-3" />
+                            <Edit3 className="w-3.5 h-3.5" />
                           </button>
 
-                          <div className="space-y-1.5">
+                          <div className="space-y-2">
                             {/* Host Bubble */}
                             <div className="flex items-start gap-1.5">
                               <span className="text-[9px] font-extrabold uppercase text-host tracking-wider min-w-[50px]">Host:</span>
-                              <span className="text-xs text-slate-200 font-medium">
+                              <span className="text-xs text-slate-250 font-semibold leading-relaxed">
                                 {entry.speaker === 'host' ? entry.original_text : entry.translated_text}
                               </span>
                             </div>
@@ -818,7 +820,7 @@ export default function HistoryPage() {
                             {/* Partner Bubble */}
                             <div className="flex items-start gap-1.5">
                               <span className="text-[9px] font-extrabold uppercase text-partner tracking-wider min-w-[50px]">{partObj?.name}:</span>
-                              <span className="text-xs text-slate-300">
+                              <span className="text-xs text-slate-350 font-medium leading-relaxed">
                                 {entry.speaker === 'partner' ? entry.original_text : entry.translated_text}
                               </span>
                             </div>
@@ -837,17 +839,17 @@ export default function HistoryPage() {
       {/* AI SUMMARY POPUP MODAL */}
       {showSummaryModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-55 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="w-full max-w-2xl h-[85vh] glass-panel rounded-3xl p-5 md:p-8 flex flex-col relative overflow-hidden shadow-2xl">
+          <div className="w-full max-w-2xl h-[85vh] glass-panel rounded-3xl p-5 md:p-8 flex flex-col relative overflow-hidden shadow-2xl border border-white/5">
             
             {/* Modal Title */}
             <div className="flex items-center justify-between pb-3 border-b border-white/5 shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-host animate-pulse" />
-                <h2 className="text-sm md:text-base font-black text-white uppercase tracking-wider">AI Tóm tắt cuộc họp</h2>
+                <h2 className="text-xs font-black text-white uppercase tracking-wider">AI Tóm tắt cuộc họp</h2>
               </div>
               <button
                 onClick={() => setShowSummaryModal(false)}
-                className="p-1.5 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 cursor-pointer"
+                className="w-9 h-9 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 cursor-pointer flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -858,17 +860,17 @@ export default function HistoryPage() {
               {aiLoading ? (
                 <div className="h-full flex flex-col items-center justify-center py-20 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-host" />
-                  <p className="text-xs font-bold text-slate-400 mt-4">AI đang phân tích và soạn thảo bản tóm tắt...</p>
+                  <p className="text-xs font-bold text-slate-400 mt-4 tracking-wide">AI đang phân tích và soạn thảo bản tóm tắt...</p>
                 </div>
               ) : (
                 <>
                   {/* Share Setup Section */}
-                  <div className="glass-panel bg-white/[0.02] border border-white/5 p-4 rounded-2xl space-y-3">
-                    <h3 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-partner" />
+                  <div className="glass-panel bg-white/[0.01] border border-white/5 p-5 rounded-3xl space-y-3.5">
+                    <h3 className="text-xs font-black text-slate-200 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Share2 className="w-4 h-4 text-partner" />
                       Cấu hình Chia sẻ bảo mật
                     </h3>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                    <p className="text-[10px] text-slate-400 leading-normal font-bold">
                       Bạn có thể tạo một URL chia sẻ công khai cho bất kỳ ai xem bản tóm tắt này. Đặt mật khẩu tùy chọn để bảo vệ tài liệu.
                     </p>
 
@@ -878,18 +880,18 @@ export default function HistoryPage() {
                         placeholder="Đặt mật khẩu bảo mật (để trống nếu công khai)..."
                         value={sharePassword}
                         onChange={(e) => setSharePassword(e.target.value)}
-                        className="flex-1 py-2 px-3.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-white focus:outline-none focus:border-host/50"
+                        className="flex-1 py-3 px-4 rounded-2xl bg-slate-950 border border-white/10 text-xs font-bold text-white focus:outline-none focus:border-host/50 placeholder:text-slate-700"
                       />
                       <button
                         onClick={handleCreateShareLink}
-                        className="py-2 px-5 rounded-xl bg-gradient-to-r from-host to-partner text-white font-extrabold text-xs cursor-pointer shadow-lg active:scale-95 transition-all"
+                        className="h-11 px-5 rounded-full bg-gradient-to-r from-host to-partner text-slate-950 font-black text-xs uppercase tracking-wider cursor-pointer shadow-lg active:scale-95 transition-all duration-300 flex items-center justify-center gap-1"
                       >
                         Tạo Link Chia Sẻ
                       </button>
                     </div>
 
                     {shareLink && (
-                      <div className="mt-3 p-3 bg-partner/5 border border-partner/20 rounded-xl flex items-center justify-between gap-3 animate-fadeIn">
+                      <div className="mt-3 p-3.5 bg-partner/5 border border-partner/20 rounded-2xl flex items-center justify-between gap-3 animate-fadeIn">
                         <span className="text-[10px] font-bold text-slate-300 truncate select-all">{shareLink}</span>
                         <button
                           onClick={() => {
@@ -897,9 +899,9 @@ export default function HistoryPage() {
                             setCopied(true)
                             setTimeout(() => setCopied(false), 2000)
                           }}
-                          className="shrink-0 py-1.5 px-3 rounded-lg bg-partner text-slate-950 font-extrabold text-[10px] hover:opacity-90 flex items-center gap-1 cursor-pointer"
+                          className="shrink-0 h-8 px-4.5 rounded-full bg-partner text-slate-950 font-black text-[10px] uppercase tracking-wider hover:opacity-90 flex items-center gap-1 cursor-pointer transition-all duration-300 active:scale-95"
                         >
-                          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          {copied ? <Check className="w-3 h-3 stroke-[3]" /> : <Copy className="w-3 h-3" />}
                           {copied ? 'Đã copy' : 'Copy'}
                         </button>
                       </div>
@@ -907,9 +909,9 @@ export default function HistoryPage() {
                   </div>
 
                   {/* Summary Text Render */}
-                  <div className="glass-panel p-5 rounded-2xl space-y-3">
-                    <h3 className="text-[11px] font-extrabold uppercase text-host tracking-wider">Xem trước bản tóm tắt:</h3>
-                    <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed border-t border-white/5 pt-3 max-h-[300px] overflow-y-auto pr-1">
+                  <div className="glass-panel p-5 rounded-3xl space-y-3.5 border border-white/5">
+                    <h3 className="text-[10px] font-black uppercase text-host tracking-wider">Xem trước bản tóm tắt:</h3>
+                    <div className="text-xs text-slate-350 font-medium whitespace-pre-wrap leading-relaxed border-t border-white/5 pt-4 max-h-[300px] overflow-y-auto pr-1">
                       {aiSummary}
                     </div>
                   </div>

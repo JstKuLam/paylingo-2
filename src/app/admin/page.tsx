@@ -18,7 +18,6 @@ import {
   FileText,
   AlertTriangle,
   Lock,
-  UserCheck,
   X,
   Volume2,
   Users,
@@ -29,7 +28,6 @@ import {
   Check
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { downloadSessionPDF } from '@/lib/pdf-generator'
 
 const PARTNER_LANGUAGES = [
   { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐' },
@@ -311,6 +309,7 @@ export default function AdminPage() {
     const langObj = PARTNER_LANGUAGES.find(l => l.code === viewingSession.partner_language)
     const langName = langObj?.name || viewingSession.partner_language
 
+    const { downloadSessionPDF } = await import('@/lib/pdf-generator')
     await downloadSessionPDF(
       viewingSession.name,
       viewingSession.partner_language,
@@ -368,7 +367,7 @@ export default function AdminPage() {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background">
         <Loader2 className="w-10 h-10 animate-spin text-host" />
-        <span className="text-slate-400 mt-4 text-sm font-medium">Đang xác thực thông tin...</span>
+        <span className="text-slate-400 mt-4 text-sm font-semibold tracking-wide">Đang xác thực thông tin...</span>
       </div>
     )
   }
@@ -402,7 +401,7 @@ export default function AdminPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@paylingo.com"
-                className="w-full py-3 px-4 rounded-xl glass-input text-xs font-bold text-white placeholder:text-slate-600 outline-none"
+                className="w-full h-[48px] px-6 rounded-full glass-input text-xs font-bold text-white placeholder:text-slate-600 outline-none text-center border border-white/5 focus:border-host/40"
               />
             </div>
 
@@ -414,26 +413,26 @@ export default function AdminPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full py-3 px-4 rounded-xl glass-input text-xs font-bold text-white placeholder:text-slate-600 outline-none"
+                className="w-full h-[48px] px-6 rounded-full glass-input text-xs font-bold text-white placeholder:text-slate-600 outline-none text-center border border-white/5 focus:border-host/40"
               />
             </div>
 
             {authError && (
-              <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl p-3 text-xs animate-shake">
+              <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full py-3 px-5 text-xs animate-shake">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{authError}</span>
+                <span className="font-semibold leading-none">{authError}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={isLoadingAuth}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-host to-partner text-white font-bold text-xs hover:scale-[1.02] transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full h-[48px] rounded-full bg-gradient-to-r from-host to-partner text-white font-black text-xs tracking-wider uppercase hover:scale-[1.01] active:scale-[0.97] transition-all duration-200 ease-out cursor-pointer flex items-center justify-center gap-2"
             >
               {isLoadingAuth ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Đang kiểm tra...
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Đang kiểm tra...</span>
                 </>
               ) : 'Đăng nhập'}
             </button>
@@ -444,13 +443,13 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col p-4 relative overflow-hidden bg-background text-foreground">
+    <div className="min-h-screen w-full flex flex-col p-4 md:p-6 relative overflow-hidden bg-background text-foreground">
       {/* Dynamic Ambient Blur Blobs */}
       <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-host/5 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-partner/5 rounded-full blur-3xl pointer-events-none"></div>
 
       {/* Header Admin Dashboard */}
-      <header className="w-full flex flex-col md:flex-row md:items-center md:justify-between py-4 px-6 glass-panel rounded-3xl mb-4 relative z-20 gap-4">
+      <header className="w-full flex flex-col md:flex-row md:items-center md:justify-between py-4 px-6 glass-panel rounded-3xl mb-4 relative z-20 gap-4 border border-white/5 shadow-2xl">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-host to-partner flex items-center justify-center shadow-lg shadow-host/10">
             <ShieldAlert className="w-5 h-5 text-white" />
@@ -460,17 +459,17 @@ export default function AdminPage() {
               PayLingo Control Panel
               <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-host/25 border border-host/30 text-white animate-pulse">ADMIN</span>
             </h1>
-            <p className="text-[10px] text-slate-400 mt-1.5 font-bold">
+            <p className="text-[10px] text-slate-400 mt-1.5 font-bold uppercase tracking-wider">
               Điều hành người dùng, lịch sử dịch và định cấu hình AI
             </p>
           </div>
         </div>
 
-        {/* Tab switch navigation */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-white/[0.03] border border-white/5 p-1 rounded-2xl">
+        {/* Tab switch navigation (Apple Capsule shape) */}
+        <div className="flex flex-wrap items-center gap-1.5 bg-white/[0.03] border border-white/10 p-1.5 rounded-full">
           <button
             onClick={() => setActiveTab('users')}
-            className={`py-2 px-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+            className={`h-9 px-4.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
               activeTab === 'users' ? 'bg-gradient-to-r from-host to-host/80 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -479,16 +478,16 @@ export default function AdminPage() {
           
           <button
             onClick={() => setActiveTab('sessions')}
-            className={`py-2 px-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+            className={`h-9 px-4.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
               activeTab === 'sessions' ? 'bg-gradient-to-r from-host to-host/80 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Cuộc hội thoại
+            Hội thoại
           </button>
 
           <button
             onClick={() => setActiveTab('stats')}
-            className={`py-2 px-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+            className={`h-9 px-4.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
               activeTab === 'stats' ? 'bg-gradient-to-r from-host to-host/80 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -497,18 +496,18 @@ export default function AdminPage() {
 
           <button
             onClick={() => setActiveTab('api-settings')}
-            className={`py-2 px-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 ${
+            className={`h-9 px-4.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'api-settings' ? 'bg-gradient-to-r from-host to-host/80 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
-            Cấu hình API AI
+            Cấu hình AI
           </button>
 
           {/* Sign Out */}
           <button
             onClick={handleLogout}
-            className="p-2 rounded-xl bg-red-500/5 border border-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all cursor-pointer ml-1"
+            className="w-9 h-9 rounded-full bg-red-500/5 border border-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-300 cursor-pointer flex items-center justify-center"
             title="Đăng xuất"
           >
             <LogOut className="w-4 h-4" />
@@ -556,7 +555,7 @@ export default function AdminPage() {
                           <td className="py-4 px-5 text-right">
                             <button
                               onClick={() => handleViewUserSessions(usr.username)}
-                              className="py-1.5 px-3.5 rounded-xl border border-host/20 bg-host/5 hover:bg-host/10 text-host transition-all cursor-pointer font-extrabold text-[10px] uppercase tracking-wide"
+                              className="h-9 px-4 rounded-full border border-host/20 bg-host/5 hover:bg-host/10 text-host transition-all cursor-pointer font-black text-[10px] uppercase tracking-wider active:scale-95"
                             >
                               Xem cuộc gọi
                             </button>
@@ -578,13 +577,13 @@ export default function AdminPage() {
             
             {/* Search sessions */}
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-4.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
                 type="text"
                 placeholder="Tìm kiếm lịch sử theo tên hoặc Username..."
                 value={searchSessionQuery}
                 onChange={(e) => setSearchSessionQuery(e.target.value)}
-                className="w-full py-3.5 pl-11 pr-4 rounded-xl glass-input text-xs font-semibold"
+                className="w-full py-4 pl-12.5 pr-5 rounded-2xl glass-input text-xs font-semibold"
               />
             </div>
 
@@ -635,10 +634,10 @@ export default function AdminPage() {
                             <td className="py-4 px-5 text-right">
                               <button
                                 onClick={() => handleOpenSession(sess)}
-                                className="p-2 rounded-xl hover:bg-white/5 border border-white/5 text-slate-300 transition-all cursor-pointer inline-flex items-center justify-center"
+                                className="w-9 h-9 rounded-full hover:bg-white/5 border border-white/5 text-slate-300 transition-all cursor-pointer inline-flex items-center justify-center active:scale-95"
                                 title="Xem chi tiết"
                               >
-                                <Eye className="w-4 h-4" />
+                                <Eye className="w-4.5 h-4.5" />
                               </button>
                             </td>
                           </tr>
@@ -665,7 +664,7 @@ export default function AdminPage() {
                   <h3 className="text-xl font-black text-white mt-1.5">{stats.totalMinutes} Phút</h3>
                   <p className="text-[9px] text-slate-500 font-bold mt-1">Hội thoại Soniox</p>
                 </div>
-                <div className="w-11 h-11 rounded-2xl bg-host/10 border border-host/20 flex items-center justify-center text-host group-hover:scale-105 transition-transform">
+                <div className="w-11 h-11 rounded-2xl bg-host/10 border border-host/20 flex items-center justify-center text-host group-hover:scale-105 transition-transform duration-350">
                   <Clock className="w-5 h-5 text-host" />
                 </div>
               </div>
@@ -677,7 +676,7 @@ export default function AdminPage() {
                   <h3 className="text-xl font-black text-white mt-1.5">{usageStats.totalSummaries} lượt</h3>
                   <p className="text-[9px] text-slate-500 font-bold mt-1">Đã khởi tạo thành công</p>
                 </div>
-                <div className="w-11 h-11 rounded-2xl bg-partner/10 border border-partner/20 flex items-center justify-center text-partner group-hover:scale-105 transition-transform">
+                <div className="w-11 h-11 rounded-2xl bg-partner/10 border border-partner/20 flex items-center justify-center text-partner group-hover:scale-105 transition-transform duration-350">
                   <TrendingUp className="w-5 h-5 text-partner" />
                 </div>
               </div>
@@ -685,11 +684,11 @@ export default function AdminPage() {
               {/* Stat Card 3 */}
               <div className="glass-panel rounded-3xl p-5 flex items-center justify-between border border-white/5 shadow-2xl relative overflow-hidden group">
                 <div>
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Tổng Token Tiêu thụ</span>
+                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Tokens Tiêu thụ</span>
                   <h3 className="text-xl font-black text-amber-glow mt-1.5">{usageStats.totalTokens.toLocaleString()}</h3>
                   <p className="text-[9px] text-slate-500 font-bold mt-1">Prompt + Completion</p>
                 </div>
-                <div className="w-11 h-11 rounded-2xl bg-amber-glow/10 border border-amber-glow/20 flex items-center justify-center text-amber-glow group-hover:scale-105 transition-transform">
+                <div className="w-11 h-11 rounded-2xl bg-amber-glow/10 border border-amber-glow/20 flex items-center justify-center text-amber-glow group-hover:scale-105 transition-transform duration-350">
                   <Coins className="w-5 h-5 text-amber-glow" />
                 </div>
               </div>
@@ -701,7 +700,7 @@ export default function AdminPage() {
                   <h3 className="text-xl font-black text-green-400 mt-1.5">${usageStats.totalCostUSD.toFixed(5)}</h3>
                   <p className="text-[9px] text-slate-500 font-bold mt-1">Ước tính theo giá trị model</p>
                 </div>
-                <div className="w-11 h-11 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-400 group-hover:scale-105 transition-transform">
+                <div className="w-11 h-11 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-400 group-hover:scale-105 transition-transform duration-350">
                   <DollarSign className="w-5 h-5 text-green-400" />
                 </div>
               </div>
@@ -709,7 +708,7 @@ export default function AdminPage() {
 
             {/* AI usage details list */}
             <div className="space-y-3">
-              <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <h2 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                 <Database className="w-4 h-4 text-host" />
                 Lịch sử tiêu hao Token và chi phí AI ({usageLogs.length})
               </h2>
@@ -772,13 +771,13 @@ export default function AdminPage() {
           <div className="w-full max-w-xl mx-auto glass-panel rounded-3xl p-6 md:p-8 border border-white/5 shadow-2xl relative overflow-hidden animate-fadeIn">
             
             {/* Tab header title */}
-            <div className="flex items-center gap-3 mb-6 border-b border-white/5 pb-4">
+            <div className="flex items-center gap-3.5 mb-6 border-b border-white/5 pb-4">
               <div className="w-10 h-10 rounded-2xl bg-amber-glow/10 border border-amber-glow/20 flex items-center justify-center text-amber-glow">
                 <Settings className="w-5 h-5 text-amber-glow" />
               </div>
               <div>
-                <h2 className="text-sm font-black text-white uppercase tracking-wider">Cấu hình API Key AI</h2>
-                <p className="text-[9px] text-slate-400 font-bold mt-1">Định cấu hình Gemini hoặc OpenAI-compatible cho tính năng AI Tóm tắt</p>
+                <h2 className="text-xs font-black text-white uppercase tracking-wider">Cấu hình API Key AI</h2>
+                <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">Định cấu hình Gemini hoặc OpenAI-compatible cho tính năng AI Tóm tắt</p>
               </div>
             </div>
 
@@ -795,7 +794,7 @@ export default function AdminPage() {
                     setApiProvider(e.target.value)
                     setApiModel(e.target.value === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini')
                   }}
-                  className="w-full py-3 px-4 rounded-xl glass-input text-xs font-bold text-white outline-none select-none"
+                  className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white outline-none select-none"
                 >
                   <option value="gemini" className="bg-slate-950 text-white font-bold">Google Gemini API (Khuyên dùng)</option>
                   <option value="openai" className="bg-slate-950 text-white font-bold">OpenAI hoặc Compatible (Custom Endpoint)</option>
@@ -812,7 +811,7 @@ export default function AdminPage() {
                     value={apiEndpoint}
                     onChange={(e) => setApiEndpoint(e.target.value)}
                     placeholder="https://api.openai.com/v1"
-                    className="w-full py-3 px-4 rounded-xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none"
+                    className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none"
                   />
                   <p className="text-[8px] text-slate-500 font-bold">Ví dụ: `https://api.openai.com/v1` hoặc endpoint dịch vụ trung gian của bạn.</p>
                 </div>
@@ -827,7 +826,7 @@ export default function AdminPage() {
                   value={apiModel}
                   onChange={(e) => setApiModel(e.target.value)}
                   placeholder={apiProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini'}
-                  className="w-full py-3 px-4 rounded-xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none"
+                  className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none"
                 />
               </div>
 
@@ -844,7 +843,7 @@ export default function AdminPage() {
                     value={apiKeyInput}
                     onChange={(e) => setApiKeyInput(e.target.value)}
                     placeholder="Nhập khóa API bảo mật..."
-                    className="w-full py-3 pl-4 pr-12 rounded-xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none tracking-wider"
+                    className="w-full py-3.5 pl-4 pr-12 rounded-2xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none tracking-wider"
                   />
                   <button
                     type="button"
@@ -855,23 +854,23 @@ export default function AdminPage() {
                   </button>
                 </div>
                 <p className="text-[8px] text-slate-500 font-bold leading-normal">
-                  Chỉ lưu an toàn trên máy chủ. Khóa API được mã hóa bảo mật tối đa và hoàn toàn không bao giờ rò rỉ ra phía trình duyệt khách (Client-side).
+                  Chỉ lưu an toàn trên máy chủ. Khóa API được bảo vệ nghiêm ngặt bằng RLS và không bao giờ rò rỉ ra client.
                 </p>
               </div>
 
               {/* Success message */}
               {apiSuccessMsg && (
-                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl p-3 text-xs animate-fadeIn font-bold">
+                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-2xl p-3.5 text-xs animate-fadeIn font-bold">
                   <Check className="w-4 h-4 text-green-400 shrink-0" />
                   <span>Cập nhật cấu hình API AI thành công!</span>
                 </div>
               )}
 
-              {/* Submit button */}
+              {/* Submit button (Apple Prominent Capsule) */}
               <button
                 type="submit"
                 disabled={savingApi}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-host to-partner text-white font-extrabold text-xs uppercase tracking-wider hover:opacity-90 hover:scale-[1.01] shadow-xl shadow-host/10 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-4 px-4 rounded-full bg-gradient-to-r from-host to-partner text-slate-950 font-black text-xs uppercase tracking-wider hover:opacity-90 hover:scale-[1.01] shadow-xl shadow-host/15 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {savingApi ? (
                   <>
@@ -889,31 +888,31 @@ export default function AdminPage() {
       {/* SYSTEM SESSION DETAILED VIEW MODAL */}
       {viewingSession && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 md:p-6 animate-fadeIn">
-          <div className="w-full max-w-4xl h-[90vh] glass-panel rounded-3xl p-5 md:p-8 flex flex-col relative overflow-hidden max-h-[750px] shadow-2xl">
+          <div className="w-full max-w-4xl h-[90vh] glass-panel rounded-3xl p-5 md:p-8 flex flex-col relative overflow-hidden max-h-[750px] shadow-2xl border border-white/5">
             
             {/* Modal Header */}
             <div className="flex items-start justify-between pb-4 border-b border-white/5 shrink-0">
               <div className="flex-1 mr-4 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base md:text-lg font-black text-white leading-none truncate max-w-xs md:max-w-md">
+                  <h2 className="text-sm font-black text-white leading-none truncate max-w-xs md:max-w-md tracking-wide">
                     {viewingSession.name}
                   </h2>
-                  <span className="px-2.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-host/10 border border-host/15 text-host">
+                  <span className="px-2.5 py-0.5 rounded bg-host/10 text-host border border-host/15 font-black uppercase text-[8px] tracking-widest">
                     {viewingSession.username || 'Khách'}
                   </span>
                 </div>
                 
-                <p className="text-[10px] text-slate-400 mt-2 font-bold flex items-center gap-3">
+                <p className="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider flex items-center gap-3">
                   <span>Khởi tạo: {new Date(viewingSession.started_at).toLocaleString('vi-VN')}</span>
                   <span>Ngôn ngữ đối tác: {PARTNER_LANGUAGES.find(l => l.code === viewingSession.partner_language)?.name}</span>
                 </p>
               </div>
 
-              {/* Action triggers */}
-              <div className="flex items-center gap-1.5 shrink-0">
+              {/* Action triggers (Apple Style separation) */}
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={handleExportPDF}
-                  className="p-2.5 rounded-xl border border-partner/20 bg-partner/5 hover:bg-partner/10 text-partner transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+                  className="h-10 px-4 rounded-full border border-partner/30 bg-partner/5 hover:bg-partner/10 text-partner transition-all duration-300 cursor-pointer flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider active:scale-95"
                   title="Xuất file PDF"
                 >
                   <FileText className="w-4 h-4" />
@@ -922,7 +921,7 @@ export default function AdminPage() {
                 
                 <button
                   onClick={() => handleDeleteSession(viewingSession.id)}
-                  className="p-2.5 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all cursor-pointer"
+                  className="w-10 h-10 rounded-full border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all duration-300 cursor-pointer flex items-center justify-center active:scale-95"
                   title="Xóa vĩnh viễn"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -930,7 +929,7 @@ export default function AdminPage() {
 
                 <button
                   onClick={() => setViewingSession(null)}
-                  className="p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
+                  className="w-10 h-10 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all duration-300 cursor-pointer flex items-center justify-center"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -951,17 +950,17 @@ export default function AdminPage() {
                   return (
                     <div 
                       key={entry.id} 
-                      className={`flex flex-col p-3.5 rounded-2xl border transition-all ${
+                      className={`flex flex-col p-3.5 rounded-3xl border transition-all ${
                         entry.speaker === 'host' 
                           ? 'bg-host/5 border-host/15 max-w-[90%] mr-auto' 
                           : 'bg-partner/5 border-partner/15 max-w-[90%] ml-auto'
                       }`}
                     >
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         {/* Host Bubble */}
                         <div className="flex items-start gap-1.5">
                           <span className="text-[9px] font-extrabold uppercase text-host tracking-wider min-w-[50px]">Host:</span>
-                          <span className="text-xs text-slate-200 font-medium">
+                          <span className="text-xs text-slate-200 font-semibold leading-relaxed">
                             {entry.speaker === 'host' ? entry.original_text : entry.translated_text}
                           </span>
                         </div>
@@ -969,7 +968,7 @@ export default function AdminPage() {
                         {/* Partner Bubble */}
                         <div className="flex items-start gap-1.5">
                           <span className="text-[9px] font-extrabold uppercase text-partner tracking-wider min-w-[50px]">{partObj?.name}:</span>
-                          <span className="text-xs text-slate-300">
+                          <span className="text-xs text-slate-350 font-medium leading-relaxed">
                             {entry.speaker === 'partner' ? entry.original_text : entry.translated_text}
                           </span>
                         </div>

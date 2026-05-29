@@ -1,162 +1,161 @@
 import React from 'react'
-import { Document, Page, Text, View, StyleSheet, Font, pdf } from '@react-pdf/renderer'
 import { LocalTranscriptEntry } from './db'
 
-// Register main font family that covers Latin, Cyrillic, and Vietnamese diacritics
-Font.register({
-  family: 'NotoSansRegular',
-  src: 'https://fonts.gstatic.com/s/notosans/v36/o-0IIpQlx3QUlC5A4PNr5TRA.ttf'
-})
-
-// Register Japanese font
-Font.register({
-  family: 'NotoSansJP',
-  src: 'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFQgg.ttf'
-})
-
-// Register Korean font
-Font.register({
-  family: 'NotoSansKR',
-  src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbykF3F2sV8DG3nPPt711nxl.ttf'
-})
-
-// Register Simplified Chinese font
-Font.register({
-  family: 'NotoSansSC',
-  src: 'https://fonts.gstatic.com/s/notosanssc/v36/k3kF3F2sV8DG3nPPt711nxl.ttf'
-})
-
-// Register Thai font
-Font.register({
-  family: 'NotoSansThai',
-  src: 'https://fonts.gstatic.com/s/notosansthai/v32/Lh9oHzV2sV8DG3nPPt711nxl.ttf'
-})
-
-// Font family dynamic mapper based on language code
-function getFontFamily(lang: string) {
-  switch (lang.toLowerCase()) {
-    case 'ja': return 'NotoSansJP'
-    case 'ko': return 'NotoSansKR'
-    case 'zh': return 'NotoSansSC'
-    case 'th': return 'NotoSansThai'
-    default: return 'NotoSansRegular'
-  }
-}
-
-// Styling definitions for react-pdf elements
-const styles = StyleSheet.create({
-  page: {
-    padding: 40,
-    backgroundColor: '#ffffff',
-  },
-  header: {
-    borderBottomWidth: 1.5,
-    borderBottomColor: '#1e293b',
-    paddingBottom: 15,
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#0f172a',
-    fontFamily: 'NotoSansRegular',
-  },
-  meta: {
-    fontSize: 10,
-    color: '#64748b',
-    marginTop: 6,
-    fontFamily: 'NotoSansRegular',
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
-    padding: 8,
-    fontWeight: 'bold',
-  },
-  tableHeaderCol: {
-    width: '50%',
-    fontSize: 11,
-    color: '#475569',
-    fontFamily: 'NotoSansRegular',
-  },
-  row: {
-    flexDirection: 'row',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#f1f5f9',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    minHeight: 35,
-  },
-  col: {
-    width: '50%',
-    flexDirection: 'column',
-    paddingRight: 10,
-  },
-  bubble: {
-    borderRadius: 8,
-    padding: 8,
-  },
-  hostBubble: {
-    backgroundColor: '#f1f5f9',
-  },
-  partnerBubble: {
-    backgroundColor: '#ecfeff',
-  },
-  text: {
-    fontSize: 9.5,
-    lineHeight: 1.4,
-    color: '#334155',
-  },
-  speakerLabel: {
-    fontSize: 7.5,
-    fontWeight: 'bold',
-    color: '#64748b',
-    marginBottom: 3,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  timestamp: {
-    fontSize: 7,
-    color: '#94a3b8',
-    marginTop: 4,
-    textAlign: 'right',
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 40,
-    right: 40,
-    borderTopWidth: 0.5,
-    borderTopColor: '#cbd5e1',
-    paddingTop: 10,
-    textAlign: 'center',
-    fontSize: 8,
-    color: '#94a3b8',
-    fontFamily: 'NotoSansRegular',
-  }
-})
-
-interface PDFDocProps {
-  sessionName: string
-  partnerLang: string
-  partnerLangName: string
-  startedAt: string
+/**
+ * Trigger client-side PDF compilation and download.
+ * Loads @react-pdf/renderer dynamically on the client-side at runtime
+ * to ensure that this heavy library is never bundled into server-side Edge worker functions.
+ */
+export async function downloadSessionPDF(
+  sessionName: string,
+  partnerLang: string,
+  partnerLangName: string,
+  startedAt: string,
   entries: LocalTranscriptEntry[]
-}
+) {
+  // Dynamically load @react-pdf/renderer inside client execution block
+  const { pdf, Document, Page, Text, View, StyleSheet, Font } = await import('@react-pdf/renderer')
 
-const PayLingoPDFDocument: React.FC<PDFDocProps> = ({
-  sessionName,
-  partnerLang,
-  partnerLangName,
-  startedAt,
-  entries
-}) => {
+  // Register main font family that covers Latin, Cyrillic, and Vietnamese diacritics
+  Font.register({
+    family: 'NotoSansRegular',
+    src: 'https://fonts.gstatic.com/s/notosans/v36/o-0IIpQlx3QUlC5A4PNr5TRA.ttf'
+  })
+
+  // Register Japanese font
+  Font.register({
+    family: 'NotoSansJP',
+    src: 'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFQgg.ttf'
+  })
+
+  // Register Korean font
+  Font.register({
+    family: 'NotoSansKR',
+    src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbykF3F2sV8DG3nPPt711nxl.ttf'
+  })
+
+  // Register Simplified Chinese font
+  Font.register({
+    family: 'NotoSansSC',
+    src: 'https://fonts.gstatic.com/s/notosanssc/v36/k3kF3F2sV8DG3nPPt711nxl.ttf'
+  })
+
+  // Register Thai font
+  Font.register({
+    family: 'NotoSansThai',
+    src: 'https://fonts.gstatic.com/s/notosansthai/v32/Lh9oHzV2sV8DG3nPPt711nxl.ttf'
+  })
+
+  // Font family dynamic mapper based on language code
+  function getFontFamily(lang: string) {
+    switch (lang.toLowerCase()) {
+      case 'ja': return 'NotoSansJP'
+      case 'ko': return 'NotoSansKR'
+      case 'zh': return 'NotoSansSC'
+      case 'th': return 'NotoSansThai'
+      default: return 'NotoSansRegular'
+    }
+  }
+
+  // Styling definitions for react-pdf elements
+  const styles = StyleSheet.create({
+    page: {
+      padding: 40,
+      backgroundColor: '#ffffff',
+    },
+    header: {
+      borderBottomWidth: 1.5,
+      borderBottomColor: '#1e293b',
+      paddingBottom: 15,
+      marginBottom: 20,
+    },
+    title: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: '#0f172a',
+      fontFamily: 'NotoSansRegular',
+    },
+    meta: {
+      fontSize: 10,
+      color: '#64748b',
+      marginTop: 6,
+      fontFamily: 'NotoSansRegular',
+    },
+    tableHeader: {
+      flexDirection: 'row',
+      borderBottomWidth: 1,
+      borderBottomColor: '#e2e8f0',
+      backgroundColor: '#f8fafc',
+      padding: 8,
+      fontWeight: 'bold',
+    },
+    tableHeaderCol: {
+      width: '50%',
+      fontSize: 11,
+      color: '#475569',
+      fontFamily: 'NotoSansRegular',
+    },
+    row: {
+      flexDirection: 'row',
+      borderBottomWidth: 0.5,
+      borderBottomColor: '#f1f5f9',
+      paddingVertical: 10,
+      paddingHorizontal: 8,
+      minHeight: 35,
+    },
+    col: {
+      width: '50%',
+      flexDirection: 'column',
+      paddingRight: 10,
+    },
+    bubble: {
+      borderRadius: 8,
+      padding: 8,
+    },
+    hostBubble: {
+      backgroundColor: '#f1f5f9',
+    },
+    partnerBubble: {
+      backgroundColor: '#ecfeff',
+    },
+    text: {
+      fontSize: 9.5,
+      lineHeight: 1.4,
+      color: '#334155',
+    },
+    speakerLabel: {
+      fontSize: 7.5,
+      fontWeight: 'bold',
+      color: '#64748b',
+      marginBottom: 3,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    timestamp: {
+      fontSize: 7,
+      color: '#94a3b8',
+      marginTop: 4,
+      textAlign: 'right',
+    },
+    footer: {
+      position: 'absolute',
+      bottom: 30,
+      left: 40,
+      right: 40,
+      borderTopWidth: 0.5,
+      borderTopColor: '#cbd5e1',
+      paddingTop: 10,
+      textAlign: 'center',
+      fontSize: 8,
+      color: '#94a3b8',
+      fontFamily: 'NotoSansRegular',
+    }
+  })
+
   const formattedDate = new Date(startedAt).toLocaleString('vi-VN')
   const partnerFont = getFontFamily(partnerLang)
 
-  return (
+  const doc = (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Header Section */}
@@ -225,27 +224,6 @@ const PayLingoPDFDocument: React.FC<PDFDocProps> = ({
         />
       </Page>
     </Document>
-  )
-}
-
-/**
- * Trigger client-side PDF compilation and download.
- */
-export async function downloadSessionPDF(
-  sessionName: string,
-  partnerLang: string,
-  partnerLangName: string,
-  startedAt: string,
-  entries: LocalTranscriptEntry[]
-) {
-  const doc = (
-    <PayLingoPDFDocument
-      sessionName={sessionName}
-      partnerLang={partnerLang}
-      partnerLangName={partnerLangName}
-      startedAt={startedAt}
-      entries={entries}
-    />
   )
 
   const blob = await pdf(doc).toBlob()
