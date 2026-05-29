@@ -117,20 +117,48 @@ export function parseTokensToMessages(
       }
     } else if (currentMessage) {
       // Append word to current message
-      // Add spaces appropriately (prevent double spaces and handle CJK/Thai spacing rules)
+      // Add spaces appropriately (prevent double spaces, timing gap checking, and syllable-level merging for Vietnamese)
+      const gap = word.start_ms - currentMessage.end_ms
+
       const needsSpace = (str: string, wordStr: string) => {
         if (!str) return false
+        if (str.endsWith(' ') || wordStr.startsWith(' ')) return false
+        
         // No space for CJK languages or Thai
         const isCJKOrThai = /[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff\u0e00-\u0e7f]/
         if (isCJKOrThai.test(str) && isCJKOrThai.test(wordStr)) return false
-        return !str.endsWith(' ') && !wordStr.startsWith(' ')
+        
+        const lastWord = str.split(' ').pop() || ''
+        const cleanLastWord = lastWord.replace(/[^a-zA-ZÀ-ỹđĐ]/g, '')
+        const cleanWordStr = wordStr.replace(/[^a-zA-ZÀ-ỹđĐ]/g, '')
+        
+        if (!cleanLastWord || !cleanWordStr) return false
+
+        // Timing gap check: if very small (continuous speech of a decomposed syllable), no space
+        if (gap <= 100) {
+          if (cleanLastWord.length <= 2 || cleanWordStr.length <= 2) {
+            return false
+          }
+        }
+        
+        // Subword check for Vietnamese (either is very short and not standalone)
+        const standaloneWords = ['a', 'i', 'y', 'ở', 'o', 'à', 'A', 'I', 'Y', 'Ở', 'O', 'À']
+        const isPrevStandalone = standaloneWords.includes(cleanLastWord)
+        const isCurrStandalone = standaloneWords.includes(cleanWordStr)
+        
+        if ((cleanLastWord.length === 1 && !isPrevStandalone) || 
+            (cleanWordStr.length === 1 && !isCurrStandalone)) {
+          return false
+        }
+        
+        return true
       }
 
       const origSpace = needsSpace(currentMessage.original_text, word.original) ? ' ' : ''
-      currentMessage.original_text += origSpace + word.original
+      currentMessage.original_text = (currentMessage.original_text + origSpace + word.original).normalize('NFC')
 
       const transSpace = needsSpace(currentMessage.translated_text, word.translated) ? ' ' : ''
-      currentMessage.translated_text += transSpace + word.translated
+      currentMessage.translated_text = (currentMessage.translated_text + transSpace + word.translated).normalize('NFC')
 
       currentMessage.end_ms = word.end_ms
       // If any word in the chunk is still partial, the message is partial

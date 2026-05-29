@@ -75,6 +75,9 @@ export default function SessionPage() {
   const [editOrigText, setEditOrigText] = useState('')
   const [editTransText, setEditTransText] = useState('')
 
+  // Font Size state (75%, 100%, 120%, 150%, 200%)
+  const [fontSize, setFontSize] = useState<75 | 100 | 120 | 150 | 200>(100)
+
   const partnerScrollRef = useRef<HTMLDivElement>(null)
   const hostScrollRef = useRef<HTMLDivElement>(null)
 
@@ -214,7 +217,7 @@ export default function SessionPage() {
     )
   }
 
-  // Initialize auto-sync & read layout states once on mount
+  // Initialize auto-sync, read layout, and read font size once on mount
   useEffect(() => {
     initAutoSync()
     
@@ -223,8 +226,22 @@ export default function SessionPage() {
       if (savedLayout && ['stacked', 'split', 'flipped'].includes(savedLayout)) {
         setLayoutMode(savedLayout)
       }
+      
+      const savedFontSize = localStorage.getItem('paylingo_font_size')
+      if (savedFontSize) {
+        setFontSize(parseInt(savedFontSize) as any)
+      }
     }
   }, [])
+
+  const handleToggleFontSize = () => {
+    const sizes: (75 | 100 | 120 | 150 | 200)[] = [75, 100, 120, 150, 200]
+    const currentIndex = sizes.indexOf(fontSize)
+    const nextIndex = (currentIndex + 1) % sizes.length
+    const nextSize = sizes[nextIndex]
+    setFontSize(nextSize)
+    localStorage.setItem('paylingo_font_size', nextSize.toString())
+  }
 
   // 1. Authenticate user by username
   useEffect(() => {
@@ -272,6 +289,8 @@ export default function SessionPage() {
     model: 'stt-rt-v4',
     enable_language_identification: true,
     enable_endpoint_detection: true,
+    language_hints: ['vi', partnerLang],
+    language_hints_strict: true,
     translation: {
       type: 'two_way',
       language_a: 'vi',
@@ -417,45 +436,6 @@ export default function SessionPage() {
             </p>
           </div>
         </div>
-
-        {/* Controls Header */}
-        <div className="flex items-center gap-2">
-          {/* Layout switcher */}
-          <button
-            onClick={handleToggleLayout}
-            className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
-            title="Chuyển đổi giao diện"
-          >
-            {layoutMode === 'stacked' && <LayoutGrid className="w-4 h-4 text-host" />}
-            {layoutMode === 'split' && <Columns className="w-4 h-4 text-partner" />}
-            {layoutMode === 'flipped' && <Rotate3d className="w-4 h-4 text-amber-500 animate-spin" style={{ animationDuration: '3s' }} />}
-            <span className="hidden sm:inline">
-              {layoutMode === 'stacked' && 'Xếp chồng'}
-              {layoutMode === 'split' && 'Song song'}
-              {layoutMode === 'flipped' && 'Xoay 180°'}
-            </span>
-          </button>
-
-
-
-          {/* History Page Trigger */}
-          <button
-            onClick={() => setShowHistory(true)}
-            className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
-          >
-            <History className="w-4 h-4" />
-            Lịch sử
-          </button>
-
-          {/* Sign Out */}
-          <button
-            onClick={handleLogout}
-            className="p-2.5 rounded-xl border border-red-500/10 hover:border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all cursor-pointer"
-            title="Đăng xuất"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
       </header>
 
       {/* Main Translation Container with Layout switching transitions */}
@@ -483,20 +463,8 @@ export default function SessionPage() {
               </div>
             </div>
 
-            {/* Language Selector Dropdown */}
-            <div className="flex items-center gap-2">
-              <select
-                disabled={isActive}
-                value={partnerLang}
-                onChange={(e) => setPartnerLang(e.target.value)}
-                className="bg-white/5 hover:bg-white/10 text-xs font-bold border border-white/10 rounded-xl px-3 py-1.5 text-white transition-all cursor-pointer outline-none max-w-[140px]"
-              >
-                {PARTNER_LANGUAGES.map(lang => (
-                  <option key={lang.code} value={lang.code} className="bg-slate-900 text-white">
-                    {lang.flag} {lang.name}
-                  </option>
-                ))}
-              </select>
+            <div className="text-xs font-bold text-slate-400 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+              {selectedPartner?.name}
             </div>
           </div>
 
@@ -519,11 +487,14 @@ export default function SessionPage() {
                     msg.speaker === 'partner' ? 'mr-auto items-start' : 'ml-auto items-end'
                   }`}
                 >
-                  <div className={`rounded-2xl px-4 py-3 text-sm font-medium ${
-                    msg.speaker === 'partner' 
-                      ? 'bg-partner/10 border border-partner/20 text-partner-foreground' 
-                      : 'bg-white/5 border border-white/10 text-slate-300'
-                  } ${!msg.is_final ? 'opacity-70 italic' : ''}`}>
+                  <div 
+                    className={`rounded-2xl px-4 py-3 font-medium ${
+                      msg.speaker === 'partner' 
+                        ? 'bg-partner/10 border border-partner/20 text-partner-foreground' 
+                        : 'bg-white/5 border border-white/10 text-slate-300'
+                    } ${!msg.is_final ? 'opacity-70 italic' : ''}`}
+                    style={{ fontSize: `${fontSize}%` }}
+                  >
                     {/* Always show Partner's language (partner_text) */}
                     {msg.speaker === 'partner' ? msg.original_text : msg.translated_text}
                   </div>
@@ -589,11 +560,14 @@ export default function SessionPage() {
                     msg.speaker === 'host' ? 'mr-auto items-start' : 'ml-auto items-end'
                   }`}
                 >
-                  <div className={`rounded-2xl px-4 py-3 text-sm font-medium ${
-                    msg.speaker === 'host' 
-                      ? 'bg-host/10 border border-host/20 text-host-foreground' 
-                      : 'bg-white/5 border border-white/10 text-slate-300'
-                  } ${!msg.is_final ? 'opacity-70 italic' : ''}`}>
+                  <div 
+                    className={`rounded-2xl px-4 py-3 font-medium ${
+                      msg.speaker === 'host' 
+                        ? 'bg-host/10 border border-host/20 text-host-foreground' 
+                        : 'bg-white/5 border border-white/10 text-slate-300'
+                    } ${!msg.is_final ? 'opacity-70 italic' : ''}`}
+                    style={{ fontSize: `${fontSize}%` }}
+                  >
                     {/* Always show Vietnamese (host_text) */}
                     {msg.speaker === 'host' ? msg.original_text : msg.translated_text}
                   </div>
@@ -619,10 +593,10 @@ export default function SessionPage() {
       </main>
 
       {/* Control Navigation Dashboard */}
-      <footer className="w-full flex flex-col sm:flex-row items-center justify-between mt-4 py-3 px-4 glass-panel rounded-2xl gap-3 z-20 shrink-0">
+      <footer className="w-full flex flex-col xl:flex-row items-center justify-between mt-4 py-4 px-5 glass-panel rounded-2xl gap-4 z-20 shrink-0">
         
-        {/* Connection & Recording Status Details */}
-        <div className="flex items-center gap-3">
+        {/* Left Column: Connection & Recording Status Details */}
+        <div className="flex items-center gap-3 w-full xl:w-auto shrink-0 justify-center xl:justify-start">
           <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${
             state === 'recording' ? 'bg-red-500 animate-pulse-glowing' : 
             state === 'connecting' || state === 'starting' ? 'bg-yellow-500 animate-pulse' : 
@@ -658,12 +632,36 @@ export default function SessionPage() {
           </div>
         </div>
 
-        {/* Core Actions buttons */}
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        {/* Center Column: Language translation indicator (English <---> Việt Nam) */}
+        <div className="flex items-center justify-center w-full xl:w-auto">
+          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold text-white transition-all shadow-inner">
+            <select
+              disabled={isActive}
+              value={partnerLang}
+              onChange={(e) => setPartnerLang(e.target.value)}
+              className="bg-transparent text-xs font-bold text-white transition-all cursor-pointer outline-none border-none py-0 px-1"
+            >
+              {PARTNER_LANGUAGES.map(lang => (
+                <option key={lang.code} value={lang.code} className="bg-slate-900 text-white">
+                  {lang.flag} {lang.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-slate-500 font-extrabold mx-1">⇆</span>
+            <span className="flex items-center gap-1.5 text-slate-300">
+              🇻🇳 Việt Nam
+            </span>
+          </div>
+        </div>
+
+        {/* Right Column: Actions (Start/Stop, Font Size, Layout, History, Sign Out) */}
+        <div className="flex flex-wrap items-center justify-center xl:justify-end gap-2 w-full xl:w-auto">
+          
+          {/* Start/Stop Button */}
           {!isActive ? (
             <button
               onClick={handleStart}
-              className="flex-1 sm:flex-none py-3 px-8 rounded-xl font-bold bg-gradient-to-r from-host to-partner hover:scale-[1.02] text-white shadow-lg shadow-host/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-sm animate-pulse-glowing"
+              className="py-2.5 px-6 rounded-xl font-bold bg-gradient-to-r from-host to-partner hover:scale-[1.02] text-white shadow-lg shadow-host/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs animate-pulse-glowing"
             >
               <Mic className="w-4 h-4 text-white" />
               Bắt đầu Dịch (Start)
@@ -671,12 +669,57 @@ export default function SessionPage() {
           ) : (
             <button
               onClick={handleStop}
-              className="flex-1 sm:flex-none py-3 px-8 rounded-xl font-bold bg-gradient-to-r from-red-500 to-red-600 hover:scale-[1.02] text-white shadow-lg shadow-red-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
+              className="py-2.5 px-6 rounded-xl font-bold bg-gradient-to-r from-red-500 to-red-600 hover:scale-[1.02] text-white shadow-lg shadow-red-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs"
             >
               <Square className="w-4 h-4 text-white fill-white" />
               Kết thúc (Stop)
             </button>
           )}
+
+          {/* Font Size Button */}
+          <button
+            onClick={handleToggleFontSize}
+            className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            title="Chỉnh cỡ chữ dịch"
+          >
+            <span className="font-extrabold text-[10px] bg-slate-800 px-1 py-0.5 rounded leading-none">AA</span>
+            <span>{fontSize}%</span>
+          </button>
+
+          {/* Layout switcher */}
+          <button
+            onClick={handleToggleLayout}
+            className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            title="Chuyển đổi giao diện"
+          >
+            {layoutMode === 'stacked' && <LayoutGrid className="w-4 h-4 text-host" />}
+            {layoutMode === 'split' && <Columns className="w-4 h-4 text-partner" />}
+            {layoutMode === 'flipped' && <Rotate3d className="w-4 h-4 text-amber-500 animate-spin" style={{ animationDuration: '3s' }} />}
+            <span className="hidden md:inline">
+              {layoutMode === 'stacked' && 'Xếp chồng'}
+              {layoutMode === 'split' && 'Song song'}
+              {layoutMode === 'flipped' && 'Xoay 180°'}
+            </span>
+          </button>
+
+          {/* History Page Trigger */}
+          <button
+            onClick={() => setShowHistory(true)}
+            className="p-2.5 rounded-xl border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+          >
+            <History className="w-4 h-4" />
+            Lịch sử
+          </button>
+
+          {/* Sign Out */}
+          <button
+            onClick={handleLogout}
+            className="p-2.5 rounded-xl border border-red-500/10 hover:border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all cursor-pointer"
+            title="Đăng xuất"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+
         </div>
       </footer>
 
