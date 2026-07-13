@@ -911,10 +911,10 @@ export default function SessionPage() {
           {/* Small version and build timestamp on the right */}
           <div className="text-right flex flex-col justify-center leading-none pr-1">
             <span className="text-[9px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest">
-              v3.0.2
+              v3.0.3
             </span>
             <span className="text-[7px] md:text-[8px] text-slate-600 font-bold mt-1 hidden sm:inline">
-              2026-07-13 11:58
+              2026-07-13 12:08
             </span>
           </div>
         </div>

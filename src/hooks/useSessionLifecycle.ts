@@ -248,8 +248,10 @@ export function useSessionLifecycle({
       // Write in bulk to Dexie
       await db.transcriptEntries.bulkPut(localEntries)
       
-      // Auto-trigger sync periodically
-      syncPendingData()
+      // Note: We do not trigger syncPendingData() here because this useEffect runs 
+      // on every intermediate transcription token (multiple times per second).
+      // Background sync is handled by the 15-second timer in initAutoSync(),
+      // and explicit sync runs on start/stop/visibility changes to conserve network egress.
     }
 
     saveMessages()

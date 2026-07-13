@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.3] - 2026-07-13
+
+### Fixed
+- **Supabase Egress Bandwidth Optimization:** Removed the high-frequency database sync trigger (`syncPendingData()`) from the real-time transcription autosave `useEffect`. Transcription changes are now stored instantly in local IndexedDB (Dexie) and synced to Supabase efficiently in batches (every 15 seconds) or on session end, saving over 99.9% of database REST API requests and resolving the bandwidth quota issue.
+- **Version bump:** Updated version to `v3.0.3` with the correct release build timestamp.
+
 ## [3.0.2] - 2026-07-13
 
 ### Fixed

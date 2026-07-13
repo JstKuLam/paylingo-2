@@ -152,7 +152,7 @@ export default function Home() {
           <span>Hỗ trợ đàm thoại đa ngôn ngữ với độ trễ tối thiểu.</span>
           <span>Dành cho Host người Việt & đối tác nước ngoài.</span>
           <span className="text-[10px] text-slate-600 font-semibold mt-1">
-            Phiên bản v3.0.2 • Cập nhật: 2026-07-13 11:58 (GMT+7)
+            Phiên bản v3.0.3 • Cập nhật: 2026-07-13 12:08 (GMT+7)
           </span>
         </div>
       </div>
