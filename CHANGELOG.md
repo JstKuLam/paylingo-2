@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.2] - 2026-07-13
+
+### Fixed
+- **Button Contrast (Dark & Light Theme):**
+  - **Dark Theme:** Made button text and Lucide icon strokes automatically render as dark steel-grey (`#111215`) when placed inside light-silver (`#cbd5e1`) button containers (`bg-host`, `bg-primary`), ensuring maximum contrast and legibility.
+  - **Light Theme:** Fixed a styling conflict that caused SVG strokes inside primary buttons to render as black. Icons (like the mic icon on Bắt Đầu button) now correctly render with white strokes.
+- **Font-Size Badge ("AA"):** Re-mapped `.bg-slate-800` styling in Light theme to a light gray background with dark text to fix the unreadable dark-on-dark "AA" font size button.
+- **Version bump:** Updated version to `v3.0.2` with the correct release build timestamp.
+
 ## [3.0.1] - 2026-07-13
 
 ### Fixed

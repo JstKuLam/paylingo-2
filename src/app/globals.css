@@ -34,6 +34,34 @@
   --input: rgba(255, 255, 255, 0.08);
   --ring: #cbd5e1;
   --radius: 0.75rem;
+
+  /* Ensure dark text and dark icons on silver/light buttons in Dark Mode */
+  .bg-host,
+  .bg-primary {
+    color: #111215 !important;
+  }
+  .bg-host .text-white,
+  .bg-primary .text-white,
+  .bg-host.text-white,
+  .bg-primary.text-white,
+  .from-host .text-white,
+  .from-host.text-white,
+  .bg-host .text-slate-100,
+  .bg-primary .text-slate-100,
+  .from-host .text-slate-100 {
+    color: #111215 !important;
+  }
+  .bg-host svg,
+  .bg-primary svg,
+  .from-host svg,
+  .bg-host .stroke-white,
+  .bg-primary .stroke-white,
+  .from-host .stroke-white,
+  .bg-host .stroke-slate-100,
+  .bg-primary .stroke-slate-100,
+  .from-host .stroke-slate-100 {
+    stroke: #111215 !important;
+  }
 }
 
 @theme inline {
@@ -321,6 +349,25 @@ body {
   button .text-slate-100, [role="button"] .text-slate-100 {
     color: #ffffff !important;
     fill: #ffffff !important;
+  }
+
+  /* Force white strokes for all icons inside blue/brand buttons in Light mode */
+  .bg-host svg, .bg-partner svg, .bg-primary svg,
+  .from-host svg, .from-partner svg,
+  .bg-host .stroke-white, .bg-partner .stroke-white, .bg-primary .stroke-white,
+  .from-host .stroke-white, .from-partner .stroke-white,
+  .bg-host .stroke-slate-100, .bg-partner .stroke-slate-100, .bg-primary .stroke-slate-100,
+  .bg-host .stroke-slate-200, .bg-partner .stroke-slate-200, .bg-primary .stroke-slate-200 {
+    stroke: #ffffff !important;
+  }
+
+  /* Override bg-slate-800 (used for disabled buttons & AA font-size badge) in Light mode for clean styling */
+  .bg-slate-800 {
+    background-color: var(--bg-secondary) !important;
+  }
+  .bg-slate-800.text-slate-300, .bg-slate-800 .text-slate-300,
+  .bg-slate-800.text-slate-400, .bg-slate-800 .text-slate-400 {
+    color: var(--text-secondary) !important;
   }
 }
 
