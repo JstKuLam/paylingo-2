@@ -305,6 +305,23 @@ body {
   .prose-invert {
     color: var(--foreground) !important;
   }
+
+  /* Restore high-contrast white text for primary colored backgrounds and buttons in Light mode */
+  .bg-host.text-white, .bg-partner.text-white, .bg-primary.text-white,
+  .from-host.text-white, .from-partner.text-white,
+  button.text-white, [role="button"].text-white,
+  .bg-host .text-white, .bg-partner .text-white, .bg-primary .text-white,
+  .from-host .text-white, .from-partner .text-white,
+  button .text-white, [role="button"] .text-white,
+  .bg-host.text-slate-100, .bg-partner.text-slate-100, .bg-primary.text-slate-100,
+  .from-host.text-slate-100, .from-partner.text-slate-100,
+  button.text-slate-100, [role="button"].text-slate-100,
+  .bg-host .text-slate-100, .bg-partner .text-slate-100, .bg-primary .text-slate-100,
+  .from-host .text-slate-100, .from-partner .text-slate-100,
+  button .text-slate-100, [role="button"] .text-slate-100 {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+  }
 }
 
 @layer base {
