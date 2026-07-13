@@ -22,19 +22,7 @@ import {
   AlertTriangle,
   LayoutGrid,
   Columns,
-  Maximize2,
-  ArrowLeft,
-  Search,
-  Trash2,
-  Edit3,
-  FileText,
   Check,
-  X,
-  Calendar,
-  Clock,
-  FolderOpen,
-  CloudLightning,
-  Database,
   Sun,
   Moon,
   Sparkles,
@@ -45,7 +33,7 @@ import { useTheme } from '@/hooks/useTheme'
 import { parseTokensToMessages, TranscriptMessage } from '@/lib/soniox-parser'
 import { useSessionLifecycle } from '@/hooks/useSessionLifecycle'
 import { initAutoSync, syncPendingData } from '@/lib/sync-manager'
-import { db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
+import { formatTimeline } from '@/lib/utils'
 import PayPayLogo from '@/components/PayPayLogo'
 
 const PARTNER_LANGUAGES = [
@@ -60,66 +48,97 @@ const PARTNER_LANGUAGES = [
   { code: 'th', name: 'ภาษาไทย', flag: '🇹🇭', label: 'Thai' },
 ]
 
-export default function SessionPage() {
-  const router = useRouter()
-  const { theme, changeTheme } = useTheme()
-  const [partnerLang, setPartnerLang] = useState('any')
+// SUB-COMPONENT: Manages active recording session, WebSocket streaming, and message rendering.
+// This component remounts completely when key (recordingMode + partnerLang) changes,
+// preventing any React Error #310 hook ordering mismatches in @soniox/react.
+function SessionActiveArea({
+  recordingMode,
+  partnerLang,
+  setPartnerLang,
+  layoutMode,
+  fontSize,
+  handleToggleLayout,
+  handleLogout,
+  setFontSize,
+  setIsRecordingActive
+}: {
+  recordingMode: 'one_way' | 'two_way' | 'scribe'
+  partnerLang: string
+  setPartnerLang: (lang: string) => void
+  layoutMode: 'stacked' | 'split' | 'flipped'
+  fontSize: 75 | 100 | 120 | 150 | 200
+  handleToggleLayout: () => void
+  handleLogout: () => void
+  setFontSize: (size: any) => void
+  setIsRecordingActive: (active: boolean) => void
+}) {
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
-  const [userLabel, setUserLabel] = useState<string>('Khách')
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
-  
-  // Phase 5 Layout Switcher states
-  const [layoutMode, setLayoutMode] = useState<'stacked' | 'split' | 'flipped'>('split')
-
-
-  // Font Size state (75%, 100%, 120%, 150%, 200%)
-  const [fontSize, setFontSize] = useState<75 | 100 | 120 | 150 | 200>(100)
   const [showFontSizeDropdown, setShowFontSizeDropdown] = useState(false)
-  
-  // Scroll to bottom helper states
   const [showPartnerScrollBottom, setShowPartnerScrollBottom] = useState(false)
   const [showHostScrollBottom, setShowHostScrollBottom] = useState(false)
 
   const partnerScrollRef = useRef<HTMLDivElement>(null)
   const hostScrollRef = useRef<HTMLDivElement>(null)
 
+  const [splitRatio, setSplitRatio] = useState(35)
+  const [isDragging, setIsDragging] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  // Initialize auto-sync, read layout, and read font size once on mount
   useEffect(() => {
-    initAutoSync()
-    
-    if (typeof window !== 'undefined') {
-      const savedLayout = localStorage.getItem('paylingo_layout_mode') as any
-      if (savedLayout && ['stacked', 'split', 'flipped'].includes(savedLayout)) {
-        setLayoutMode(savedLayout)
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const containerRect = containerRef.current.getBoundingClientRect()
+      
+      let clientX = e.clientX
+      let newRatio: number
+      if (layoutMode === 'flipped') {
+        const distanceVal = containerRect.right - clientX
+        newRatio = (distanceVal / containerRect.width) * 100
+      } else {
+        const distanceVal = clientX - containerRect.left
+        newRatio = (distanceVal / containerRect.width) * 100
       }
       
-      const savedFontSize = localStorage.getItem('paylingo_font_size')
-      if (savedFontSize) {
-        setFontSize(parseInt(savedFontSize) as any)
-      }
+      newRatio = Math.max(15, Math.min(85, newRatio))
+      setSplitRatio(newRatio)
     }
-  }, [])
 
-
-
-  // 1. Authenticate user by username
-  useEffect(() => {
-    const checkAuth = async () => {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-
-      const username = session?.user?.user_metadata?.username
-      if (!session || !username) {
-        router.push('/')
-        return
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!containerRef.current || e.touches.length === 0) return
+      const containerRect = containerRef.current.getBoundingClientRect()
+      
+      let clientX = e.touches[0].clientX
+      let newRatio: number
+      if (layoutMode === 'flipped') {
+        const distanceVal = containerRect.right - clientX
+        newRatio = (distanceVal / containerRect.width) * 100
+      } else {
+        const distanceVal = clientX - containerRect.left
+        newRatio = (distanceVal / containerRect.width) * 100
       }
-
-      setUserLabel(username)
-      setIsLoadingAuth(false)
+      
+      newRatio = Math.max(15, Math.min(85, newRatio))
+      setSplitRatio(newRatio)
     }
-    checkAuth()
-  }, [router])
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('touchmove', handleTouchMove)
+    window.addEventListener('touchend', handleMouseUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleMouseUp)
+    }
+  }, [isDragging, layoutMode])
 
   const getSonioxConfig = useCallback(async () => {
     const response = await fetch('/api/auth/soniox-key', { method: 'POST' })
@@ -132,9 +151,23 @@ export default function SessionPage() {
     }
   }, [])
 
-  // 2. Configure Soniox Real-time Hook and dynamic translation configuration
+  // Configure Soniox Real-time Hook and dynamic translation configuration
   const recordingConfig = useMemo(() => {
-    if (partnerLang === 'any') {
+    if (recordingMode === 'scribe') {
+      if (partnerLang === 'any') {
+        return {
+          language_hints: ['vi', 'en', 'zh', 'ja', 'ko', 'es', 'ru', 'de', 'th'],
+          language_hints_strict: false,
+          translation: undefined
+        }
+      } else {
+        return {
+          language_hints: ['vi', partnerLang],
+          language_hints_strict: true,
+          translation: undefined
+        }
+      }
+    } else if (recordingMode === 'one_way' || partnerLang === 'any') {
       return {
         language_hints: ['vi', 'en', 'zh', 'ja', 'ko', 'es', 'ru', 'de', 'th'],
         language_hints_strict: false,
@@ -154,21 +187,15 @@ export default function SessionPage() {
         }
       }
     }
-  }, [partnerLang])
+  }, [recordingMode, partnerLang])
 
   const {
     isActive,
     state,
     finalTokens,
     partialTokens,
-    isPaused,
-    isSourceMuted,
-    isReconnecting,
-    reconnectAttempt,
     start,
-    stop,
-    pause,
-    resume
+    stop
   } = useRecording({
     config: getSonioxConfig,
     model: 'stt-rt-v4',
@@ -183,7 +210,12 @@ export default function SessionPage() {
     reset_transcript_on_reconnect: false
   })
 
-  // 3. Sync and parse tokens into conversation messages in real-time
+  // Lift isActive state up to parent so the persistent header knows when to lock toggles
+  useEffect(() => {
+    setIsRecordingActive(isActive)
+  }, [isActive, setIsRecordingActive])
+
+  // Sync and parse tokens into conversation messages in real-time
   useEffect(() => {
     if (finalTokens.length > 0 || partialTokens.length > 0) {
       const parsed = parseTokensToMessages(finalTokens, partialTokens, partnerLang)
@@ -193,11 +225,9 @@ export default function SessionPage() {
     }
   }, [finalTokens, partialTokens, partnerLang])
 
-  // 4. Hook into session database lifecycle, autosave, and guards
+  // Hook into session database lifecycle, autosave, and guards
   const {
-    sessionId,
     silenceWarning,
-    isMinutesExhausted,
     wakeLockError,
     offlineIndicator,
     startSession,
@@ -209,7 +239,6 @@ export default function SessionPage() {
     stopRecording: stop
   })
 
-  // 5. Wrap Start Recording to create local DB record
   const handleStart = async () => {
     try {
       const selected = PARTNER_LANGUAGES.find(l => l.code === partnerLang)
@@ -220,7 +249,6 @@ export default function SessionPage() {
     }
   }
 
-  // 6. Wrap Stop Recording to update local DB status
   const handleStop = async () => {
     try {
       await stop()
@@ -230,22 +258,9 @@ export default function SessionPage() {
     }
   }
 
-  // 7. Toggle Layout Modes
-  const handleToggleLayout = () => {
-    const modes: ('stacked' | 'split' | 'flipped')[] = ['stacked', 'split', 'flipped']
-    const nextIndex = (modes.indexOf(layoutMode) + 1) % modes.length
-    const nextMode = modes[nextIndex]
-    setLayoutMode(nextMode)
-    localStorage.setItem('paylingo_layout_mode', nextMode)
-  }
-
-
-
-  // Scroll detectors to check if user has scrolled up to review history
   const handlePartnerScroll = () => {
     const el = partnerScrollRef.current
     if (!el) return
-    // Show button if scrolled up by more than 80px from bottom
     const isScrolledUp = el.scrollHeight - el.scrollTop - el.clientHeight > 80
     setShowPartnerScrollBottom(isScrolledUp)
   }
@@ -253,12 +268,10 @@ export default function SessionPage() {
   const handleHostScroll = () => {
     const el = hostScrollRef.current
     if (!el) return
-    // Show button if scrolled up by more than 80px from bottom
     const isScrolledUp = el.scrollHeight - el.scrollTop - el.clientHeight > 80
     setShowHostScrollBottom(isScrolledUp)
   }
 
-  // Smooth scroll to bottom handlers
   const scrollToBottomPartner = () => {
     const el = partnerScrollRef.current
     if (el) {
@@ -275,7 +288,6 @@ export default function SessionPage() {
     }
   }
 
-  // Auto-scroll panels on message update - only if user is already at the bottom
   useEffect(() => {
     if (partnerScrollRef.current && !showPartnerScrollBottom) {
       partnerScrollRef.current.scrollTop = partnerScrollRef.current.scrollHeight
@@ -286,48 +298,25 @@ export default function SessionPage() {
     if (hostScrollRef.current && !showHostScrollBottom) {
       hostScrollRef.current.scrollTop = hostScrollRef.current.scrollHeight
     }
-  }, [messages, showHostScrollBottom])
-
-  // Handle Logout
-  const handleLogout = async () => {
-    if (isActive) {
-      await handleStop()
-    }
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/')
-  }
-
-  if (isLoadingAuth) {
-    return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-host" />
-        <span className="text-slate-400 mt-4 text-xs font-semibold tracking-wide">Đang kiểm tra phòng dịch...</span>
-      </div>
-    )
-  }
+  }, [messages, silenceWarning, showHostScrollBottom])
 
   const selectedPartner = PARTNER_LANGUAGES.find(l => l.code === partnerLang)
 
-  return (
-    <div className="h-screen h-[100dvh] w-full flex flex-col p-3 md:p-5 relative overflow-hidden bg-background">
-      {/* Decorative Blur Blobs */}
-      <div className="absolute top-1/3 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-host/5 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute bottom-1/3 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-partner/5 rounded-full blur-3xl pointer-events-none"></div>
+  const firstMsgStartMs = useMemo(() => {
+    if (messages.length === 0) return 0
+    return messages[0].start_ms
+  }, [messages])
 
-      {/* Warning/Status Banners */}
+  const router = useRouter()
+
+  return (
+    <div className="flex-1 w-full flex flex-col min-h-0 relative z-10 animate-slide-up-fade">
+      {/* Warning/Status Banners inside active area */}
       <div className="w-full space-y-2 mb-3 relative z-30 shrink-0">
         {offlineIndicator && (
           <div className="w-full bg-amber-500/10 border border-amber-500/20 text-amber-400 py-3 px-5 rounded-full text-xs font-bold flex items-center gap-2 animate-pulse shadow-lg shadow-amber-500/5">
             <WifiOff className="w-4 h-4 shrink-0" />
             <span>Mất kết nối mạng. Đang lưu tạm bản dịch vào bộ nhớ máy (Offline-first)...</span>
-          </div>
-        )}
-
-        {silenceWarning && (
-          <div className="w-full bg-red-500/10 border border-red-500/20 text-red-400 py-3 px-5 rounded-full text-xs font-bold flex items-center gap-2 animate-bounce shadow-lg shadow-red-500/5">
-            <AlertTriangle className="w-4 h-4 shrink-0 animate-pulse" />
-            <span>Không phát hiện âm thanh trong 4 phút. Cuộc họp sẽ tự động dừng sau 1 phút nữa để tiết kiệm chi phí!</span>
           </div>
         )}
 
@@ -339,86 +328,31 @@ export default function SessionPage() {
         )}
       </div>
 
-      {/* Dynamic Header */}
-      <header className="w-full flex items-center justify-between py-3 px-5 glass-panel rounded-full mb-3 md:mb-4 relative z-20 shrink-0 border border-white/5 shadow-xl">
-        <div className="flex items-center gap-3">
-          <PayPayLogo className="h-7 md:h-8 w-auto text-white shrink-0 hover:scale-[1.02] transition-transform duration-200" width={92} height={35} />
-          <div className="h-4 w-px bg-white/10 shrink-0" />
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-[9px] md:text-[10px] font-extrabold uppercase tracking-widest bg-host/10 border border-host/15 text-host flex items-center gap-1 shadow-inner">
-              <UserCheck className="w-3 h-3 text-host" />
-              {userLabel}
-            </span>
-            <span className="text-[9px] md:text-[10px] text-slate-500 hidden sm:inline font-bold">
-              • Hội thoại song ngữ trực tiếp 2 chiều
-            </span>
-          </div>
-        </div>
-
-        {/* Premium Theme Selector Pill inside header */}
-        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-          <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 bg-black/10 rounded-full border border-white/5">
-            <button
-              onClick={() => changeTheme('dark')}
-              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-                theme === 'dark' ? 'bg-host text-white shadow-sm' : 'text-slate-400 hover:text-white'
-              }`}
-              title="Space Dark - Giao diện tối huyền bí"
-            >
-              <Moon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => changeTheme('light-ios')}
-              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-                theme === 'light-ios' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
-              }`}
-              title="iOS Light - Giao diện sáng Apple HIG"
-            >
-              <Sun className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => changeTheme('light-glass')}
-              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-                theme === 'light-glass' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
-              }`}
-              title="Liquid Glass - Giao diện kính mờ cao cấp"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => changeTheme('light-warm')}
-              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-                theme === 'light-warm' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
-              }`}
-              title="Warm Amber - Giao diện ấm áp cổ kính"
-            >
-              <SunDim className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Small version and build timestamp on the right */}
-          <div className="text-right flex flex-col justify-center leading-none pr-1">
-            <span className="text-[9px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest">
-              v2.4.0
-            </span>
-            <span className="text-[7px] md:text-[8px] text-slate-600 font-bold mt-1">
-              2026-05-29 16:30
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Translation Container with Layout switching transitions */}
-      <main className={`flex-1 w-full relative z-10 min-h-0 ${
-        layoutMode === 'split' 
-          ? 'grid grid-cols-1 grid-rows-[3.5fr_6.5fr] md:grid-rows-none md:grid-cols-[3.5fr_6.5fr] gap-3 md:gap-4' 
-          : 'flex flex-col gap-3 md:gap-4'
-      }`}>
+      {/* Main panels layout */}
+      <main
+        ref={containerRef}
+        className={`flex-1 w-full relative z-10 min-h-0 ${
+          layoutMode === 'split' || layoutMode === 'flipped'
+            ? `grid grid-cols-1 grid-rows-[3.5fr_6.5fr] md:grid-rows-none md:flex ${
+                layoutMode === 'flipped' ? 'md:flex-row-reverse' : 'md:flex-row'
+              } md:items-stretch gap-3 md:gap-0`
+            : 'flex flex-col gap-3 md:gap-4'
+        }`}
+      >
         
-        {/* PANEL A - PARTNER PANEL (Always shows partner's language) */}
-        <section className={`glass-panel rounded-3xl p-4 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-partner/30 shadow-partner/5 shadow-2xl transition-all duration-500 min-h-0 ${
-          layoutMode === 'flipped' ? 'transform rotate-180 flex-[7_7_0%] md:flex-[7_7_0%] order-1' : 'flex-[7_7_0%] md:flex-[7_7_0%]'
-        }`}>
+        {/* PANEL A - PARTNER PANEL */}
+        <section
+          style={
+            layoutMode === 'split' || layoutMode === 'flipped'
+              ? { width: `calc(${splitRatio}% - 6px)` }
+              : undefined
+          }
+          className={`glass-panel rounded-3xl p-4 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-partner/30 shadow-partner/5 shadow-2xl min-h-0 ${
+            isDragging ? 'duration-0' : 'transition-all duration-500'
+          } ${
+            layoutMode === 'flipped' ? 'transform rotate-180 flex-[7_7_0%] order-1' : 'flex-[7_7_0%]'
+          } ${layoutMode === 'split' || layoutMode === 'flipped' ? 'md:flex-none' : 'md:flex-[7_7_0%]'}`}
+        >
           <div className="absolute inset-0 bg-partner/[0.003] pointer-events-none"></div>
 
           {/* Panel A Header */}
@@ -452,20 +386,20 @@ export default function SessionPage() {
               </div>
             ) : (
               messages.map((msg) => {
-                // If partner language is 'any', do not show host speech (or its empty translation) in Panel A
                 if (partnerLang === 'any' && msg.speaker === 'host') return null
 
                 const displayText = msg.speaker === 'partner' ? msg.original_text : msg.translated_text
                 if (!displayText || !displayText.trim()) return null
 
+                const timelineStr = formatTimeline(msg.start_ms - firstMsgStartMs)
+
                 return (
                   <div key={msg.id} className="flex flex-col w-full items-start gap-1 animate-fadeIn">
-                    {/* Speaker Label */}
-                    <span className="text-[9px] md:text-[10px] font-extrabold uppercase tracking-widest px-1 text-partner/70">
-                      {msg.speaker === 'partner' ? selectedPartner?.name : 'Bạn (Dịch)'}
+                    <span className="text-[9px] md:text-[10px] font-extrabold uppercase tracking-widest px-1 text-partner/70 flex items-center gap-1.5">
+                      <span>{msg.speaker === 'partner' ? selectedPartner?.name : 'Bạn (Dịch)'}</span>
+                      <span className="font-mono text-slate-500 text-[8px] md:text-[9px]">[{timelineStr}]</span>
                     </span>
                     
-                    {/* Message Bubble */}
                     <div 
                       className={`rounded-[20px] px-4 py-2.5 text-sm md:text-base font-semibold max-w-[88%] md:max-w-[85%] shadow-lg transition-all ${
                         msg.speaker === 'partner' 
@@ -482,7 +416,6 @@ export default function SessionPage() {
             )}
           </div>
 
-          {/* Scroll to Bottom Button */}
           {showPartnerScrollBottom && (
             <button
               onClick={scrollToBottomPartner}
@@ -493,7 +426,6 @@ export default function SessionPage() {
             </button>
           )}
 
-          {/* Panel A Active Speaker indicator */}
           {isActive && (
             <div className="pt-2.5 flex items-center justify-between text-[10px] text-partner font-bold border-t border-white/5 shrink-0">
               <span className="flex items-center gap-1.5">
@@ -505,10 +437,34 @@ export default function SessionPage() {
           )}
         </section>
 
-        {/* PANEL B - HOST PANEL (Always shows Vietnamese) */}
-        <section className={`glass-panel rounded-3xl p-4 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-host/30 shadow-host/5 shadow-2xl transition-all duration-500 min-h-0 ${
-          layoutMode === 'flipped' ? 'flex-[13_13_0%] md:flex-[13_13_0%] order-2' : 'flex-[13_13_0%] md:flex-[13_13_0%]'
-        }`}>
+        {(layoutMode === 'split' || layoutMode === 'flipped') && (
+          <div
+            onMouseDown={() => setIsDragging(true)}
+            onTouchStart={() => setIsDragging(true)}
+            className="hidden md:flex w-3 hover:w-4 cursor-col-resize select-none h-full items-center justify-center transition-all z-40 relative group shrink-0"
+          >
+            <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5 bg-white/5 group-hover:bg-primary/30 group-active:bg-primary/50 transition-colors"></div>
+            <div className="w-1.5 h-8 rounded-full bg-slate-500/20 group-hover:bg-slate-400/80 group-active:bg-primary/80 transition-colors flex flex-col gap-0.5 items-center justify-center py-1">
+              <span className="w-1 h-1 rounded-full bg-white/50"></span>
+              <span className="w-1 h-1 rounded-full bg-white/50"></span>
+              <span className="w-1 h-1 rounded-full bg-white/50"></span>
+            </div>
+          </div>
+        )}
+
+        {/* PANEL B - HOST PANEL */}
+        <section
+          style={
+            layoutMode === 'split' || layoutMode === 'flipped'
+              ? { width: `calc(${100 - splitRatio}% - 6px)` }
+              : undefined
+          }
+          className={`glass-panel rounded-3xl p-4 md:p-6 flex flex-col relative overflow-hidden border-t-2 border-host/30 shadow-host/5 shadow-2xl min-h-0 ${
+            isDragging ? 'duration-0' : 'transition-all duration-500'
+          } ${
+            layoutMode === 'flipped' ? 'flex-[13_13_0%] order-2' : 'flex-[13_13_0%]'
+          } ${layoutMode === 'split' || layoutMode === 'flipped' ? 'md:flex-none' : 'md:flex-[13_13_0%]'}`}
+        >
           <div className="absolute inset-0 bg-host/[0.003] pointer-events-none"></div>
 
           {/* Panel B Header */}
@@ -545,14 +501,15 @@ export default function SessionPage() {
                 const displayText = msg.speaker === 'host' ? msg.original_text : msg.translated_text
                 if (!displayText || !displayText.trim()) return null
 
+                const timelineStr = formatTimeline(msg.start_ms - firstMsgStartMs)
+
                 return (
                   <div key={msg.id} className="flex flex-col w-full items-start gap-1 animate-fadeIn">
-                    {/* Speaker Label */}
-                    <span className="text-[9px] md:text-[10px] font-extrabold uppercase tracking-widest px-1 text-host/70">
-                      {msg.speaker === 'host' ? 'Bạn' : `${selectedPartner?.name} (Dịch)`}
+                    <span className="text-[9px] md:text-[10px] font-extrabold uppercase tracking-widest px-1 text-host/70 flex items-center gap-1.5">
+                      <span>{msg.speaker === 'host' ? 'Bạn' : `${selectedPartner?.name} (Dịch)`}</span>
+                      <span className="font-mono text-slate-500 text-[8px] md:text-[9px]">[{timelineStr}]</span>
                     </span>
                     
-                    {/* Message Bubble */}
                     <div 
                       className={`rounded-[20px] px-4 py-2.5 text-sm md:text-base font-semibold max-w-[88%] md:max-w-[85%] shadow-lg transition-all ${
                         msg.speaker === 'host' 
@@ -567,9 +524,20 @@ export default function SessionPage() {
                 )
               })
             )}
+
+            {silenceWarning && (
+              <div className="w-full flex justify-center py-2 animate-bounce my-2 shrink-0">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-2xl text-[11px] font-semibold flex items-start gap-2.5 max-w-[95%] shadow-lg shadow-red-500/5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-400 animate-pulse mt-0.5" />
+                  <div className="flex flex-col gap-0.5 text-left">
+                    <span className="uppercase text-[9px] tracking-wider font-extrabold text-red-500">CẢNH BÁO TỰ ĐỘNG DỪNG</span>
+                    <span>Không phát hiện âm thanh trong 4 phút. Cuộc họp sẽ tự động dừng sau 1 phút nữa để tiết kiệm chi phí!</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Scroll to Bottom Button */}
           {showHostScrollBottom && (
             <button
               onClick={scrollToBottomHost}
@@ -580,7 +548,6 @@ export default function SessionPage() {
             </button>
           )}
 
-          {/* Panel B Active Speaker indicator */}
           {isActive && (
             <div className="pt-2.5 flex items-center justify-between text-[10px] text-host font-bold border-t border-white/5 shrink-0">
               <span className="flex items-center gap-1.5">
@@ -596,20 +563,18 @@ export default function SessionPage() {
       {/* Control Navigation Dashboard */}
       <footer className="w-full flex flex-col md:flex-row items-center justify-between mt-3 py-3 px-4 md:px-5 glass-panel rounded-3xl gap-3 md:gap-4 relative z-20 shrink-0 border border-white/5 shadow-2xl">
         
-        {/* Left Column: Connection & Recording Status Details + Language Selector */}
+        {/* Left Column: Connection Status & Language Selector */}
         <div className="flex items-center justify-between md:justify-start gap-3 md:gap-6 w-full md:w-auto shrink-0 pb-3 md:pb-0 border-b border-white/5 md:border-none">
-          {/* Status Details */}
           <div className="flex items-center gap-3 text-left pl-1">
             <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 border border-black/10 ${
-              isReconnecting || state === 'connecting' || state === 'starting' ? 'bg-yellow-500 animate-pulse' :
+              state === 'connecting' || state === 'starting' ? 'bg-yellow-500 animate-pulse' :
               state === 'recording' ? 'bg-red-500 animate-pulse-glowing' : 
               'bg-slate-600'
             }`} />
             
             <div className="flex flex-col">
               <span className="text-[10px] md:text-xs font-black text-slate-100 uppercase tracking-wider leading-tight">
-                {isReconnecting ? 'Mất mạng...' :
-                 state === 'idle' ? 'Đang chờ' :
+                {state === 'idle' ? 'Đang chờ' :
                  state === 'starting' ? 'Khởi động...' :
                  state === 'connecting' ? 'Kết nối...' :
                  state === 'recording' ? 'Đang dịch' :
@@ -618,21 +583,25 @@ export default function SessionPage() {
                  state === 'stopped' ? 'Đã dừng' : 'Đang chờ'}
               </span>
               <span className="text-[8px] md:text-[9px] text-slate-500 font-extrabold uppercase mt-0.5 tracking-widest hidden sm:inline-flex items-center gap-1">
-                {isReconnecting ? 'ĐANG KẾT NỐI LẠI...' : state === 'recording' ? 'KẾT NỐI ỔN ĐỊNH' : 'AUDIO CHƯA KÍCH HOẠT'}
+                {state === 'recording' ? 'KẾT NỐI ỔN ĐỊNH' : 'AUDIO CHƯA KÍCH HOẠT'}
               </span>
             </div>
           </div>
 
-          {/* Language Selector Capsule (Hit Target: 44px) */}
           <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-4 h-[44px] text-xs font-bold text-white transition-all duration-200 hover:bg-white/[0.08] shadow-inner shrink-0 focus-within:border-host/40">
             <Languages className="w-4 h-4 text-partner shrink-0" />
             <select
-              disabled={isActive}
+              disabled={isActive || recordingMode === 'one_way'}
               value={partnerLang}
               onChange={(e) => setPartnerLang(e.target.value)}
-              className="bg-transparent text-xs font-extrabold text-white cursor-pointer outline-none border-none py-2 pr-1 shrink-0 focus:ring-0 focus:border-none focus:outline-none"
+              className="bg-transparent text-xs font-extrabold text-white cursor-pointer outline-none border-none py-2 pr-1 shrink-0 focus:ring-0 focus:border-none focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {PARTNER_LANGUAGES.map(lang => (
+              {PARTNER_LANGUAGES.filter(lang => {
+                if (recordingMode === 'two_way') {
+                  return lang.code !== 'any'
+                }
+                return true
+              }).map(lang => (
                 <option key={lang.code} value={lang.code} className="bg-slate-950 text-white">
                   {lang.flag} {lang.name}
                 </option>
@@ -645,11 +614,9 @@ export default function SessionPage() {
           </div>
         </div>
 
-        {/* Right Column: Actions (Start/Stop, Font Size, Layout, History, Sign Out) */}
+        {/* Right Column: Actions (Start/Stop, Font, Layout, History, Logout) */}
         <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto mt-1 md:mt-0">
-          
-          {/* Start/Stop Button (Hit Target: 44px) */}
-          {state === 'idle' || state === 'stopped' || state === 'canceled' || state === 'error' ? (
+          {state === 'idle' || state === 'stopped' || state === 'error' ? (
             <button
               onClick={handleStart}
               className="flex-1 md:flex-none h-[44px] px-6 rounded-full font-black bg-gradient-to-r from-host to-partner hover:scale-[1.02] text-white shadow-lg shadow-host/20 transition-all duration-200 ease-out active:scale-[0.97] flex items-center justify-center gap-2 cursor-pointer text-xs uppercase tracking-wider animate-pulse-glowing"
@@ -675,7 +642,7 @@ export default function SessionPage() {
             </button>
           )}
 
-          {/* Font Size Menu Dropdown (Hit Target: 44px) */}
+          {/* Font Size Selector */}
           <div className="relative shrink-0">
             <button
               onClick={() => setShowFontSizeDropdown(!showFontSizeDropdown)}
@@ -689,13 +656,7 @@ export default function SessionPage() {
 
             {showFontSizeDropdown && (
               <>
-                {/* Click-away backdrop */}
-                <div 
-                  className="fixed inset-0 z-40 cursor-default" 
-                  onClick={() => setShowFontSizeDropdown(false)}
-                />
-                
-                {/* Dropdown Menu */}
+                <div className="fixed inset-0 z-40 cursor-default" onClick={() => setShowFontSizeDropdown(false)} />
                 <div className="absolute bottom-full right-0 mb-2.5 w-32 glass-panel rounded-2xl py-1.5 z-50 border border-white/10 shadow-2xl flex flex-col animate-fadeIn overflow-hidden">
                   {([75, 100, 120, 150, 200] as const).map((size) => (
                     <button
@@ -718,7 +679,7 @@ export default function SessionPage() {
             )}
           </div>
 
-          {/* Layout switcher (Hit Target: 44px) */}
+          {/* Layout Switcher */}
           <button
             onClick={handleToggleLayout}
             className="h-[44px] px-4 rounded-full border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all duration-200 ease-out active:scale-[0.97] cursor-pointer flex items-center gap-1.5 text-xs font-bold shrink-0"
@@ -734,7 +695,7 @@ export default function SessionPage() {
             </span>
           </button>
 
-          {/* History Page Trigger (Hit Target: 44px) */}
+          {/* History Page Trigger */}
           <button
             onClick={() => router.push('/history')}
             className="h-[44px] px-4 rounded-full border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all duration-200 ease-out active:scale-[0.97] cursor-pointer flex items-center gap-1.5 text-xs font-bold shrink-0"
@@ -743,7 +704,7 @@ export default function SessionPage() {
             <span className="hidden md:inline">Lịch sử</span>
           </button>
 
-          {/* Sign Out (Hit Target: 44px Circular button) */}
+          {/* Logout */}
           <button
             onClick={handleLogout}
             className="w-[44px] h-[44px] rounded-full border border-red-500/10 hover:border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all duration-200 ease-out active:scale-[0.97] cursor-pointer flex items-center justify-center shrink-0"
@@ -751,9 +712,265 @@ export default function SessionPage() {
           >
             <LogOut className="w-4 h-4" />
           </button>
-
         </div>
       </footer>
+    </div>
+  )
+}
+
+// MAIN COMPONENT: Manages parent states, theme, authentication, and mounts persistent sliding header
+// alongside the key-remountable SessionActiveArea.
+export default function SessionPage() {
+  const router = useRouter()
+  const { theme, changeTheme } = useTheme()
+  const [recordingMode, setRecordingMode] = useState<'one_way' | 'two_way' | 'scribe'>('one_way')
+  const [partnerLang, setPartnerLang] = useState('any')
+  const [userLabel, setUserLabel] = useState<string>('Khách')
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
+
+  // Persistent recording state lifted from child to lock header toggle when active
+  const [isRecordingActive, setIsRecordingActive] = useState(false)
+
+  // Layout & Font states managed in parent to preserve settings across remounts
+  const [layoutMode, setLayoutMode] = useState<'stacked' | 'split' | 'flipped'>('split')
+  const [fontSize, setFontSize] = useState<75 | 100 | 120 | 150 | 200>(100)
+
+  // Floating Mode Explanation Toast notification state
+  const [toast, setToast] = useState<{ mode: 'one_way' | 'two_way' | 'scribe'; key: number } | null>(null)
+
+  // Auto-dismiss mode change toast after 3.2 seconds
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => {
+      setToast(null)
+    }, 3200)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  // Initialize sync and retrieve stored preferences on mount
+  useEffect(() => {
+    initAutoSync()
+    
+    if (typeof window !== 'undefined') {
+      const savedLayout = localStorage.getItem('paylingo_layout_mode') as any
+      if (savedLayout && ['stacked', 'split', 'flipped'].includes(savedLayout)) {
+        setLayoutMode(savedLayout)
+      }
+      
+      const savedFontSize = localStorage.getItem('paylingo_font_size')
+      if (savedFontSize) {
+        setFontSize(parseInt(savedFontSize) as any)
+      }
+    }
+  }, [])
+
+  // Authenticate user
+  useEffect(() => {
+    const checkAuth = async () => {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+
+      const username = session?.user?.user_metadata?.username
+      if (!session || !username) {
+        router.push('/')
+        return
+      }
+
+      setUserLabel(username)
+      setIsLoadingAuth(false)
+    }
+    checkAuth()
+  }, [router])
+
+  const handleModeChange = (mode: 'one_way' | 'two_way' | 'scribe') => {
+    if (isRecordingActive) return
+    if (mode !== recordingMode) {
+      setToast({ mode, key: Date.now() })
+    }
+    setRecordingMode(mode)
+    if (mode === 'one_way') {
+      setPartnerLang('any')
+    } else if (mode === 'two_way') {
+      if (partnerLang === 'any') {
+        setPartnerLang('en')
+      }
+    }
+  }
+
+  const handleToggleLayout = () => {
+    const modes: ('stacked' | 'split' | 'flipped')[] = ['stacked', 'split', 'flipped']
+    const nextIndex = (modes.indexOf(layoutMode) + 1) % modes.length
+    const nextMode = modes[nextIndex]
+    setLayoutMode(nextMode)
+    localStorage.setItem('paylingo_layout_mode', nextMode)
+  }
+
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/')
+  }
+
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background">
+        <Loader2 className="w-10 h-10 animate-spin text-host" />
+        <span className="text-slate-400 mt-4 text-xs font-semibold tracking-wide">Đang kiểm tra phòng dịch...</span>
+      </div>
+    )
+  }
+
+  const activeIndex = recordingMode === 'one_way' ? 0 : recordingMode === 'two_way' ? 1 : 2
+
+  return (
+    <div className="h-screen h-[100dvh] w-full flex flex-col p-3 md:p-5 relative overflow-hidden bg-background">
+      {/* Decorative Blur Blobs */}
+      <div className="absolute top-1/3 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-host/5 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-1/3 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-partner/5 rounded-full blur-3xl pointer-events-none"></div>
+
+      {/* Persistent Static Header: Never unmounts, enabling premium slide animations */}
+      <header className="w-full flex items-center justify-between py-3 px-4 md:px-5 glass-panel rounded-full mb-3 md:mb-4 relative z-20 shrink-0 border border-white/5 shadow-xl gap-2">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          <PayPayLogo className="h-6 md:h-8 w-auto text-white shrink-0 hover:scale-[1.02] transition-transform duration-200" width={75} height={28} />
+          <div className="h-4 w-px bg-white/10 shrink-0" />
+          <div className="flex items-center gap-1.5">
+            <span className="px-2.5 py-1 rounded-full text-[8px] md:text-[10px] font-extrabold uppercase tracking-widest bg-host/10 border border-host/15 text-host flex items-center gap-1 shadow-inner">
+              <UserCheck className="w-3 h-3 text-host shrink-0" />
+              <span className="hidden xs:inline">{userLabel}</span>
+              <span className="xs:hidden">{userLabel.slice(0, 5)}...</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Premium Sliding Segmented Control Capsule */}
+        <div className="relative flex items-center p-0.5 bg-black/35 rounded-full border border-white/5 shadow-inner shrink-0 scale-90 xs:scale-100 w-[240px] md:w-[310px] h-[38px] md:h-[40px]">
+          {/* Sliding active pill background layer */}
+          <div 
+            className="absolute top-0.5 bottom-0.5 left-1 w-[calc((100%-4px)/3-4px)] bg-host rounded-full transition-transform duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] shadow z-0" 
+            style={{ transform: `translateX(calc(${activeIndex * 100}% + ${activeIndex * 4}px))` }}
+          />
+
+          <button
+            disabled={isRecordingActive}
+            onClick={() => handleModeChange('one_way')}
+            className={`relative z-10 w-1/3 h-full rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-colors duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none ${
+              recordingMode === 'one_way' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Dịch một chiều từ mọi ngôn ngữ sang Tiếng Việt"
+          >
+            One Way
+          </button>
+          
+          <button
+            disabled={isRecordingActive}
+            onClick={() => handleModeChange('two_way')}
+            className={`relative z-10 w-1/3 h-full rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-colors duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none ${
+              recordingMode === 'two_way' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Dịch song ngữ hai chiều giữa hai ngôn ngữ"
+          >
+            Two Way
+          </button>
+          
+          <button
+            disabled={isRecordingActive}
+            onClick={() => handleModeChange('scribe')}
+            className={`relative z-10 w-1/3 h-full rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider transition-colors duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] flex items-center justify-center cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none ${
+              recordingMode === 'scribe' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Ghi lại nguyên bản lời nói của từng bên, không dịch"
+          >
+            <span className="hidden xs:inline">Smart Scribe</span>
+            <span className="inline xs:hidden">Scribe</span>
+          </button>
+        </div>
+
+        {/* Premium Theme Selector Pill inside header */}
+        <div className="flex items-center gap-2 md:gap-4 shrink-0">
+          <div className="hidden md:flex items-center gap-0.5 sm:gap-1 p-0.5 bg-black/10 rounded-full border border-white/5">
+            <button
+              onClick={() => changeTheme('dark')}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'dark' ? 'bg-host text-white shadow-sm' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Steel Dark - Giao diện tối kim loại"
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => changeTheme('light')}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
+                theme === 'light' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Tech Blue Light - Giao diện sáng công nghệ"
+            >
+              <Sun className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Small version and build timestamp on the right */}
+          <div className="text-right flex flex-col justify-center leading-none pr-1">
+            <span className="text-[9px] md:text-[10px] text-slate-400 font-black uppercase tracking-widest">
+              v3.0.0
+            </span>
+            <span className="text-[7px] md:text-[8px] text-slate-600 font-bold mt-1 hidden sm:inline">
+              2026-07-13 11:47
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <SessionActiveArea
+        key={`${recordingMode}-${partnerLang}`}
+        recordingMode={recordingMode}
+        partnerLang={partnerLang}
+        setPartnerLang={setPartnerLang}
+        layoutMode={layoutMode}
+        fontSize={fontSize}
+        handleToggleLayout={handleToggleLayout}
+        handleLogout={handleLogout}
+        setFontSize={setFontSize}
+        setIsRecordingActive={setIsRecordingActive}
+      />
+
+      {/* Ultra-Premium Mode Explanation Toast */}
+      {toast && (
+        <div 
+          key={toast.key}
+          onClick={() => setToast(null)}
+          className="absolute top-[76px] md:top-[92px] left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-[390px] pointer-events-auto cursor-pointer animate-toast-slide-in"
+        >
+          <div className="glass-panel border-white/10 rounded-2xl p-3 shadow-2xl flex items-center gap-3 relative overflow-hidden backdrop-blur-xl border border-white/5 hover:bg-white/[0.02] active:scale-98 transition-all duration-200">
+            {/* Toast Mode Gradient Accent background bar */}
+            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+              toast.mode === 'one_way' ? 'bg-host' : toast.mode === 'two_way' ? 'bg-partner' : 'bg-amber-glow'
+            }`} />
+            
+            {/* Icon Area */}
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+              toast.mode === 'one_way' ? 'bg-host/15 text-host' : toast.mode === 'two_way' ? 'bg-partner/15 text-partner' : 'bg-amber-500/15 text-amber-glow'
+            }`}>
+              {toast.mode === 'one_way' && <Mic className="w-4.5 h-4.5" />}
+              {toast.mode === 'two_way' && <Languages className="w-4.5 h-4.5" />}
+              {toast.mode === 'scribe' && <Volume2 className="w-4.5 h-4.5" />}
+            </div>
+
+            {/* Text Area */}
+            <div className="flex-1 min-w-0 pr-1">
+              <h4 className="font-extrabold text-[10px] md:text-[11px] text-white uppercase tracking-wider">
+                {toast.mode === 'one_way' && 'Dịch Một Chiều (One-Way)'}
+                {toast.mode === 'two_way' && 'Dịch Song Ngữ (Two-Way)'}
+                {toast.mode === 'scribe' && 'Ghi Âm Nguyên Bản (Smart Scribe)'}
+              </h4>
+              <p className="text-[9px] md:text-[10px] text-slate-300 font-semibold mt-0.5 leading-snug">
+                {toast.mode === 'one_way' && 'Hệ thống tự động nghe mọi ngôn ngữ và dịch trực tiếp sang Tiếng Việt.'}
+                {toast.mode === 'two_way' && 'Hỗ trợ đối thoại song ngữ hai chiều tốc độ cao giữa bạn và đối tác.'}
+                {toast.mode === 'scribe' && 'Ghi và nhận dạng giọng nói nguyên bản của từng bên, không dịch.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

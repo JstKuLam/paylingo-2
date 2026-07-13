@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
 import { syncPendingData } from '@/lib/sync-manager'
-import { TranscriptMessage } from '@/lib/soniox-parser'
+import { TranscriptMessage, stringToUUID } from '@/lib/soniox-parser'
 import { createClient } from '@/lib/supabase/client'
 
 interface UseSessionLifecycleProps {
@@ -233,7 +233,7 @@ export function useSessionLifecycle({
 
     const saveMessages = async () => {
       const localEntries: LocalTranscriptEntry[] = messages.map(msg => ({
-        id: msg.id.replace('msg-', 'entry-'), // make a valid entry uuid/string
+        id: stringToUUID(msg.id), // make a valid entry uuid/string
         session_id: sessionId,
         speaker: msg.speaker,
         original_text: msg.original_text,

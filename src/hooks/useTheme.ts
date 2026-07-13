@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react'
 
-export type ThemeType = 'dark' | 'light-ios' | 'light-glass' | 'light-warm'
+export type ThemeType = 'dark' | 'light'
 
 export function useTheme() {
   const [theme, setTheme] = useState<ThemeType>('dark')
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as ThemeType | null
+    const savedTheme = localStorage.getItem('theme')
     if (savedTheme) {
-      // Map legacy 'light' to 'light-ios'
-      const normalizedTheme = savedTheme === ('light' as any) ? 'light-ios' : savedTheme
+      // Map legacy themes to 'light' or 'dark'
+      let normalizedTheme: ThemeType = 'dark'
+      if (savedTheme === 'light' || savedTheme.startsWith('light-')) {
+        normalizedTheme = 'light'
+      } else {
+        normalizedTheme = 'dark'
+      }
       setTheme(normalizedTheme)
       document.documentElement.setAttribute('data-theme', normalizedTheme)
     } else {
-      // Default to dark mode for PayLingo
       setTheme('dark')
       document.documentElement.setAttribute('data-theme', 'dark')
     }
@@ -26,10 +30,7 @@ export function useTheme() {
   }
 
   const toggleTheme = () => {
-    const themes: ThemeType[] = ['dark', 'light-ios', 'light-glass', 'light-warm']
-    const currentIndex = themes.indexOf(theme)
-    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % themes.length
-    const nextTheme = themes[nextIndex]
+    const nextTheme: ThemeType = theme === 'dark' ? 'light' : 'dark'
     changeTheme(nextTheme)
   }
 

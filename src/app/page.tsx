@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, ArrowRight, Loader2, AlertCircle, Sun, Moon, Sparkles, SunDim } from 'lucide-react'
+import { User, ArrowRight, Loader2, AlertCircle, Sun, Moon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/hooks/useTheme'
 
@@ -152,7 +152,7 @@ export default function Home() {
           <span>Hỗ trợ đàm thoại đa ngôn ngữ với độ trễ tối thiểu.</span>
           <span>Dành cho Host người Việt & đối tác nước ngoài.</span>
           <span className="text-[10px] text-slate-600 font-semibold mt-1">
-            Phiên bản v2.4.0 • Cập nhật: 2026-05-29 16:30 (GMT+7)
+            Phiên bản v3.0.0 • Cập nhật: 2026-07-13 11:47 (GMT+7)
           </span>
         </div>
       </div>
@@ -164,36 +164,18 @@ export default function Home() {
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
             theme === 'dark' ? 'bg-host text-white shadow-md scale-105' : 'text-slate-400 hover:text-white hover:bg-white/5'
           }`}
-          title="Space Dark - Giao diện tối huyền bí"
+          title="Steel Dark - Giao diện tối kim loại"
         >
           <Moon className="w-4 h-4" />
         </button>
         <button
-          onClick={() => changeTheme('light-ios')}
+          onClick={() => changeTheme('light')}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-            theme === 'light-ios' ? 'bg-host text-white shadow-md scale-105' : 'text-slate-500 hover:text-slate-850 hover:bg-black/5'
+            theme === 'light' ? 'bg-host text-white shadow-md scale-105' : 'text-slate-500 hover:text-slate-800'
           }`}
-          title="iOS Light - Giao diện sáng Apple HIG"
+          title="Tech Blue Light - Giao diện sáng công nghệ"
         >
           <Sun className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => changeTheme('light-glass')}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-            theme === 'light-glass' ? 'bg-host text-white shadow-md scale-105' : 'text-slate-500 hover:text-slate-850 hover:bg-black/5'
-          }`}
-          title="Liquid Glass - Giao diện kính mờ cao cấp"
-        >
-          <Sparkles className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => changeTheme('light-warm')}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-            theme === 'light-warm' ? 'bg-host text-white shadow-md scale-105' : 'text-slate-500 hover:text-slate-850 hover:bg-black/5'
-          }`}
-          title="Warm Amber - Giao diện ấm áp cổ kính"
-        >
-          <SunDim className="w-4 h-4" />
         </button>
       </div>
     </div>

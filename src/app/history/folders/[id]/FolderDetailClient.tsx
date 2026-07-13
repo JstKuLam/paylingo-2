@@ -16,11 +16,13 @@ import {
   Sparkles,
   ChevronRight,
   Copy,
-  Share2
+  Share2,
+  Download
 } from 'lucide-react'
 import { db, LocalSession, LocalFolder } from '@/lib/db'
 import { syncPendingData } from '@/lib/sync-manager'
 import { createClient } from '@/lib/supabase/client'
+import { generatePremiumHTMLReport, downloadSummaryHTML } from '@/lib/html-generator'
 
 const PARTNER_LANGUAGES = [
   { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐' },
@@ -56,6 +58,28 @@ export default function FolderDetailPage({ params }: PageProps) {
   const [copied, setCopied] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
   const [selectedStyle, setSelectedStyle] = useState<'default' | 'formal' | 'casual' | 'very_casual'>('default')
+
+  // Dynamic loading steps to improve perceived speed
+  const [loadingStep, setLoadingStep] = useState(0)
+  const loadingSteps = [
+    "Đang kết nối AI và đọc dữ liệu IndexedDB...",
+    "Đang phân tích cấu trúc các cuộc đàm thoại...",
+    "Nhận diện vai trò người nói và chủ đề chính...",
+    "Tổng hợp các quyết định và việc cần làm...",
+    "Đang vẽ Sơ đồ tư duy cuộc họp (Mind Map)...",
+    "Đang xuất bản báo cáo HTML cao cấp..."
+  ]
+
+  useEffect(() => {
+    if (!aiLoading) {
+      setLoadingStep(0)
+      return
+    }
+    const timer = setInterval(() => {
+      setLoadingStep(prev => (prev < loadingSteps.length - 1 ? prev + 1 : prev))
+    }, 1800)
+    return () => clearInterval(timer)
+  }, [aiLoading])
 
   // Load Folder details & associated Sessions
   useEffect(() => {
@@ -487,7 +511,15 @@ export default function FolderDetailPage({ params }: PageProps) {
               {aiLoading ? (
                 <div className="h-full flex flex-col items-center justify-center py-20 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-host" />
-                  <p className="text-xs font-bold text-slate-400 mt-4 tracking-wide">AI đang phân tích và tổng hợp toàn bộ các cuộc đàm thoại...</p>
+                  <p className="text-xs font-black text-slate-200 mt-4 tracking-wide transition-all duration-300 animate-pulse text-center px-4">
+                    {loadingSteps[loadingStep]}
+                  </p>
+                  <div className="w-48 bg-white/5 h-1.5 rounded-full mt-3 overflow-hidden border border-white/5">
+                    <div 
+                      className="bg-host h-full rounded-full transition-all duration-500" 
+                      style={{ width: `${((loadingStep + 1) / loadingSteps.length) * 100}%` }}
+                    ></div>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -567,12 +599,34 @@ export default function FolderDetailPage({ params }: PageProps) {
                     )}
                   </div>
 
-                  {/* Summary Text Render */}
-                  <div className="glass-panel p-5 rounded-3xl space-y-3.5 border border-white/5">
-                    <h3 className="text-[10px] font-black uppercase text-host tracking-wider">Xem trước bản tóm tắt thư mục:</h3>
-                    <div className="text-xs text-slate-350 font-medium whitespace-pre-wrap leading-relaxed border-t border-white/5 pt-4 max-h-[300px] overflow-y-auto pr-1">
-                      {aiSummary}
+                  {/* HTML Report Publication & Direct View */}
+                  <div className="glass-panel p-4 rounded-3xl border border-white/5 bg-white/[0.01] space-y-3 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Xuất bản tài liệu AI (Publish & Export)</span>
+                      <span className="text-[8px] text-slate-500 font-bold leading-tight">Báo cáo tóm tắt dưới dạng văn bản HTML cấu trúc cao cấp.</span>
                     </div>
+                    <button
+                      onClick={() => downloadSummaryHTML(folder?.name || 'thu_muc', aiSummary, undefined, 'Nhiều ngôn ngữ')}
+                      className="h-9 px-4.5 rounded-full bg-host hover:opacity-90 text-white font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-all duration-200 shadow-md active:scale-95 shrink-0"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Tải báo cáo HTML
+                    </button>
+                  </div>
+
+                  <div className="glass-panel p-1.5 rounded-3xl border border-white/5 flex flex-col flex-1 min-h-[350px]">
+                    <div className="flex items-center justify-between px-3 py-1.5 shrink-0">
+                      <span className="text-[9px] font-black uppercase text-host tracking-wider">Xem trước báo cáo HTML (Live Report Preview)</span>
+                      <span className="text-[8px] text-slate-500 font-bold">Apple HIG & shadcn UI Style layout</span>
+                    </div>
+                    <iframe 
+                      className="w-full flex-1 border border-white/5 rounded-2xl bg-[#f8fafc] min-h-[350px]"
+                      srcDoc={generatePremiumHTMLReport({
+                        sessionName: folder?.name || 'thu_muc',
+                        markdown: aiSummary,
+                        partnerLang: 'Nhiều ngôn ngữ'
+                      })}
+                    />
                   </div>
                 </>
               )}

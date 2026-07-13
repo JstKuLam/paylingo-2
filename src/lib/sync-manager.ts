@@ -1,5 +1,6 @@
 import { db, LocalSession, LocalTranscriptEntry } from './db'
 import { createClient } from './supabase/client'
+import { stringToUUID } from './soniox-parser'
 
 /**
  * Sweeps the local IndexedDB and pushes all 'pending' sessions and transcript entries to Supabase.
@@ -97,16 +98,21 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
       const safeEntries = pendingEntries.filter(entry => verifiedSessionIds.has(entry.session_id))
 
       if (safeEntries.length > 0) {
-        const supaEntries = safeEntries.map(entry => ({
-          id: entry.id,
-          session_id: entry.session_id,
-          speaker: entry.speaker,
-          original_text: entry.original_text,
-          translated_text: entry.translated_text,
-          start_ms: entry.start_ms,
-          end_ms: entry.end_ms,
-          created_at: entry.created_at
-        }))
+        const supaEntries = safeEntries.map(entry => {
+          const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
+            ? entry.id
+            : stringToUUID(entry.id)
+          return {
+            id: entryId,
+            session_id: entry.session_id,
+            speaker: entry.speaker,
+            original_text: entry.original_text,
+            translated_text: entry.translated_text,
+            start_ms: entry.start_ms,
+            end_ms: entry.end_ms,
+            created_at: entry.created_at
+          }
+        })
 
         // Push all in one batch upsert
         const { error: entriesError } = await supabase
@@ -115,17 +121,34 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
 
         if (!entriesError) {
           // Mark all safe entries as synced in local DB
-          const entryIds = safeEntries.map(e => e.id)
-          await db.transcriptEntries.where('id').anyOf(entryIds).modify({ sync_status: 'synced' })
+          for (const entry of safeEntries) {
+            const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
+              ? entry.id
+              : stringToUUID(entry.id)
+            if (entryId !== entry.id) {
+              await db.transcriptEntries.delete(entry.id)
+              await db.transcriptEntries.put({
+                ...entry,
+                id: entryId,
+                sync_status: 'synced',
+                updated_at: new Date().toISOString()
+              })
+            } else {
+              await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
+            }
+          }
           syncedEntries += safeEntries.length
         } else {
           console.error('Failed to sync transcript entries batch:', entriesError.message)
           // Fallback to updating individually on failures to sync what is possible
           for (const entry of safeEntries) {
+            const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
+              ? entry.id
+              : stringToUUID(entry.id)
             const { error: singleError } = await supabase
               .from('transcript_entries')
               .upsert({
-                id: entry.id,
+                id: entryId,
                 session_id: entry.session_id,
                 speaker: entry.speaker,
                 original_text: entry.original_text,
@@ -136,7 +159,17 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
               })
 
             if (!singleError) {
-              await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
+              if (entryId !== entry.id) {
+                await db.transcriptEntries.delete(entry.id)
+                await db.transcriptEntries.put({
+                  ...entry,
+                  id: entryId,
+                  sync_status: 'synced',
+                  updated_at: new Date().toISOString()
+                })
+              } else {
+                await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
+              }
               syncedEntries++
             } else {
               await db.transcriptEntries.update(entry.id, { sync_status: 'failed' })

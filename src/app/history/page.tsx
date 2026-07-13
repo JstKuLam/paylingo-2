@@ -27,13 +27,13 @@ import {
   Copy,
   Share2,
   Sun,
-  Moon,
-  SunDim
+  Moon
 } from 'lucide-react'
 import { db, LocalSession, LocalTranscriptEntry, LocalFolder } from '@/lib/db'
 import { syncPendingData } from '@/lib/sync-manager'
 import { createClient } from '@/lib/supabase/client'
 import { useTheme } from '@/hooks/useTheme'
+import { formatTimeline } from '@/lib/utils'
 
 const PARTNER_LANGUAGES = [
   { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐' },
@@ -386,7 +386,7 @@ export default function HistoryPage() {
         <span className="text-slate-400 mt-4 text-sm font-semibold tracking-wide">Đang tải lịch sử dịch...</span>
       </div>
     )
-  }
+  }  const firstEntryStartMs = sessionEntries[0]?.start_ms ?? 0
 
   return (
     <div className="min-h-screen w-full flex flex-col p-4 md:p-6 relative overflow-hidden bg-background">
@@ -447,36 +447,18 @@ export default function HistoryPage() {
               className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
                 theme === 'dark' ? 'bg-host text-white shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
-              title="Space Dark - Giao diện tối huyền bí"
+              title="Steel Dark - Giao diện tối kim loại"
             >
               <Moon className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => changeTheme('light-ios')}
+              onClick={() => changeTheme('light')}
               className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-                theme === 'light-ios' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
+                theme === 'light' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
-              title="iOS Light - Giao diện sáng Apple HIG"
+              title="Tech Blue Light - Giao diện sáng công nghệ"
             >
               <Sun className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => changeTheme('light-glass')}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-                theme === 'light-glass' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
-              }`}
-              title="Liquid Glass - Giao diện kính mờ cao cấp"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => changeTheme('light-warm')}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer ${
-                theme === 'light-warm' ? 'bg-host text-white shadow-sm' : 'text-slate-500 hover:text-slate-850'
-              }`}
-              title="Warm Amber - Giao diện ấm áp cổ kính"
-            >
-              <SunDim className="w-3.5 h-3.5" />
             </button>
           </div>
 
@@ -865,22 +847,40 @@ export default function HistoryPage() {
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
 
-                          <div className="space-y-2">
-                            {/* Host Bubble */}
-                            <div className="flex items-start gap-1.5">
-                              <span className="text-[9px] font-extrabold uppercase text-host tracking-wider min-w-[50px]">Host:</span>
-                              <span className="text-xs text-slate-250 font-semibold leading-relaxed">
-                                {entry.speaker === 'host' ? entry.original_text : entry.translated_text}
-                              </span>
-                            </div>
+                           <div className="space-y-2">
+                            {(() => {
+                              const hostText = entry.speaker === 'host' ? entry.original_text : entry.translated_text
+                              const partnerText = entry.speaker === 'partner' ? entry.original_text : entry.translated_text
+                              const timelineStr = formatTimeline(entry.start_ms - firstEntryStartMs)
 
-                            {/* Partner Bubble */}
-                            <div className="flex items-start gap-1.5">
-                              <span className="text-[9px] font-extrabold uppercase text-partner tracking-wider min-w-[50px]">{partObj?.name}:</span>
-                              <span className="text-xs text-slate-350 font-medium leading-relaxed">
-                                {entry.speaker === 'partner' ? entry.original_text : entry.translated_text}
-                              </span>
-                            </div>
+                              return (
+                                <>
+                                  {hostText && hostText.trim() !== '' && (
+                                    <div className="flex items-start gap-1.5 animate-fadeIn">
+                                      <span className="text-[9px] font-extrabold uppercase text-host tracking-wider min-w-[55px] flex items-center gap-1">
+                                        <span>Host</span>
+                                        <span className="font-mono text-slate-500 text-[8px]">[{timelineStr}]</span>:
+                                      </span>
+                                      <span className="text-xs text-slate-250 font-semibold leading-relaxed">
+                                        {hostText}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {partnerText && partnerText.trim() !== '' && (
+                                    <div className="flex items-start gap-1.5 animate-fadeIn">
+                                      <span className="text-[9px] font-extrabold uppercase text-partner tracking-wider min-w-[55px] truncate flex items-center gap-1">
+                                        <span>{partObj?.name}</span>
+                                        <span className="font-mono text-slate-500 text-[8px]">[{timelineStr}]</span>:
+                                      </span>
+                                      <span className="text-xs text-slate-350 font-medium leading-relaxed">
+                                        {partnerText}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
+                              )
+                            })()}
                           </div>
                         </div>
                       )}

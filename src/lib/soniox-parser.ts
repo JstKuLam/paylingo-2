@@ -23,9 +23,50 @@ const FILLER_WORDS = new Set([
   'ờ', 'ừm', 'ừ', 'ơ', 'hơ', 'ư', 'ưm', 'oh', 'a', 'ha'
 ])
 
+const VIETNAMESE_ABBREVIATIONS: Record<string, string> = {
+  'dng': 'dừng',
+  'hn': 'hơn',
+  'ko': 'không',
+  'đc': 'được',
+  'dc': 'được',
+  'nhg': 'nhưng',
+  'ng': 'người',
+  'vs': 'với',
+  'trc': 'trước',
+  'đt': 'điện thoại',
+  'kb': 'không biết',
+  'thg': 'thường',
+  'bth': 'bình thường'
+}
+
+function expandVietnameseAbbreviations(text: string): string {
+  if (!text) return ''
+  
+  // Split into words, keeping track of punctuation
+  return text.split(/\s+/).map(word => {
+    // Strip trailing/leading punctuation for dictionary lookup
+    const cleanWord = word.toLowerCase().normalize('NFC').replace(/[.,!?;:]/g, '')
+    const replacement = VIETNAMESE_ABBREVIATIONS[cleanWord]
+    
+    if (replacement) {
+      // Re-apply punctuation if any
+      const punctuationMatch = word.match(/[.,!?;:]+$/)
+      const punctuation = punctuationMatch ? punctuationMatch[0] : ''
+      
+      // Match case (capitalization) of original word
+      if (word[0] === word[0].toUpperCase()) {
+        return replacement[0].toUpperCase() + replacement.slice(1) + punctuation
+      }
+      return replacement + punctuation
+    }
+    return word
+  }).join(' ')
+}
+
 function cleanTranscriptText(text: string): string {
   if (!text) return ''
-  return text
+  const expanded = expandVietnameseAbbreviations(text)
+  return expanded
     .replace(/\s+/g, ' ')                  // collapse multiple spaces
     .replace(/\s+([.,!?;:])$/g, '$1')      // remove space before end punctuation
     .replace(/\s+([.,!?;:])\s+/g, '$1 ')   // remove space before punctuation but keep one after
@@ -164,3 +205,32 @@ export function parseTokensToMessages(
   // Combine and sort chronologically by start_ms
   return allMessages.sort((a, b) => a.start_ms - b.start_ms)
 }
+
+/**
+ * Generates a deterministic UUIDv4-compliant string from any input string.
+ * Used to map client-side arbitrary message IDs to standard database UUID format.
+ */
+export function stringToUUID(str: string): string {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i)
+    hash |= 0
+  }
+  
+  const hex = '0123456789abcdef'
+  let seed = ''
+  let r = Math.abs(hash)
+  for (let i = 0; i < 32; i++) {
+    r = (r * 1103515245 + 12345) & 0x7fffffff
+    seed += hex[r % 16]
+  }
+  
+  return [
+    seed.slice(0, 8),
+    seed.slice(8, 12),
+    '4' + seed.slice(13, 16),
+    'a' + seed.slice(17, 20),
+    seed.slice(20, 32)
+  ].join('-')
+}
+

@@ -5,34 +5,34 @@
 @custom-variant dark (&:is(.dark *));
 
 :root, [data-theme="dark"], .dark {
-  --background: #09090b; /* Apple Space Black */
-  --foreground: #f2f2f7; /* Apple Primary Light Label */
-  --accent-host: #6339f0; /* PayPay Deep Violet-Purple branding (vibrant digital match of #5427D4) */
-  --accent-host-rgb: 99, 57, 240;
-  --accent-partner: #859eff; /* PayPay Light Slate-Purple branding (#859EFF) */
-  --accent-partner-rgb: 133, 158, 255;
-  --accent-amber: #ffd60a; /* Apple Dark Mode Yellow/Amber (pure gold glow) */
-  --border-glass: rgba(255, 255, 255, 0.08); /* Chromatic hairline boundary */
-  --bg-glass: rgba(22, 22, 23, 0.72); /* Apple's official Dark Liquid Glass material */
+  --background: #111215; /* Deep Metallic Steel Gray */
+  --foreground: #f1f5f9; /* Cool Slate Light Text */
+  --accent-host: #cbd5e1; /* Silver / Light Slate */
+  --accent-host-rgb: 203, 213, 225;
+  --accent-partner: #64748b; /* Cool Steel Gray */
+  --accent-partner-rgb: 100, 116, 139;
+  --accent-amber: #94a3b8; /* Cool Muted Metal Accent */
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --bg-glass: rgba(26, 28, 34, 0.72); /* Translucent Steel Gray */
 
-  /* shadcn UI semantic variables mapped to Space Dark */
-  --card: #18181b;
-  --card-foreground: #f4f4f5;
-  --popover: #09090b;
-  --popover-foreground: #f2f2f7;
-  --primary: #6339f0; /* PayPay Deep Violet-Purple */
-  --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --secondary-foreground: #f4f4f5;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #27272a;
-  --accent-foreground: #f4f4f5;
+  /* shadcn UI semantic variables mapped to Dark Mode */
+  --card: #16171b;
+  --card-foreground: #f1f5f9;
+  --popover: #16171b;
+  --popover-foreground: #f1f5f9;
+  --primary: #cbd5e1; /* Silver primary */
+  --primary-foreground: #111215;
+  --secondary: #212328;
+  --secondary-foreground: #f1f5f9;
+  --muted: #212328;
+  --muted-foreground: #94a3b8;
+  --accent: #212328;
+  --accent-foreground: #f1f5f9;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.08);
-  --ring: #6339f0;
+  --ring: #cbd5e1;
   --radius: 0.75rem;
 }
 
@@ -95,30 +95,7 @@ body {
   position: relative;
 }
 
-/* PayPay Brand-derived Subtle Ambient Auroras (Only active on Dark background) */
-body::before {
-  content: "";
-  position: absolute;
-  top: -15%;
-  left: -25%;
-  width: 90%;
-  height: 90%;
-  background: radial-gradient(circle at 30% 30%, rgba(var(--accent-host-rgb), 0.05) 0%, rgba(0, 0, 0, 0) 65%);
-  z-index: -1;
-  pointer-events: none;
-}
-
-body::after {
-  content: "";
-  position: absolute;
-  bottom: -15%;
-  right: -25%;
-  width: 90%;
-  height: 90%;
-  background: radial-gradient(circle at 70% 70%, rgba(var(--accent-partner-rgb), 0.03) 0%, rgba(0, 0, 0, 0) 65%);
-  z-index: -1;
-  pointer-events: none;
-}
+/* PayPay Brand-derived Subtle Ambient Auroras disabled for clean tech styling */
 
 /* Glassmorphism Classes */
 .glass-panel {
@@ -196,130 +173,47 @@ body::after {
 
 /* ========== Solid + Brand Family Light Themes (shadcn UI aesthetic) ========== */
 
-[data-theme="light"],
-[data-theme="light-ios"] {
-  --background: #f9fafb; /* Solid Crisp Light Zinc (shadcn-like gray background) */
-  --foreground: #09090b; /* Solid zinc-950 text */
-  --accent-host: #5427d4; /* PayPay Deep Violet-Purple branding */
-  --accent-host-rgb: 84, 39, 212;
-  --accent-partner: #859eff; /* PayPay Light Slate-Purple branding */
-  --accent-partner-rgb: 133, 158, 255;
-  --accent-amber: #f97316; /* Solid bright orange */
-  --border-glass: #e4e4e7; /* Solid crisp zinc-200 border */
-  --bg-glass: #ffffff; /* Solid white panels */
-  
-  --text-secondary: #71717a; /* zinc-500 secondary label */
-  --bg-secondary: #f4f4f5; /* zinc-100 secondary background */
-  --bg-secondary-hover: #e4e4e7; /* zinc-200 hover */
-  --bg-glass-input: #ffffff; /* solid white inputs */
-  --border-input: #d4d4d8; /* zinc-300 input border */
-  --placeholder: #a1a1aa; /* zinc-400 placeholder */
-
-  /* shadcn UI semantic variables mapped to iOS Light */
-  --card: #ffffff;
-  --card-foreground: #09090b;
-  --popover: #ffffff;
-  --popover-foreground: #09090b;
-  --primary: #5427d4; /* PayPay Brand Purple */
-  --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #09090b;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --accent: #f4f4f5;
-  --accent-foreground: #09090b;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #e4e4e7;
-  --input: #e4e4e7;
-  --ring: #5427d4;
-  --radius: 0.75rem;
-}
-
-[data-theme="light-glass"] {
-  --background: #f1f5f9; /* Solid Slate Light Gray backdrop */
-  --foreground: #0f172a; /* Slate-900 Primary label */
-  --accent-host: #5427d4; /* PayPay Deep Violet-Purple branding */
-  --accent-host-rgb: 84, 39, 212;
-  --accent-partner: #859eff; /* PayPay Light Slate-Purple branding */
-  --accent-partner-rgb: 133, 158, 255;
-  --accent-amber: #f59e0b; /* Amber accent */
-  --border-glass: #cbd5e1; /* Solid slate-300 border */
-  --bg-glass: rgba(255, 255, 255, 0.95); /* Ultra frosted high-opacity white */
+[data-theme="light"] {
+  --background: #f8fafc; /* Solid Light Slate */
+  --foreground: #0f172a; /* Slate-900 */
+  --accent-host: #2563eb; /* Tech Blue */
+  --accent-host-rgb: 37, 99, 235;
+  --accent-partner: #0284c7; /* Sky Blue */
+  --accent-partner-rgb: 2, 132, 199;
+  --accent-amber: #0284c7;
+  --border-glass: #cbd5e1; /* Crisp slate-300 border */
+  --bg-glass: #ffffff; /* Solid white panels - no transparency */
   
   --text-secondary: #64748b; /* slate-500 secondary label */
-  --bg-secondary: #e2e8f0; /* slate-200 secondary background */
-  --bg-secondary-hover: #cbd5e1; /* slate-300 hover */
-  --bg-glass-input: #ffffff;
-  --border-input: #cbd5e1;
-  --placeholder: #94a3b8;
+  --bg-secondary: #f1f5f9; /* slate-100 secondary background */
+  --bg-secondary-hover: #e2e8f0; /* slate-200 hover */
+  --bg-glass-input: #ffffff; /* solid white inputs */
+  --border-input: #cbd5e1; /* slate-300 input border */
+  --placeholder: #94a3b8; /* slate-400 placeholder */
 
-  /* shadcn UI semantic variables mapped to Liquid Glass */
-  --card: rgba(255, 255, 255, 0.95);
+  /* shadcn UI semantic variables mapped to Light Mode */
+  --card: #ffffff;
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #5427d4;
+  --primary: #2563eb; /* Tech Blue primary */
   --primary-foreground: #ffffff;
-  --secondary: #e2e8f0;
+  --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
-  --muted: #e2e8f0;
+  --muted: #f1f5f9;
   --muted-foreground: #64748b;
-  --accent: #e2e8f0;
+  --accent: #f1f5f9;
   --accent-foreground: #0f172a;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #cbd5e1;
-  --input: #cbd5e1;
-  --ring: #5427d4;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #2563eb;
   --radius: 0.75rem;
 }
 
-[data-theme="light-warm"] {
-  --background: #faf6f0; /* Solid Warm vintage parchment backdrop */
-  --foreground: #3c2f2f; /* Dark Warm Espresso Label */
-  --accent-host: #752570; /* Warm Plum (Warm shade of PayPay Purple) */
-  --accent-host-rgb: 117, 37, 112;
-  --accent-partner: #8e709a; /* Warm Slate-Purple Partner */
-  --accent-partner-rgb: 142, 112, 154;
-  --accent-amber: #d97706; /* Solid Amber */
-  --border-glass: #ebdcc6; /* Solid warm clay border */
-  --bg-glass: #ffffff; /* Solid white panels */
-  
-  --text-secondary: #6e5e58; /* Warm secondary label */
-  --bg-secondary: #f3eae0; /* Warm secondary background */
-  --bg-secondary-hover: #ebdcc6; /* Warm hover */
-  --bg-glass-input: #ffffff;
-  --border-input: #ebdcc6;
-  --placeholder: #bca8a0;
-
-  /* shadcn UI semantic variables mapped to Warm Amber */
-  --card: #ffffff;
-  --card-foreground: #3c2f2f;
-  --popover: #ffffff;
-  --popover-foreground: #3c2f2f;
-  --primary: #752570;
-  --primary-foreground: #ffffff;
-  --secondary: #f3eae0;
-  --secondary-foreground: #3c2f2f;
-  --muted: #f3eae0;
-  --muted-foreground: #6e5e58;
-  --accent: #f3eae0;
-  --accent-foreground: #3c2f2f;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #ebdcc6;
-  --input: #ebdcc6;
-  --ring: #752570;
-  --radius: 0.75rem;
-}
-
-/* Master Selector for all light-based theme ecosystems */
-[data-theme="light"],
-[data-theme="light-ios"],
-[data-theme="light-glass"],
-[data-theme="light-warm"] {
-
+/* Master Selector for Light theme - no gradient, no ambient */
+[data-theme="light"] {
   /* Pure Solid backgrounds for light themes - remove dynamic aurora blobs completely */
   body::before,
   body::after {
@@ -425,4 +319,40 @@ body::after {
   html {
     @apply font-sans;
   }
+}
+
+/* Premium Entrance Slide-Up Fade Animation for Tab/Mode Switching */
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-slide-up-fade {
+  animation: slideUpFade 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Premium Toast Bounce/Slide-In Animation */
+@keyframes toastSlideIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -24px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, 2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.animate-toast-slide-in {
+  animation: toastSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }

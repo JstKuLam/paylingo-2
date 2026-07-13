@@ -5,23 +5,26 @@ export const runtime = 'edge'
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate the user session
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn' },
-        { status: 401 }
-      )
+    // 1. Check for Mobile app secret bypass
+    const mobileSecret = request.headers.get('x-mobile-secret')
+    const expectedSecret = process.env.PAYLINGO_MOBILE_SECRET || 'REDACTED_LEGACY_MOBILE_HMAC_SECRET'
+    
+    let isAuthorized = false
+    if (mobileSecret === expectedSecret) {
+      isAuthorized = true
+    } else {
+      // Standard user session authentication
+      const supabase = await createClient()
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (!authError && user && user.user_metadata?.username) {
+        isAuthorized = true
+      }
     }
 
-    // 2. Double check username presence
-    const username = user.user_metadata?.username
-    if (!username) {
+    if (!isAuthorized) {
       return NextResponse.json(
-        { error: 'Tài khoản chưa có tên người dùng hợp lệ' },
-        { status: 403 }
+        { error: 'Phiên đăng nhập không hợp lệ hoặc không có quyền truy cập' },
+        { status: 401 }
       )
     }
 

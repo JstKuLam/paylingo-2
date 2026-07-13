@@ -1,0 +1,40 @@
+CREATE TABLE TranscriptMessage (
+    id TEXT NOT NULL PRIMARY KEY,
+    sessionId TEXT NOT NULL,
+    text TEXT NOT NULL,
+    translation TEXT,
+    speaker TEXT NOT NULL,
+    startMs INTEGER NOT NULL,
+    endMs INTEGER NOT NULL,
+    isFinal INTEGER NOT NULL
+);
+
+CREATE TABLE Session (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    partnerLang TEXT NOT NULL,
+    createdAt INTEGER NOT NULL
+);
+
+-- Queries for Session
+insertSession:
+INSERT OR REPLACE INTO Session(id, title, mode, partnerLang, createdAt)
+VALUES (?, ?, ?, ?, ?);
+
+getAllSessions:
+SELECT * FROM Session ORDER BY createdAt DESC;
+
+deleteSession:
+DELETE FROM Session WHERE id = ?;
+
+-- Queries for TranscriptMessage
+insertMessage:
+INSERT OR REPLACE INTO TranscriptMessage(id, sessionId, text, translation, speaker, startMs, endMs, isFinal)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+getMessagesForSession:
+SELECT * FROM TranscriptMessage WHERE sessionId = ? ORDER BY startMs ASC;
+
+deleteMessagesForSession:
+DELETE FROM TranscriptMessage WHERE sessionId = ?;
