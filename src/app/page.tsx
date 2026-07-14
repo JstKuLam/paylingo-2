@@ -177,7 +177,7 @@ export default function Home() {
           </form>
 
           <div className="entry-footnote">
-            <span>v3.0.3</span>
+            <span>v3.1.1</span>
             <Link href="/admin">Quản trị</Link>
           </div>
         </div>

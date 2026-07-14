@@ -43,6 +43,10 @@ export default function WorkspaceHeader({
       </nav>
 
       <div className="workspace-actions">
+        <div className="text-right mr-2 hidden xs:block">
+          <p className="text-[10px] font-bold text-slate-400 leading-none">v3.1.1</p>
+          <p className="text-[9px] text-slate-500 mt-0.5 font-semibold">14/07/2026 14:13 (GMT+7)</p>
+        </div>
         {actions}
         <button
           type="button"
