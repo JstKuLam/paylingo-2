@@ -2,12 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.1.1] - 2026-07-14
+## [3.1.1] - 2026-07-14 / 14-07-2026
 
-### Fixed
-- **Theme fidelity:** Rebuilt the dark palette as a neutral graphite and steel control surface, removing the remaining teal cast from the entry screen.
-- **Tech-blue light mode:** Applied blue-white surfaces, technical blue borders, and consistent blue action states throughout the interface.
-- **Theme consistency:** Replaced fixed blue, teal, white, and report-preview colors in primary, recording, AI, sharing, and archive controls with theme tokens.
+### Fixed / Đã sửa
+- **Theme fidelity / Độ trung thực của giao diện:** Rebuilt the dark palette as a neutral graphite and steel control surface, removing the remaining teal cast from the entry screen. / Xây dựng lại Dark mode theo tông graphite và steel trung tính, loại bỏ sắc teal còn sót ở màn hình vào phiên.
+- **Tech-blue light mode / Light mode xanh công nghệ:** Applied blue-white surfaces, technical blue borders, and consistent blue action states throughout the interface. / Áp dụng bề mặt xanh-trắng, viền xanh kỹ thuật và trạng thái tương tác xanh đồng nhất trong toàn bộ giao diện.
+- **Theme consistency / Tính đồng nhất của theme:** Replaced fixed blue, teal, white, and report-preview colors in primary, recording, AI, sharing, and archive controls with theme tokens. / Thay các màu xanh, teal, trắng và report-preview gắn cứng bằng theme token cho nút chính, ghi âm, AI, chia sẻ và lịch sử.
 
 ## [3.1.0] - 2026-07-14
 
