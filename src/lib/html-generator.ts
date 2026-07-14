@@ -16,7 +16,7 @@ interface HTMLReportProps {
  */
 function extractSection(markdown: string, keywords: string): string {
   const lines = markdown.split('\n')
-  let sectionContent: string[] = []
+  const sectionContent: string[] = []
   let found = false
   
   const regex = new RegExp(`(?:#+|\\*\\*)\\s*(?:\\d+\\.)?\\s*(?:${keywords})`, 'i')
@@ -42,6 +42,15 @@ function extractSection(markdown: string, keywords: string): string {
   }
   
   return found ? sectionContent.join('\n').trim() : ''
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 /**
@@ -126,11 +135,13 @@ export function generatePremiumHTMLReport({
 
   // Mind map format (protecting tree lines)
   const mindMapHtml = mindMap
-    ? `<pre class="mindmap-code">${mindMap}</pre>`
+    ? `<pre class="mindmap-code">${escapeHtml(mindMap)}</pre>`
     : `<div class="empty-state">Không có dữ liệu sơ đồ tư duy cuộc họp.</div>`
 
   // Title display
-  const displayTitle = sessionName || 'Tóm tắt Hội thoại PayLingo'
+  const displayTitle = escapeHtml(sessionName || 'Tóm tắt Hội thoại PayLingo')
+  const displayGeneratedAt = escapeHtml(generatedAt)
+  const displayPartnerLang = escapeHtml(partnerLang)
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -448,7 +459,7 @@ export function generatePremiumHTMLReport({
         </div>
         <div class="meta-item">
           <span class="meta-label">Ngày khởi tạo tóm tắt</span>
-          <span class="meta-value">${generatedAt}</span>
+          <span class="meta-value">${displayGeneratedAt}</span>
         </div>
         ${startedAt ? `
         <div class="meta-item">
@@ -458,7 +469,7 @@ export function generatePremiumHTMLReport({
         ` : ''}
         <div class="meta-item">
           <span class="meta-label">Ngôn ngữ đàm thoại</span>
-          <span class="meta-value">Tiếng Việt • Đối tác (${partnerLang})</span>
+          <span class="meta-value">Tiếng Việt • Đối tác (${displayPartnerLang})</span>
         </div>
       </div>
     </header>

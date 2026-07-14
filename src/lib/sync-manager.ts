@@ -1,4 +1,4 @@
-import { db, LocalSession, LocalTranscriptEntry } from './db'
+import { claimLegacyLocalData, db } from './db'
 import { createClient } from './supabase/client'
 import { stringToUUID } from './soniox-parser'
 
@@ -15,7 +15,8 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
   const { data: { session } } = await supabase.auth.getSession()
 
   const username = session?.user?.user_metadata?.username
-  if (!session || !username) {
+  const ownerId = session?.user?.id
+  if (!session || !username || !ownerId) {
     return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Unauthenticated' }
   }
   let syncedFolders = 0
@@ -23,58 +24,69 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
   let syncedEntries = 0
 
   try {
+    await claimLegacyLocalData(ownerId, username)
+
     // 0. Sync pending folders
     const pendingFolders = await db.folders.where('sync_status').equals('pending').toArray()
+    const ownedFolders = pendingFolders.filter((folder) => folder.owner_id === ownerId)
 
-    for (const localFolder of pendingFolders) {
-      if (localFolder.username !== username) continue
-
+    if (ownedFolders.length > 0) {
       const { error: folderError } = await supabase
         .from('folders')
-        .upsert({
-          id: localFolder.id,
-          username: localFolder.username,
-          name: localFolder.name,
-          created_at: localFolder.created_at,
-          updated_at: localFolder.updated_at
-        })
+        .upsert(ownedFolders.map((folder) => ({
+          id: folder.id,
+          owner_id: ownerId,
+          username: folder.username,
+          name: folder.name,
+          created_at: folder.created_at,
+          updated_at: folder.updated_at
+        })))
 
       if (!folderError) {
-        await db.folders.update(localFolder.id, { sync_status: 'synced' })
-        syncedFolders++
+        await db.folders.bulkUpdate(
+          ownedFolders.map((folder) => ({ key: folder.id, changes: { owner_id: ownerId, sync_status: 'synced' as const } }))
+        )
+        syncedFolders = ownedFolders.length
       } else {
-        console.error(`Failed to sync folder ${localFolder.id}:`, folderError.message)
-        await db.folders.update(localFolder.id, { sync_status: 'failed' })
+        console.error('Failed to sync folders:', folderError.message)
+        await db.folders.bulkUpdate(
+          ownedFolders.map((folder) => ({ key: folder.id, changes: { sync_status: 'failed' as const } }))
+        )
       }
     }
 
     // 1. Sync pending sessions
     const pendingSessions = await db.sessions.where('sync_status').equals('pending').toArray()
+    const ownedSessions = pendingSessions.filter((localSession) => localSession.owner_id === ownerId)
 
-    for (const localSess of pendingSessions) {
-      // Security check: ensure session belongs to the currently logged in username
-      if (localSess.username !== username) continue
-
-      // Map to Supabase sessions format
+    if (ownedSessions.length > 0) {
       const { error: sessError } = await supabase
         .from('sessions')
-        .upsert({
-          id: localSess.id,
-          username: localSess.username,
-          folder_id: localSess.folder_id || null,
-          name: localSess.name,
-          partner_language: localSess.partner_language,
-          started_at: localSess.started_at,
-          ended_at: localSess.ended_at,
-          duration_seconds: localSess.duration_seconds
-        })
+        .upsert(ownedSessions.map((localSession) => ({
+          id: localSession.id,
+          owner_id: ownerId,
+          username: localSession.username,
+          folder_id: localSession.folder_id || null,
+          name: localSession.name,
+          partner_language: localSession.partner_language,
+          started_at: localSession.started_at,
+          ended_at: localSession.ended_at,
+          duration_seconds: localSession.duration_seconds
+        })))
 
       if (!sessError) {
-        await db.sessions.update(localSess.id, { sync_status: 'synced' })
-        syncedSessions++
+        await db.sessions.bulkUpdate(
+          ownedSessions.map((localSession) => ({
+            key: localSession.id,
+            changes: { owner_id: ownerId, sync_status: 'synced' as const }
+          }))
+        )
+        syncedSessions = ownedSessions.length
       } else {
-        console.error(`Failed to sync session ${localSess.id}:`, sessError.message)
-        await db.sessions.update(localSess.id, { sync_status: 'failed' })
+        console.error('Failed to sync sessions:', sessError.message)
+        await db.sessions.bulkUpdate(
+          ownedSessions.map((localSession) => ({ key: localSession.id, changes: { sync_status: 'failed' as const } }))
+        )
       }
     }
 
@@ -89,7 +101,7 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
       const verifiedSessionIds = new Set<string>()
       for (const sessId of sessionIds) {
         const localSess = await db.sessions.get(sessId)
-        if (localSess && localSess.username === username) {
+        if (localSess?.owner_id === ownerId) {
           verifiedSessionIds.add(sessId)
         }
       }
@@ -180,26 +192,39 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
     }
 
     return { success: true, syncedFolders, syncedSessions, syncedEntries }
-  } catch (error: any) {
-    return { success: false, syncedFolders, syncedSessions, syncedEntries, error: error.message }
+  } catch (error: unknown) {
+    return {
+      success: false,
+      syncedFolders,
+      syncedSessions,
+      syncedEntries,
+      error: error instanceof Error ? error.message : 'Unknown sync error'
+    }
   }
 }
 
 /**
  * Initializes automatic background synchronization listeners.
  */
+let stopAutoSync: (() => void) | null = null
+
 export function initAutoSync() {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined') return () => undefined
+  if (stopAutoSync) return stopAutoSync
 
-  // Sync when coming online
-  window.addEventListener('online', () => {
-    syncPendingData()
-  })
+  const handleOnline = () => void syncPendingData()
+  window.addEventListener('online', handleOnline)
 
-  // Periodic check every 15 seconds if online
-  setInterval(() => {
+  const intervalId = window.setInterval(() => {
     if (navigator.onLine) {
-      syncPendingData()
+      void syncPendingData()
     }
   }, 15000)
+
+  stopAutoSync = () => {
+    window.removeEventListener('online', handleOnline)
+    window.clearInterval(intervalId)
+    stopAutoSync = null
+  }
+  return stopAutoSync
 }

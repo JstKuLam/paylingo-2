@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { claimLegacyLocalData, db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
 import { syncPendingData } from '@/lib/sync-manager'
 import { TranscriptMessage, stringToUUID } from '@/lib/soniox-parser'
 import { createClient } from '@/lib/supabase/client'
@@ -21,14 +21,19 @@ export function useSessionLifecycle({
 }: UseSessionLifecycleProps) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [silenceWarning, setSilenceWarning] = useState(false)
-  const [isMinutesExhausted, setIsMinutesExhausted] = useState(false)
   const [wakeLockError, setWakeLockError] = useState(false)
-  const [offlineIndicator, setOfflineIndicator] = useState(false)
+  const [offlineIndicator, setOfflineIndicator] = useState(
+    () => typeof navigator !== 'undefined' && !navigator.onLine
+  )
 
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const durationTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const wakeLockRef = useRef<any | null>(null)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
   const activeSessionRef = useRef<string | null>(null)
+  const stopRecordingRef = useRef(stopRecording)
+
+  useEffect(() => {
+    stopRecordingRef.current = stopRecording
+  }, [stopRecording])
 
   // Track network online status
   useEffect(() => {
@@ -43,7 +48,6 @@ export function useSessionLifecycle({
 
     window.addEventListener('online', updateOnlineStatus)
     window.addEventListener('offline', updateOnlineStatus)
-    setOfflineIndicator(!navigator.onLine)
 
     return () => {
       window.removeEventListener('online', updateOnlineStatus)
@@ -57,18 +61,25 @@ export function useSessionLifecycle({
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       const username = session?.user?.user_metadata?.username
+      const ownerId = session?.user?.id
 
-      if (username) {
+      if (username && ownerId) {
+        await claimLegacyLocalData(ownerId, username)
         const abandonedSessions = await db.sessions
-          .where('username')
-          .equals(username)
+          .where('owner_id')
+          .equals(ownerId)
           .toArray()
           
         const now = new Date().toISOString()
         for (const sess of abandonedSessions) {
           if (sess.ended_at === null) {
+            const durationSeconds = Math.max(
+              sess.duration_seconds,
+              Math.floor((Date.now() - new Date(sess.started_at).getTime()) / 1000)
+            )
             await db.sessions.update(sess.id, {
               ended_at: now,
+              duration_seconds: durationSeconds,
               sync_status: 'pending',
               updated_at: now
             })
@@ -81,22 +92,22 @@ export function useSessionLifecycle({
   }, [])
 
   // 1. Wake Lock API Integration
-  const requestWakeLock = async () => {
+  const requestWakeLock = useCallback(async () => {
     if (typeof window === 'undefined' || !('wakeLock' in navigator)) {
       setWakeLockError(true)
       return
     }
 
     try {
-      wakeLockRef.current = await (navigator as any).wakeLock.request('screen')
+      wakeLockRef.current = await navigator.wakeLock.request('screen')
       setWakeLockError(false)
     } catch (err) {
       console.warn('Failed to acquire Wake Lock:', err)
       setWakeLockError(true)
     }
-  }
+  }, [])
 
-  const releaseWakeLock = async () => {
+  const releaseWakeLock = useCallback(async () => {
     if (wakeLockRef.current) {
       try {
         await wakeLockRef.current.release()
@@ -105,7 +116,7 @@ export function useSessionLifecycle({
         console.error('Failed to release Wake Lock:', err)
       }
     }
-  }
+  }, [])
 
   // Handle automatic re-acquisition on tab visibility changes
   useEffect(() => {
@@ -121,15 +132,16 @@ export function useSessionLifecycle({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [isActive])
+  }, [isActive, requestWakeLock])
 
   // 2. Start Session Lifecycle
-  const startSession = async (langName: string) => {
+  const startSession = useCallback(async (langName: string) => {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     const username = session?.user?.user_metadata?.username
+    const ownerId = session?.user?.id
     
-    if (!session || !username) {
+    if (!session || !username || !ownerId) {
       throw new Error('Unauthenticated')
     }
 
@@ -148,6 +160,7 @@ export function useSessionLifecycle({
 
     const newLocalSession: LocalSession = {
       id: newSessionId,
+      owner_id: ownerId,
       username: username,
       name: sessionName,
       partner_language: partnerLang,
@@ -164,44 +177,18 @@ export function useSessionLifecycle({
     setSessionId(newSessionId)
     activeSessionRef.current = newSessionId
     setSilenceWarning(false)
-    setIsMinutesExhausted(false)
 
     // Request Wake Lock
     await requestWakeLock()
 
-    // Start timer incrementing duration
-    if (durationTimerRef.current) clearInterval(durationTimerRef.current)
-    durationTimerRef.current = setInterval(async () => {
-      if (activeSessionRef.current) {
-        const localS = await db.sessions.get(activeSessionRef.current)
-        if (localS) {
-          const duration = localS.duration_seconds + 1
-          await db.sessions.update(activeSessionRef.current, {
-            duration_seconds: duration,
-            sync_status: 'pending',
-            updated_at: new Date().toISOString()
-          })
-          
-          // Verify minute limits
-          // Note: In a production app, we would query actual user usage or check with the database.
-          // For MVP, we can simulate checking limits here if needed.
-        }
-      }
-    }, 1000)
-
     // Sync in background immediately
-    syncPendingData()
+    void syncPendingData()
 
     return newSessionId
-  }
+  }, [partnerLang, requestWakeLock])
 
   // 3. Stop Session Lifecycle
-  const stopSession = async () => {
-    if (durationTimerRef.current) {
-      clearInterval(durationTimerRef.current)
-      durationTimerRef.current = null
-    }
-
+  const stopSession = useCallback(async () => {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current)
       silenceTimerRef.current = null
@@ -209,8 +196,16 @@ export function useSessionLifecycle({
 
     if (activeSessionRef.current) {
       const now = new Date().toISOString()
+      const activeSession = await db.sessions.get(activeSessionRef.current)
+      const durationSeconds = activeSession
+        ? Math.max(
+            activeSession.duration_seconds,
+            Math.floor((Date.now() - new Date(activeSession.started_at).getTime()) / 1000)
+          )
+        : 0
       await db.sessions.update(activeSessionRef.current, {
         ended_at: now,
+        duration_seconds: durationSeconds,
         sync_status: 'pending',
         updated_at: now
       })
@@ -224,29 +219,46 @@ export function useSessionLifecycle({
     setSilenceWarning(false)
 
     // Sync everything
-    syncPendingData()
-  }
+    void syncPendingData()
+  }, [releaseWakeLock])
 
   // 4. Autosave active messages to local IndexedDB (Dexie)
   useEffect(() => {
     if (!sessionId || messages.length === 0) return
 
     const saveMessages = async () => {
-      const localEntries: LocalTranscriptEntry[] = messages.map(msg => ({
-        id: stringToUUID(msg.id), // make a valid entry uuid/string
+      const activeSession = await db.sessions.get(sessionId)
+      if (!activeSession) return
+      const sessionStartedAt = new Date(activeSession.started_at).getTime()
+
+      const localEntries: LocalTranscriptEntry[] = messages.filter((message) => message.is_final).map(msg => ({
+        id: stringToUUID(`${sessionId}:${msg.id}`),
         session_id: sessionId,
         speaker: msg.speaker,
         original_text: msg.original_text,
         translated_text: msg.translated_text,
         start_ms: msg.start_ms,
         end_ms: msg.end_ms,
-        created_at: new Date(msg.start_ms).toISOString(),
+        created_at: new Date(sessionStartedAt + Math.max(0, msg.start_ms)).toISOString(),
         sync_status: 'pending',
         updated_at: new Date().toISOString()
       }))
 
-      // Write in bulk to Dexie
-      await db.transcriptEntries.bulkPut(localEntries)
+      if (localEntries.length === 0) return
+
+      const existingEntries = await db.transcriptEntries.bulkGet(localEntries.map((entry) => entry.id))
+      const changedEntries = localEntries.flatMap((entry, index) => {
+        const existing = existingEntries[index]
+        const hasChanged = !existing
+          || existing.original_text !== entry.original_text
+          || existing.translated_text !== entry.translated_text
+          || existing.end_ms !== entry.end_ms
+        return hasChanged ? [{ ...entry, created_at: existing?.created_at || entry.created_at }] : []
+      })
+
+      if (changedEntries.length > 0) {
+        await db.transcriptEntries.bulkPut(changedEntries)
+      }
       
       // Note: We do not trigger syncPendingData() here because this useEffect runs 
       // on every intermediate transcription token (multiple times per second).
@@ -256,6 +268,11 @@ export function useSessionLifecycle({
 
     saveMessages()
   }, [messages, sessionId])
+
+  const latestMessageMarker = useMemo(() => {
+    const latestMessage = messages.at(-1)
+    return latestMessage ? `${latestMessage.id}:${latestMessage.end_ms}:${latestMessage.is_final}` : ''
+  }, [messages])
 
   // 5. Silence & inactivity monitoring (5-minute cap)
   useEffect(() => {
@@ -272,7 +289,7 @@ export function useSessionLifecycle({
 
         // Force stop at 5 minutes of silence (300 seconds)
         silenceTimerRef.current = setTimeout(async () => {
-          await stopRecording()
+          await stopRecordingRef.current()
           await stopSession()
           alert('Hội thoại đã tự động kết thúc do 5 phút không hoạt động để tránh hao tổn phí API.')
         }, 60000)
@@ -286,12 +303,11 @@ export function useSessionLifecycle({
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
     }
-  }, [isActive, sessionId, messages])
+  }, [isActive, sessionId, latestMessageMarker, stopSession])
 
   return {
     sessionId,
     silenceWarning,
-    isMinutesExhausted,
     wakeLockError,
     offlineIndicator,
     startSession,

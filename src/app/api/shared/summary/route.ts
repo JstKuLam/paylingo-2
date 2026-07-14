@@ -1,17 +1,25 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { z } from 'zod'
+import {
+  hashSharedPassword,
+  isLegacySharedPasswordHash,
+  verifySharedPassword,
+} from '@/lib/shared-password'
 
 export const runtime = 'edge'
 
-// Simple helper to hash the password securely on the server
-async function hashPassword(password: string): Promise<string | null> {
-  if (!password) return null
-  const encoder = new TextEncoder()
-  const data = encoder.encode(password)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-}
+const shareRequestSchema = z.object({
+  action: z.enum(['verify']).optional(),
+  id: z.string().uuid().optional(),
+  password: z.string().max(200).optional().default(''),
+  sessionId: z.string().uuid().optional(),
+  folderId: z.string().uuid().optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  summaryContent: z.string().min(1).max(500_000).optional(),
+})
+
+const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
 /**
  * GET handler: Fetch info about a shared summary.
@@ -43,8 +51,9 @@ export async function GET(req: Request) {
 
     // If password-protected, verify
     if (hasPassword) {
-      const inputHash = await hashPassword(password)
-      if (inputHash !== summary.password_hash) {
+      const isValid = await verifySharedPassword(password, summary.password_hash)
+      if (!isValid) {
+        await wait(600)
         return NextResponse.json({
           id: summary.id,
           title: summary.title,
@@ -64,7 +73,7 @@ export async function GET(req: Request) {
       isLocked: false,
       created_at: summary.created_at
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching shared summary:', error)
     return NextResponse.json({ error: 'Lỗi hệ thống khi tải chia sẻ' }, { status: 500 })
   }
@@ -77,8 +86,11 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
-    const { action, id, password, sessionId, folderId, title, summaryContent } = body
+    const parsedBody = shareRequestSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: 'Dữ liệu chia sẻ không hợp lệ' }, { status: 400 })
+    }
+    const { action, id, password, sessionId, folderId, title, summaryContent } = parsedBody.data
 
     // Case 2: Verify password of existing shared summary
     if (action === 'verify') {
@@ -99,9 +111,15 @@ export async function POST(req: Request) {
 
       const hasPassword = !!summary.password_hash
       if (hasPassword) {
-        const inputHash = await hashPassword(password || '')
-        if (inputHash !== summary.password_hash) {
+        const isValid = await verifySharedPassword(password, summary.password_hash)
+        if (!isValid) {
+          await wait(600)
           return NextResponse.json({ error: 'Mật khẩu không chính xác', isLocked: true }, { status: 401 })
+        }
+
+        if (isLegacySharedPasswordHash(summary.password_hash)) {
+          const upgradedHash = await hashSharedPassword(password)
+          await supabase.from('shared_summaries').update({ password_hash: upgradedHash }).eq('id', summary.id)
         }
       }
 
@@ -131,13 +149,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Cần cung cấp sessionId hoặc folderId' }, { status: 400 })
     }
 
-    const passHash = password ? await hashPassword(password) : null
+    if (Boolean(sessionId) === Boolean(folderId)) {
+      return NextResponse.json({ error: 'Chỉ được chia sẻ một cuộc hội thoại hoặc một thư mục' }, { status: 400 })
+    }
 
-    // Write using service role client to ensure database insert bypasses restrictive write RLS on custom schema relations if needed
-    const adminSupa = createAdminClient()
+    const parentQuery = sessionId
+      ? supabase.from('sessions').select('id').eq('id', sessionId).single()
+      : supabase.from('folders').select('id').eq('id', folderId!).single()
+    const { data: ownedParent, error: parentError } = await parentQuery
+    if (parentError || !ownedParent) {
+      return NextResponse.json({ error: 'Bạn không có quyền chia sẻ nội dung này' }, { status: 403 })
+    }
+
+    const passHash = await hashSharedPassword(password)
     
     // Check if summary already exists for this session or folder
-    let query = adminSupa.from('shared_summaries').select('id')
+    let query = supabase.from('shared_summaries').select('id')
     if (sessionId) {
       query = query.eq('session_id', sessionId)
     } else {
@@ -148,7 +175,7 @@ export async function POST(req: Request) {
     let resultId = ''
     if (existing && existing.length > 0) {
       // Update existing
-      const { data: updated, error: updateError } = await adminSupa
+      const { data: updated, error: updateError } = await supabase
         .from('shared_summaries')
         .update({
           title,
@@ -167,7 +194,7 @@ export async function POST(req: Request) {
       resultId = updated.id
     } else {
       // Insert new
-      const { data: inserted, error: insertError } = await adminSupa
+      const { data: inserted, error: insertError } = await supabase
         .from('shared_summaries')
         .insert({
           session_id: sessionId || null,
@@ -187,8 +214,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, id: resultId })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating/verifying shared summary:', error)
-    return NextResponse.json({ error: error.message || 'Lỗi hệ thống' }, { status: 500 })
+    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
   }
 }

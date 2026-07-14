@@ -2,6 +2,7 @@ import Dexie, { Table } from 'dexie'
 
 export interface LocalFolder {
   id: string
+  owner_id?: string
   username: string
   name: string
   created_at: string
@@ -11,6 +12,7 @@ export interface LocalFolder {
 
 export interface LocalSession {
   id: string
+  owner_id?: string
   username: string
   folder_id?: string | null
   name: string
@@ -54,7 +56,31 @@ class PayLingoDatabase extends Dexie {
       transcriptEntries: 'id, session_id, [session_id+start_ms], sync_status, updated_at',
       folders: 'id, username, sync_status, updated_at'
     })
+
+    this.version(3).stores({
+      sessions: 'id, owner_id, username, folder_id, started_at, sync_status, updated_at',
+      transcriptEntries: 'id, session_id, [session_id+start_ms], sync_status, updated_at',
+      folders: 'id, owner_id, username, sync_status, updated_at'
+    })
   }
 }
 
 export const db = new PayLingoDatabase()
+
+export async function claimLegacyLocalData(ownerId: string, username: string) {
+  await db.transaction('rw', db.sessions, db.folders, async () => {
+    const legacySessions = await db.sessions.where('username').equals(username).toArray()
+    const legacyFolders = await db.folders.where('username').equals(username).toArray()
+
+    await Promise.all(
+      legacySessions
+        .filter((session) => !session.owner_id)
+        .map((session) => db.sessions.update(session.id, { owner_id: ownerId }))
+    )
+    await Promise.all(
+      legacyFolders
+        .filter((folder) => !folder.owner_id)
+        .map((folder) => db.folders.update(folder.id, { owner_id: ownerId }))
+    )
+  })
+}

@@ -1,21 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { z } from 'zod'
 
 export const runtime = 'edge'
 
+const redeemCodeSchema = z.object({
+  code: z.string().trim().min(4).max(32).regex(/^[A-Za-z0-9-]+$/),
+})
+
+const delay = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+
 export async function POST(request: NextRequest) {
   try {
-    const { code } = await request.json()
-
-    if (!code || typeof code !== 'string') {
+    const parsedBody = redeemCodeSchema.safeParse(await request.json())
+    if (!parsedBody.success) {
+      await delay(1_000)
       return NextResponse.json(
         { error: 'Mã truy cập không hợp lệ' },
         { status: 400 }
       )
     }
-
-    // Standard brute-force rate limit delay
-    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    const { code } = parsedBody.data
 
     // Initialize admin client to query access_codes (which requires bypass/admin role)
     const adminClient = createAdminClient()
@@ -61,9 +66,10 @@ export async function POST(request: NextRequest) {
       label: codeData.label,
       expires_at: codeData.expires_at,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    console.error('Unable to redeem access code:', error)
     return NextResponse.json(
-      { error: 'Đã xảy ra lỗi hệ thống: ' + error.message },
+      { error: 'Đã xảy ra lỗi hệ thống' },
       { status: 500 }
     )
   }

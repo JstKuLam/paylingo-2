@@ -1,32 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useSyncExternalStore } from 'react'
 
 export type ThemeType = 'dark' | 'light'
 
-export function useTheme() {
-  const [theme, setTheme] = useState<ThemeType>('dark')
+const THEME_EVENT = 'paylingo-theme-change'
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme) {
-      // Map legacy themes to 'light' or 'dark'
-      let normalizedTheme: ThemeType = 'dark'
-      if (savedTheme === 'light' || savedTheme.startsWith('light-')) {
-        normalizedTheme = 'light'
-      } else {
-        normalizedTheme = 'dark'
-      }
-      setTheme(normalizedTheme)
-      document.documentElement.setAttribute('data-theme', normalizedTheme)
-    } else {
-      setTheme('dark')
-      document.documentElement.setAttribute('data-theme', 'dark')
-    }
-  }, [])
+function normalizeTheme(value: string | null): ThemeType {
+  return value === 'light' || value?.startsWith('light-') ? 'light' : 'dark'
+}
+
+function getThemeSnapshot(): ThemeType {
+  if (typeof window === 'undefined') return 'dark'
+  return normalizeTheme(localStorage.getItem('theme'))
+}
+
+function subscribeToTheme(callback: () => void) {
+  window.addEventListener('storage', callback)
+  window.addEventListener(THEME_EVENT, callback)
+  return () => {
+    window.removeEventListener('storage', callback)
+    window.removeEventListener(THEME_EVENT, callback)
+  }
+}
+
+export function useTheme() {
+  const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, () => 'dark')
 
   const changeTheme = (newTheme: ThemeType) => {
-    setTheme(newTheme)
     document.documentElement.setAttribute('data-theme', newTheme)
+    document.documentElement.classList.toggle('dark', newTheme === 'dark')
     localStorage.setItem('theme', newTheme)
+    window.dispatchEvent(new Event(THEME_EVENT))
   }
 
   const toggleTheme = () => {
@@ -36,4 +39,3 @@ export function useTheme() {
 
   return { theme, changeTheme, toggleTheme }
 }
-

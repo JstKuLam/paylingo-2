@@ -1,984 +1,392 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import type { FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { 
-  ShieldAlert, 
-  Database, 
-  Trash2, 
-  Calendar, 
-  Clock, 
-  TrendingUp, 
-  DollarSign, 
-  Search, 
-  LogOut, 
-  Loader2, 
-  Eye, 
-  EyeOff,
-  FileText,
-  AlertTriangle,
-  Lock,
-  X,
-  Volume2,
-  Users,
-  Settings,
-  Key,
+import {
+  BarChart3,
+  Check,
   Cpu,
-  Coins,
-  Check
+  Database,
+  Download,
+  KeyRound,
+  Loader2,
+  LockKeyhole,
+  LogOut,
+  Search,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  Users,
+  Volume2,
+  X,
 } from 'lucide-react'
+import WorkspaceHeader from '@/components/WorkspaceHeader'
+import type { LocalTranscriptEntry } from '@/lib/db'
+import { getPartnerLanguage } from '@/lib/languages'
 import { createClient } from '@/lib/supabase/client'
 
-const PARTNER_LANGUAGES = [
-  { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐' },
-  { code: 'en', name: 'English', flag: '🇬🇧' },
-  { code: 'zh', name: '中文', flag: '🇨🇳' },
-  { code: 'ja', name: '日本語', flag: '🇯🇵' },
-  { code: 'ko', name: '한국어', flag: '🇰🇷' },
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
-  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
-  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'th', name: 'ภาษาไทย', flag: '🇹🇭' },
-]
+type AdminTab = 'users' | 'sessions' | 'usage' | 'api-settings'
+type ApiProvider = 'gemini' | 'openai'
+
+interface AdminSession {
+  id: string
+  username: string | null
+  name: string
+  partner_language: string
+  duration_seconds: number
+  started_at: string
+}
+
+type AdminTranscriptEntry = LocalTranscriptEntry
+
+interface UsageLog {
+  id: string
+  username: string
+  model: string
+  prompt_tokens: number
+  completion_tokens: number
+  cost_usd: number | string
+  created_at: string
+}
+
+const MASKED_API_KEY = '••••••••••••••••'
+
+function formatDuration(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  return hours > 0 ? `${hours} giờ ${minutes} phút` : `${minutes} phút`
+}
 
 export default function AdminPage() {
   const router = useRouter()
-  
-  // Auth states
+  const supabase = useMemo(() => createClient(), [])
   const [isAdmin, setIsAdmin] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [authError, setAuthError] = useState<string | null>(null)
+  const [authError, setAuthError] = useState('')
   const [isLoadingAuth, setIsLoadingAuth] = useState(false)
-
-  // Tabs state
-  const [activeTab, setActiveTab] = useState<'users' | 'sessions' | 'stats' | 'api-settings'>('users')
-
-  // Global Sessions History state
-  const [globalSessions, setGlobalSessions] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState<AdminTab>('users')
+  const [globalSessions, setGlobalSessions] = useState<AdminSession[]>([])
+  const [usageLogs, setUsageLogs] = useState<UsageLog[]>([])
+  const [loadingData, setLoadingData] = useState(false)
+  const [dataError, setDataError] = useState('')
   const [searchSessionQuery, setSearchSessionQuery] = useState('')
-  const [loadingSessions, setLoadingSessions] = useState(false)
-  const [viewingSession, setViewingSession] = useState<any | null>(null)
-  const [sessionEntries, setSessionEntries] = useState<any[]>([])
-
-  // Dashboard Stats state
-  const [stats, setStats] = useState({
-    totalMinutes: 0,
-    estimatedCost: 0,
-    activeUsersCount: 0
-  })
-
-  // Token Usage Stats
-  const [usageLogs, setUsageLogs] = useState<any[]>([])
-  const [loadingUsage, setLoadingUsage] = useState(false)
-  const [usageStats, setUsageStats] = useState({
-    totalSummaries: 0,
-    totalPromptTokens: 0,
-    totalCompletionTokens: 0,
-    totalTokens: 0,
-    totalCostUSD: 0
-  })
-
-  // API Config Form states
-  const [apiProvider, setApiProvider] = useState<'gemini' | 'openai'>('gemini')
+  const [viewingSession, setViewingSession] = useState<AdminSession | null>(null)
+  const [sessionEntries, setSessionEntries] = useState<AdminTranscriptEntry[]>([])
+  const [loadingEntries, setLoadingEntries] = useState(false)
+  const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini')
   const [apiEndpoint, setApiEndpoint] = useState('')
   const [apiModel, setApiModel] = useState('gemini-2.5-flash')
   const [apiKeyInput, setApiKeyInput] = useState('')
-  const [showApiKey, setShowApiKey] = useState(false)
+  const [hasApiKey, setHasApiKey] = useState(false)
   const [savingApi, setSavingApi] = useState(false)
-  const [apiSuccessMsg, setApiSuccessMsg] = useState(false)
+  const [apiMessage, setApiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const supabase = createClient()
-
-  // 1. Check if logged in as Admin
-  useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session && session.user?.app_metadata?.role === 'admin') {
-        setIsAdmin(true)
-        loadData()
-      } else {
-        setIsAdmin(false)
-      }
-      setCheckingAuth(false)
-    }
-    checkAdmin()
-  }, [])
-
-  // 2. Load admin data
-  const loadData = async () => {
-    setLoadingSessions(true)
+  const loadData = useCallback(async () => {
+    setLoadingData(true)
+    setDataError('')
     try {
-      // Load Sessions directly
-      const { data: sessionsData, error: sessErr } = await supabase
-        .from('sessions')
-        .select('*')
-        .order('started_at', { ascending: false })
+      const [sessionsResult, settingsResponse, usageResponse] = await Promise.all([
+        supabase.from('sessions').select('*').order('started_at', { ascending: false }),
+        fetch('/api/admin/settings'),
+        fetch('/api/admin/usage-logs'),
+      ])
+      if (sessionsResult.error) throw sessionsResult.error
+      const settings: {
+        provider?: ApiProvider
+        endpoint?: string
+        model?: string
+        hasApiKey?: boolean
+        error?: string
+      } = await settingsResponse.json()
+      const usage: UsageLog[] | { error: string } = await usageResponse.json()
 
-      if (sessErr) throw sessErr
-
-      setGlobalSessions(sessionsData || [])
-      setLoadingSessions(false)
-
-      // Compute statistics
-      if (sessionsData) {
-        let totalSec = sessionsData.reduce((acc, curr) => acc + (curr.duration_seconds || 0), 0)
-        let totalMin = Math.ceil(totalSec / 60)
-        let cost = totalMin * 0.002 // Soniox estimated rate
-        
-        const uniqueUsernames = Array.from(new Set(sessionsData.map(s => s.username).filter(Boolean)))
-
-        setStats({
-          totalMinutes: totalMin,
-          estimatedCost: cost,
-          activeUsersCount: uniqueUsernames.length
-        })
+      if (!settingsResponse.ok) throw new Error(settings.error || 'Không thể tải cấu hình AI.')
+      if (!usageResponse.ok || !Array.isArray(usage)) {
+        throw new Error(!Array.isArray(usage) ? usage.error : 'Không thể tải thống kê AI.')
       }
 
-      // Load API key settings
-      loadApiSettings()
-
-      // Load AI Usage Logs
-      loadUsageLogs()
-    } catch (err: any) {
-      console.error(err)
-      setLoadingSessions(false)
-    }
-  }
-
-  // Load API Key Settings
-  const loadApiSettings = async () => {
-    try {
-      const res = await fetch('/api/admin/settings')
-      const data = await res.json()
-      if (!data.error) {
-        setApiProvider(data.provider || 'gemini')
-        setApiEndpoint(data.endpoint || '')
-        setApiModel(data.model || 'gemini-2.5-flash')
-        setApiKeyInput(data.api_key || '')
-      }
-    } catch (err) {
-      console.error('Failed to load api settings:', err)
-    }
-  }
-
-  // Load AI Usage Logs
-  const loadUsageLogs = async () => {
-    setLoadingUsage(true)
-    try {
-      const res = await fetch('/api/admin/usage-logs')
-      const data = await res.json()
-      if (!data.error && Array.isArray(data)) {
-        setUsageLogs(data)
-
-        // Compute AI tokens metrics
-        const summaries = data.length
-        const promptTokens = data.reduce((acc, curr) => acc + (curr.prompt_tokens || 0), 0)
-        const compTokens = data.reduce((acc, curr) => acc + (curr.completion_tokens || 0), 0)
-        const cost = data.reduce((acc, curr) => acc + Number(curr.cost_usd || 0), 0)
-
-        setUsageStats({
-          totalSummaries: summaries,
-          totalPromptTokens: promptTokens,
-          totalCompletionTokens: compTokens,
-          totalTokens: promptTokens + compTokens,
-          totalCostUSD: cost
-        })
-      }
-    } catch (err) {
-      console.error('Failed to load usage logs:', err)
+      setGlobalSessions((sessionsResult.data || []) as AdminSession[])
+      setUsageLogs(usage)
+      setApiProvider(settings.provider || 'gemini')
+      setApiEndpoint(settings.endpoint || '')
+      setApiModel(settings.model || 'gemini-2.5-flash')
+      setHasApiKey(Boolean(settings.hasApiKey))
+      setApiKeyInput('')
+    } catch (error) {
+      console.error('Failed to load admin data:', error)
+      setDataError(error instanceof Error ? error.message : 'Không thể tải dữ liệu quản trị.')
     } finally {
-      setLoadingUsage(false)
+      setLoadingData(false)
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    const authTimer = window.setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const admin = session?.user?.app_metadata?.role === 'admin'
+      setIsAdmin(admin)
+      setCheckingAuth(false)
+      if (admin) await loadData()
+    }, 0)
+    return () => window.clearTimeout(authTimer)
+  }, [loadData, supabase])
+
+  const usersList = useMemo(() => {
+    const users = new Map<string, { username: string; totalMinutes: number; totalSessions: number; lastActive: string }>()
+    for (const session of globalSessions) {
+      const username = session.username || 'Khách'
+      const existing = users.get(username)
+      const minutes = Math.ceil((session.duration_seconds || 0) / 60)
+      if (existing) {
+        existing.totalMinutes += minutes
+        existing.totalSessions += 1
+        if (new Date(session.started_at) > new Date(existing.lastActive)) existing.lastActive = session.started_at
+      } else {
+        users.set(username, { username, totalMinutes: minutes, totalSessions: 1, lastActive: session.started_at })
+      }
+    }
+    return Array.from(users.values()).sort((a, b) => b.totalMinutes - a.totalMinutes)
+  }, [globalSessions])
+
+  const filteredSessions = useMemo(() => {
+    const term = searchSessionQuery.trim().toLocaleLowerCase('vi')
+    if (!term) return globalSessions
+    return globalSessions.filter((session) =>
+      session.name.toLocaleLowerCase('vi').includes(term)
+      || session.username?.toLocaleLowerCase('vi').includes(term)
+    )
+  }, [globalSessions, searchSessionQuery])
+
+  const dashboardStats = useMemo(() => ({
+    totalDuration: globalSessions.reduce((total, session) => total + (session.duration_seconds || 0), 0),
+    totalTokens: usageLogs.reduce((total, log) => total + log.prompt_tokens + log.completion_tokens, 0),
+    totalCost: usageLogs.reduce((total, log) => total + Number(log.cost_usd || 0), 0),
+  }), [globalSessions, usageLogs])
+
+  const handleLogin = async (event: FormEvent) => {
+    event.preventDefault()
+    setIsLoadingAuth(true)
+    setAuthError('')
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
+      if (data.user?.app_metadata?.role !== 'admin') {
+        await supabase.auth.signOut()
+        throw new Error('Tài khoản này không có quyền quản trị.')
+      }
+      setIsAdmin(true)
+      await loadData()
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Không thể đăng nhập.')
+    } finally {
+      setIsLoadingAuth(false)
     }
   }
 
-  // Save API Key configurations
-  const handleSaveApiSettings = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSavingApi(true)
-    setApiSuccessMsg(false)
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setIsAdmin(false)
+    router.replace('/')
+  }
 
+  const handleOpenSession = async (session: AdminSession) => {
+    setViewingSession(session)
+    setSessionEntries([])
+    setLoadingEntries(true)
+    const { data, error } = await supabase
+      .from('transcript_entries')
+      .select('*')
+      .eq('session_id', session.id)
+      .order('start_ms', { ascending: true })
+    if (error) setDataError(error.message)
+    else setSessionEntries((data || []) as AdminTranscriptEntry[])
+    setLoadingEntries(false)
+  }
+
+  const handleDeleteSession = async () => {
+    if (!viewingSession || !confirm('Xóa vĩnh viễn hội thoại này khỏi hệ thống?')) return
+    const { error } = await supabase.from('sessions').delete().eq('id', viewingSession.id)
+    if (error) {
+      setDataError(error.message)
+      return
+    }
+    setGlobalSessions((current) => current.filter((session) => session.id !== viewingSession.id))
+    setViewingSession(null)
+  }
+
+  const handleExportPDF = async () => {
+    if (!viewingSession) return
+    const languageName = getPartnerLanguage(viewingSession.partner_language)?.name || viewingSession.partner_language
+    const { downloadSessionPDF } = await import('@/lib/pdf-generator')
+    await downloadSessionPDF(
+      viewingSession.name,
+      viewingSession.partner_language,
+      languageName,
+      viewingSession.started_at,
+      sessionEntries
+    )
+  }
+
+  const handleSaveApiSettings = async (event: FormEvent) => {
+    event.preventDefault()
+    setSavingApi(true)
+    setApiMessage(null)
     try {
-      const res = await fetch('/api/admin/settings', {
+      const response = await fetch('/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: apiProvider,
           endpoint: apiEndpoint,
           model: apiModel,
-          api_key: apiKeyInput
-        })
+          api_key: apiKeyInput.trim() || (hasApiKey ? MASKED_API_KEY : ''),
+        }),
       })
-
-      const data = await res.json()
-      if (data.error) {
-        alert(data.error)
-      } else {
-        setApiSuccessMsg(true)
-        setTimeout(() => setApiSuccessMsg(false), 3000)
-        loadApiSettings()
-      }
-    } catch (err) {
-      alert('Lỗi hệ thống khi lưu cài đặt')
+      const data: { error?: string } = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Không thể lưu cấu hình.')
+      setHasApiKey(true)
+      setApiKeyInput('')
+      setApiMessage({ type: 'success', text: 'Đã cập nhật cấu hình AI.' })
+    } catch (error) {
+      setApiMessage({ type: 'error', text: error instanceof Error ? error.message : 'Không thể lưu cấu hình.' })
     } finally {
       setSavingApi(false)
     }
   }
 
-  // 3. Login Action
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoadingAuth(true)
-    setAuthError(null)
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
-
-      if (error) {
-        setAuthError('Đăng nhập không thành công: ' + error.message)
-        setIsLoadingAuth(false)
-        return
-      }
-
-      if (data.user?.app_metadata?.role !== 'admin') {
-        await supabase.auth.signOut()
-        setAuthError('Tài khoản này không có quyền quản trị viên (Admin)')
-        setIsLoadingAuth(false)
-        return
-      }
-
-      setIsAdmin(true)
-      setIsLoadingAuth(false)
-      loadData()
-    } catch (err: any) {
-      setAuthError('Lỗi kết nối: ' + err.message)
-      setIsLoadingAuth(false)
-    }
-  }
-
-  // 4. Logout Action
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    setIsAdmin(false)
-    router.push('/')
-  }
-
-  // 5. Delete Session from Admin Dashboard
-  const handleDeleteSession = async (id: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa vĩnh viễn cuộc hội thoại này?')) return
-
-    try {
-      const { error } = await supabase.from('sessions').delete().eq('id', id)
-      if (!error) {
-        setGlobalSessions(prev => prev.filter(s => s.id !== id))
-        setViewingSession(null)
-        loadData()
-      }
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  // 6. View session details from admin
-  const handleOpenSession = async (sess: any) => {
-    setViewingSession(sess)
-    setSessionEntries([])
-    
-    try {
-      const { data, error } = await supabase
-        .from('transcript_entries')
-        .select('*')
-        .eq('session_id', sess.id)
-        .order('start_ms', { ascending: true })
-
-      if (!error) {
-        setSessionEntries(data || [])
-      }
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  // 7. Export session to PDF from Admin Dashboard
-  const handleExportPDF = async () => {
-    if (!viewingSession) return
-    const langObj = PARTNER_LANGUAGES.find(l => l.code === viewingSession.partner_language)
-    const langName = langObj?.name || viewingSession.partner_language
-
-    const { downloadSessionPDF } = await import('@/lib/pdf-generator')
-    await downloadSessionPDF(
-      viewingSession.name,
-      viewingSession.partner_language,
-      langName,
-      viewingSession.started_at,
-      sessionEntries
-    )
-  }
-
-  // Compute users list from sessions dynamically
-  const usersList = useMemo(() => {
-    const userMap = new Map<string, { username: string; totalMinutes: number; totalSessions: number; lastActive: string }>()
-    
-    globalSessions.forEach(sess => {
-      const u = sess.username || 'Khách'
-      const existing = userMap.get(u)
-      const durationMin = Math.ceil((sess.duration_seconds || 0) / 60)
-      
-      if (existing) {
-        existing.totalMinutes += durationMin
-        existing.totalSessions += 1
-        if (new Date(sess.started_at) > new Date(existing.lastActive)) {
-          existing.lastActive = sess.started_at
-        }
-      } else {
-        userMap.set(u, {
-          username: u,
-          totalMinutes: durationMin,
-          totalSessions: 1,
-          lastActive: sess.started_at
-        })
-      }
-    })
-    
-    return Array.from(userMap.values()).sort((a, b) => b.totalMinutes - a.totalMinutes)
-  }, [globalSessions])
-
-  // Filter sessions
-  const filteredSessions = globalSessions.filter(sess => {
-    const term = searchSessionQuery.toLowerCase().trim()
-    if (!term) return true
-    
-    const matchesName = sess.name.toLowerCase().includes(term)
-    const matchesUsername = sess.username?.toLowerCase().includes(term)
-    return matchesName || matchesUsername
-  })
-
-  // Show detailed logs by clicking user
   const handleViewUserSessions = (username: string) => {
     setSearchSessionQuery(username)
     setActiveTab('sessions')
   }
 
   if (checkingAuth) {
-    return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-host" />
-        <span className="text-slate-400 mt-4 text-sm font-semibold tracking-wide">Đang xác thực thông tin...</span>
-      </div>
-    )
+    return <div className="app-loading" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><span>Đang xác thực quyền quản trị</span></div>
   }
 
-  // Render Login Layout if not authenticated as Admin
   if (!isAdmin) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 relative">
-        <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-host/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-80 h-80 bg-partner/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="w-full max-w-sm glass-panel rounded-3xl p-8 relative overflow-hidden shadow-2xl">
-          <div className="absolute inset-0 shimmer pointer-events-none opacity-20"></div>
-
-          <div className="flex flex-col items-center text-center mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-host to-partner flex items-center justify-center shadow-lg mb-4">
-              <Lock className="w-6 h-6 text-white" />
-            </div>
-            <h2 className="text-2xl font-black text-white">Quản trị viên</h2>
-            <p className="text-[10px] text-slate-400 mt-1.5 uppercase font-bold tracking-widest">
-              Đăng nhập để vào hệ thống điều hành
-            </p>
+      <main className="admin-login-shell">
+        <section className="admin-login-panel">
+          <div className="admin-login-heading">
+            <span><LockKeyhole aria-hidden="true" /></span>
+            <p className="eyebrow">Khu vực hạn chế</p>
+            <h1>Đăng nhập quản trị</h1>
+            <p>Dùng tài khoản có vai trò admin để xem dữ liệu vận hành và cấu hình AI.</p>
           </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-extrabold uppercase text-slate-400">Email quản trị</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@paylingo.com"
-                className="w-full h-[48px] px-6 rounded-full glass-input text-xs font-bold text-white placeholder:text-slate-600 outline-none text-center border border-white/5 focus:border-host/40"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-extrabold uppercase text-slate-400">Mật khẩu</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full h-[48px] px-6 rounded-full glass-input text-xs font-bold text-white placeholder:text-slate-600 outline-none text-center border border-white/5 focus:border-host/40"
-              />
-            </div>
-
-            {authError && (
-              <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 text-red-400 rounded-full py-3 px-5 text-xs animate-shake">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span className="font-semibold leading-none">{authError}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoadingAuth}
-              className="w-full h-[48px] rounded-full bg-gradient-to-r from-host to-partner text-white font-black text-xs tracking-wider uppercase hover:scale-[1.01] active:scale-[0.97] transition-all duration-200 ease-out cursor-pointer flex items-center justify-center gap-2"
-            >
-              {isLoadingAuth ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  <span>Đang kiểm tra...</span>
-                </>
-              ) : 'Đăng nhập'}
+          <form onSubmit={handleLogin}>
+            <label htmlFor="admin-email">Email</label>
+            <input id="admin-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required />
+            <label htmlFor="admin-password">Mật khẩu</label>
+            <input id="admin-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
+            {authError && <div className="session-alert session-alert--danger" role="alert"><p>{authError}</p></div>}
+            <button type="submit" className="primary-command" disabled={isLoadingAuth}>
+              {isLoadingAuth ? <Loader2 className="animate-spin" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+              {isLoadingAuth ? 'Đang kiểm tra' : 'Đăng nhập'}
             </button>
           </form>
-        </div>
-      </div>
+          <button type="button" className="back-link" onClick={() => router.push('/')}>
+            Trở về ứng dụng
+          </button>
+        </section>
+      </main>
     )
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col p-4 md:p-6 relative overflow-hidden bg-background text-foreground">
-      {/* Dynamic Ambient Blur Blobs */}
-      <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-host/5 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-partner/5 rounded-full blur-3xl pointer-events-none"></div>
-
-      {/* Header Admin Dashboard */}
-      <header className="w-full flex flex-col md:flex-row md:items-center md:justify-between py-4 px-6 glass-panel rounded-3xl mb-4 relative z-20 gap-4 border border-white/5 shadow-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-host to-partner flex items-center justify-center shadow-lg shadow-host/10">
-            <ShieldAlert className="w-5 h-5 text-white" />
+    <div className="workspace-shell">
+      <WorkspaceHeader
+        title="Bảng điều khiển"
+        subtitle="Quản trị hệ thống PayLingo"
+        actions={<button type="button" onClick={handleLogout} aria-label="Đăng xuất quản trị" title="Đăng xuất"><LogOut aria-hidden="true" /></button>}
+      />
+      <main className="admin-main">
+        <section className="admin-overview">
+          <div><p className="eyebrow">Tổng quan vận hành</p><h2>Hệ thống phiên dịch</h2><p>Dữ liệu phiên, người dùng ẩn danh và mức sử dụng AI.</p></div>
+          <div className="admin-metrics">
+            <div><strong>{globalSessions.length}</strong><span>Hội thoại</span></div>
+            <div><strong>{usersList.length}</strong><span>Người dùng</span></div>
+            <div><strong>{formatDuration(dashboardStats.totalDuration)}</strong><span>Thời lượng</span></div>
+            <div><strong>${dashboardStats.totalCost.toFixed(4)}</strong><span>Chi phí AI</span></div>
           </div>
-          <div>
-            <h1 className="text-sm md:text-base font-black text-white leading-none flex items-center gap-2">
-              PayLingo Control Panel
-              <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-host/25 border border-host/30 text-white animate-pulse">ADMIN</span>
-            </h1>
-            <p className="text-[10px] text-slate-400 mt-1.5 font-bold uppercase tracking-wider">
-              Điều hành người dùng, lịch sử dịch và định cấu hình AI
-            </p>
-          </div>
-        </div>
+        </section>
 
-        {/* Tab switch navigation (Apple Capsule shape) */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-white/[0.03] border border-white/10 p-1.5 rounded-full">
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`h-9 px-4.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
-              activeTab === 'users' ? 'bg-gradient-to-r from-host to-host/80 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Người dùng
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('sessions')}
-            className={`h-9 px-4.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
-              activeTab === 'sessions' ? 'bg-gradient-to-r from-host to-host/80 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Hội thoại
-          </button>
+        <nav className="admin-tabs" aria-label="Khu vực quản trị">
+          {([
+            ['users', 'Người dùng', Users],
+            ['sessions', 'Hội thoại', Database],
+            ['usage', 'Mức sử dụng', BarChart3],
+            ['api-settings', 'Cấu hình AI', Settings],
+          ] as const).map(([value, label, Icon]) => (
+            <button type="button" key={value} className={activeTab === value ? 'is-active' : ''} onClick={() => setActiveTab(value)}>
+              <Icon aria-hidden="true" />{label}
+            </button>
+          ))}
+        </nav>
 
-          <button
-            onClick={() => setActiveTab('stats')}
-            className={`h-9 px-4.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer ${
-              activeTab === 'stats' ? 'bg-gradient-to-r from-host to-host/80 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Thống kê Token & Phí
-          </button>
+        {dataError && <div className="session-alert session-alert--danger" role="alert"><p>{dataError}</p></div>}
 
-          <button
-            onClick={() => setActiveTab('api-settings')}
-            className={`h-9 px-4.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'api-settings' ? 'bg-gradient-to-r from-host to-host/80 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Settings className="w-3.5 h-3.5" />
-            Cấu hình AI
-          </button>
-
-          {/* Sign Out */}
-          <button
-            onClick={handleLogout}
-            className="w-9 h-9 rounded-full bg-red-500/5 border border-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-300 cursor-pointer flex items-center justify-center"
-            title="Đăng xuất"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="flex-1 w-full relative z-10 overflow-y-auto min-h-0">
-        
-        {/* TAB 1: USERS LIST */}
-        {activeTab === 'users' && (
-          <div className="space-y-4">
-            
-            {/* Users List Table */}
-            <div className="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-white/[0.02] border-b border-white/5 text-slate-400 font-extrabold uppercase tracking-widest text-[9px]">
-                      <th className="py-4 px-5">Tên người dùng (Username)</th>
-                      <th className="py-4 px-5">Số cuộc đàm thoại</th>
-                      <th className="py-4 px-5">Tổng số phút dùng</th>
-                      <th className="py-4 px-5">Hoạt động cuối cùng</th>
-                      <th className="py-4 px-5 text-right">Hành động</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usersList.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-500 font-extrabold text-xs">
-                          Chưa có người dùng nào sử dụng hệ thống
-                        </td>
-                      </tr>
-                    ) : (
-                      usersList.map((usr) => (
-                        <tr key={usr.username} className="border-b border-white/5 hover:bg-white/[0.01] transition-all">
-                          <td className="py-4 px-5 font-black text-white flex items-center gap-2">
-                            <span className="w-7 h-7 rounded-xl bg-host/15 text-host flex items-center justify-center font-extrabold text-[11px] border border-host/10">👤</span>
-                            {usr.username}
-                          </td>
-                          <td className="py-4 px-5 font-bold text-slate-300">{usr.totalSessions} Phiên</td>
-                          <td className="py-4 px-5 font-black text-partner">{usr.totalMinutes} Phút</td>
-                          <td className="py-4 px-5 text-slate-400 font-bold">{new Date(usr.lastActive).toLocaleString('vi-VN')}</td>
-                          <td className="py-4 px-5 text-right">
-                            <button
-                              onClick={() => handleViewUserSessions(usr.username)}
-                              className="h-9 px-4 rounded-full border border-host/20 bg-host/5 hover:bg-host/10 text-host transition-all cursor-pointer font-black text-[10px] uppercase tracking-wider active:scale-95"
-                            >
-                              Xem cuộc gọi
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* TAB 2: SYSTEM SESSIONS */}
-        {activeTab === 'sessions' && (
-          <div className="space-y-4">
-            
-            {/* Search sessions */}
-            <div className="relative">
-              <Search className="absolute left-4.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Tìm kiếm lịch sử theo tên hoặc Username..."
-                value={searchSessionQuery}
-                onChange={(e) => setSearchSessionQuery(e.target.value)}
-                className="w-full py-4 pl-12.5 pr-5 rounded-2xl glass-input text-xs font-semibold"
-              />
-            </div>
-
-            {/* Sessions Table */}
-            <div className="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-white/[0.02] border-b border-white/5 text-slate-400 font-extrabold uppercase tracking-widest text-[9px]">
-                      <th className="py-4 px-5">Username</th>
-                      <th className="py-4 px-5">Tên cuộc hội thoại</th>
-                      <th className="py-4 px-5">Ngôn ngữ đối tác</th>
-                      <th className="py-4 px-5">Thời lượng</th>
-                      <th className="py-4 px-5">Ngày đàm thoại</th>
-                      <th className="py-4 px-5 text-right">Hành động</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loadingSessions ? (
-                      <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-500">
-                          <Loader2 className="w-6 h-6 animate-spin text-host mx-auto" />
-                        </td>
-                      </tr>
-                    ) : filteredSessions.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-500 font-extrabold">
-                          Không tìm thấy cuộc hội thoại nào
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredSessions.map((sess) => {
-                        const min = Math.floor(sess.duration_seconds / 60)
-                        const sec = sess.duration_seconds % 60
-                        const langObj = PARTNER_LANGUAGES.find(l => l.code === sess.partner_language)
-
-                        return (
-                          <tr key={sess.id} className="border-b border-white/5 hover:bg-white/[0.01] transition-all">
-                            <td className="py-4 px-5">
-                              <span className="px-2.5 py-0.5 rounded-lg bg-host/10 text-host border border-host/15 font-black uppercase text-[8px] tracking-widest">
-                                {sess.username || 'Khách'}
-                              </span>
-                            </td>
-                            <td className="py-4 px-5 font-black text-white truncate max-w-[150px]">{sess.name}</td>
-                            <td className="py-4 px-5 font-bold"><span className="text-xs mr-1">{langObj?.flag}</span>{langObj?.name || sess.partner_language}</td>
-                            <td className="py-4 px-5 font-bold text-slate-300">{min}p {sec}s</td>
-                            <td className="py-4 px-5 text-slate-400 font-bold">{new Date(sess.started_at).toLocaleString('vi-VN')}</td>
-                            <td className="py-4 px-5 text-right">
-                              <button
-                                onClick={() => handleOpenSession(sess)}
-                                className="w-9 h-9 rounded-full hover:bg-white/5 border border-white/5 text-slate-300 transition-all cursor-pointer inline-flex items-center justify-center active:scale-95"
-                                title="Xem chi tiết"
-                              >
-                                <Eye className="w-4.5 h-4.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* TAB 3: SYSTEM STATISTICS & TOKEN USAGE */}
-        {activeTab === 'stats' && (
-          <div className="space-y-6">
-            {/* Top Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Stat Card 1 */}
-              <div className="glass-panel rounded-3xl p-5 flex items-center justify-between border border-white/5 shadow-2xl relative overflow-hidden group">
-                <div>
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Tổng thời lượng</span>
-                  <h3 className="text-xl font-black text-white mt-1.5">{stats.totalMinutes} Phút</h3>
-                  <p className="text-[9px] text-slate-500 font-bold mt-1">Hội thoại Soniox</p>
-                </div>
-                <div className="w-11 h-11 rounded-2xl bg-host/10 border border-host/20 flex items-center justify-center text-host group-hover:scale-105 transition-transform duration-350">
-                  <Clock className="w-5 h-5 text-host" />
-                </div>
-              </div>
-
-              {/* Stat Card 2 */}
-              <div className="glass-panel rounded-3xl p-5 flex items-center justify-between border border-white/5 shadow-2xl relative overflow-hidden group">
-                <div>
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Tóm tắt AI</span>
-                  <h3 className="text-xl font-black text-white mt-1.5">{usageStats.totalSummaries} lượt</h3>
-                  <p className="text-[9px] text-slate-500 font-bold mt-1">Đã khởi tạo thành công</p>
-                </div>
-                <div className="w-11 h-11 rounded-2xl bg-partner/10 border border-partner/20 flex items-center justify-center text-partner group-hover:scale-105 transition-transform duration-350">
-                  <TrendingUp className="w-5 h-5 text-partner" />
-                </div>
-              </div>
-
-              {/* Stat Card 3 */}
-              <div className="glass-panel rounded-3xl p-5 flex items-center justify-between border border-white/5 shadow-2xl relative overflow-hidden group">
-                <div>
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Tokens Tiêu thụ</span>
-                  <h3 className="text-xl font-black text-amber-glow mt-1.5">{usageStats.totalTokens.toLocaleString()}</h3>
-                  <p className="text-[9px] text-slate-500 font-bold mt-1">Prompt + Completion</p>
-                </div>
-                <div className="w-11 h-11 rounded-2xl bg-amber-glow/10 border border-amber-glow/20 flex items-center justify-center text-amber-glow group-hover:scale-105 transition-transform duration-350">
-                  <Coins className="w-5 h-5 text-amber-glow" />
-                </div>
-              </div>
-
-              {/* Stat Card 4 */}
-              <div className="glass-panel rounded-3xl p-5 flex items-center justify-between border border-white/5 shadow-2xl relative overflow-hidden group">
-                <div>
-                  <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Chi phí AI ước tính</span>
-                  <h3 className="text-xl font-black text-green-400 mt-1.5">${usageStats.totalCostUSD.toFixed(5)}</h3>
-                  <p className="text-[9px] text-slate-500 font-bold mt-1">Ước tính theo giá trị model</p>
-                </div>
-                <div className="w-11 h-11 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-400 group-hover:scale-105 transition-transform duration-350">
-                  <DollarSign className="w-5 h-5 text-green-400" />
-                </div>
-              </div>
-            </div>
-
-            {/* AI usage details list */}
-            <div className="space-y-3">
-              <h2 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Database className="w-4 h-4 text-host" />
-                Lịch sử tiêu hao Token và chi phí AI ({usageLogs.length})
-              </h2>
-
-              <div className="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-white/[0.02] border-b border-white/5 text-slate-400 font-extrabold uppercase tracking-widest text-[9px]">
-                        <th className="py-4 px-5">Người dùng</th>
-                        <th className="py-4 px-5">Mô hình sử dụng</th>
-                        <th className="py-4 px-5">Prompt Tokens</th>
-                        <th className="py-4 px-5">Completion Tokens</th>
-                        <th className="py-4 px-5">Tổng Tokens</th>
-                        <th className="py-4 px-5">Chi phí ($)</th>
-                        <th className="py-4 px-5">Thời gian thực hiện</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loadingUsage ? (
-                        <tr>
-                          <td colSpan={7} className="py-12 text-center text-slate-500">
-                            <Loader2 className="w-6 h-6 animate-spin text-host mx-auto" />
-                          </td>
-                        </tr>
-                      ) : usageLogs.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="py-12 text-center text-slate-500 font-extrabold">
-                            Chưa có dữ liệu thống kê sử dụng AI
-                          </td>
-                        </tr>
-                      ) : (
-                        usageLogs.map((log) => (
-                          <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.01] transition-all">
-                            <td className="py-4 px-5">
-                              <span className="px-2.5 py-0.5 rounded-lg bg-host/10 text-host border border-host/15 font-black uppercase text-[8px] tracking-widest">
-                                {log.username}
-                              </span>
-                            </td>
-                            <td className="py-4 px-5 font-black text-white uppercase">{log.model}</td>
-                            <td className="py-4 px-5 font-bold text-slate-350">{log.prompt_tokens.toLocaleString()}</td>
-                            <td className="py-4 px-5 font-bold text-slate-350">{log.completion_tokens.toLocaleString()}</td>
-                            <td className="py-4 px-5 font-black text-partner">{(log.prompt_tokens + log.completion_tokens).toLocaleString()}</td>
-                            <td className="py-4 px-5 font-black text-green-400">${Number(log.cost_usd).toFixed(5)}</td>
-                            <td className="py-4 px-5 text-slate-400 font-bold">{new Date(log.created_at).toLocaleString('vi-VN')}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* TAB 4: API AI SETTINGS CONFIG */}
-        {activeTab === 'api-settings' && (
-          <div className="w-full max-w-xl mx-auto glass-panel rounded-3xl p-6 md:p-8 border border-white/5 shadow-2xl relative overflow-hidden animate-fadeIn">
-            
-            {/* Tab header title */}
-            <div className="flex items-center gap-3.5 mb-6 border-b border-white/5 pb-4">
-              <div className="w-10 h-10 rounded-2xl bg-amber-glow/10 border border-amber-glow/20 flex items-center justify-center text-amber-glow">
-                <Settings className="w-5 h-5 text-amber-glow" />
-              </div>
-              <div>
-                <h2 className="text-xs font-black text-white uppercase tracking-wider">Cấu hình API Key AI</h2>
-                <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">Định cấu hình Gemini hoặc OpenAI-compatible cho tính năng AI Tóm tắt</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveApiSettings} className="space-y-5">
-              {/* Provider Selector */}
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold uppercase text-slate-400 flex items-center gap-1">
-                  <Cpu className="w-3.5 h-3.5 text-host" />
-                  Nhà cung cấp dịch vụ (Provider)
-                </label>
-                <select
-                  value={apiProvider}
-                  onChange={(e: any) => {
-                    setApiProvider(e.target.value)
-                    setApiModel(e.target.value === 'gemini' ? 'gemini-2.5-flash' : 'cx/gpt-5.5')
-                  }}
-                  className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white outline-none select-none"
-                >
-                  <option value="gemini" className="bg-slate-950 text-white font-bold">Google Gemini API (Khuyên dùng)</option>
-                  <option value="openai" className="bg-slate-950 text-white font-bold">OpenAI hoặc Compatible (Custom Endpoint)</option>
-                </select>
-              </div>
-
-              {/* Endpoint - Show only if OpenAI */}
-              {apiProvider === 'openai' && (
-                <div className="space-y-1.5 animate-fadeIn">
-                  <label className="text-[9px] font-extrabold uppercase text-slate-400">Địa chỉ Endpoint (Base URL)</label>
-                  <input
-                    type="url"
-                    required
-                    value={apiEndpoint}
-                    onChange={(e) => setApiEndpoint(e.target.value)}
-                    placeholder="https://api.openai.com/v1"
-                    className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none"
-                  />
-                  <p className="text-[8px] text-slate-500 font-bold">Ví dụ: `https://api.openai.com/v1` hoặc endpoint dịch vụ trung gian của bạn.</p>
-                </div>
-              )}
-
-              {/* Model Name */}
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold uppercase text-slate-400">Tên mô hình (Model Name)</label>
-                <input
-                  type="text"
-                  required
-                  value={apiModel}
-                  onChange={(e) => setApiModel(e.target.value)}
-                  placeholder={apiProvider === 'gemini' ? 'gemini-2.5-flash' : 'cx/gpt-5.5'}
-                  className="w-full py-3.5 px-4 rounded-2xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none"
-                />
-              </div>
-
-              {/* API Key Input */}
-              <div className="space-y-1.5">
-                <label className="text-[9px] font-extrabold uppercase text-slate-400 flex items-center gap-1">
-                  <Key className="w-3.5 h-3.5 text-partner" />
-                  Khóa API (API Key)
-                </label>
-                <div className="relative">
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    required
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    placeholder="Nhập khóa API bảo mật..."
-                    className="w-full py-3.5 pl-4 pr-12 rounded-2xl glass-input text-xs font-bold text-white placeholder:text-slate-700 outline-none tracking-wider"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-350 transition-all cursor-pointer"
-                  >
-                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-[8px] text-slate-500 font-bold leading-normal">
-                  Chỉ lưu an toàn trên máy chủ. Khóa API được bảo vệ nghiêm ngặt bằng RLS và không bao giờ rò rỉ ra client.
-                </p>
-              </div>
-
-              {/* Success message */}
-              {apiSuccessMsg && (
-                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 rounded-2xl p-3.5 text-xs animate-fadeIn font-bold">
-                  <Check className="w-4 h-4 text-green-400 shrink-0" />
-                  <span>Cập nhật cấu hình API AI thành công!</span>
-                </div>
-              )}
-
-              {/* Submit button (Apple Prominent Capsule) */}
-              <button
-                type="submit"
-                disabled={savingApi}
-                className="w-full py-4 px-4 rounded-full bg-gradient-to-r from-host to-partner text-slate-950 font-black text-xs uppercase tracking-wider hover:opacity-90 hover:scale-[1.01] shadow-xl shadow-host/15 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {savingApi ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Đang lưu cấu hình...
-                  </>
-                ) : 'Lưu cấu hình API'}
-              </button>
+        {loadingData ? (
+          <div className="admin-loading"><Loader2 className="animate-spin" aria-hidden="true" /><span>Đang tải dữ liệu</span></div>
+        ) : activeTab === 'users' ? (
+          <section className="admin-section">
+            <header><div><h3>Người dùng</h3><p>Tổng hợp theo tên hiển thị trong phiên ẩn danh.</p></div><span>{usersList.length} người dùng</span></header>
+            <div className="table-wrap"><table className="data-table"><thead><tr><th>Tên hiển thị</th><th>Hội thoại</th><th>Thời lượng</th><th>Hoạt động gần nhất</th><th><span className="sr-only">Hành động</span></th></tr></thead><tbody>
+              {usersList.length === 0 ? <tr><td colSpan={5} className="table-empty">Chưa có dữ liệu người dùng</td></tr> : usersList.map((user) => (
+                <tr key={user.username}><td><span className="user-mark">{user.username.slice(0, 2).toUpperCase()}</span><strong>{user.username}</strong></td><td>{user.totalSessions}</td><td>{user.totalMinutes} phút</td><td>{new Date(user.lastActive).toLocaleString('vi-VN')}</td><td><button type="button" onClick={() => handleViewUserSessions(user.username)}>Xem phiên</button></td></tr>
+              ))}
+            </tbody></table></div>
+          </section>
+        ) : activeTab === 'sessions' ? (
+          <section className="admin-section">
+            <header><div><h3>Hội thoại toàn hệ thống</h3><p>Mở transcript, xuất PDF hoặc xóa dữ liệu.</p></div><div className="table-search"><Search aria-hidden="true" /><input type="search" value={searchSessionQuery} onChange={(event) => setSearchSessionQuery(event.target.value)} placeholder="Tên phiên hoặc người dùng" aria-label="Tìm hội thoại" /></div></header>
+            <div className="table-wrap"><table className="data-table"><thead><tr><th>Người dùng</th><th>Hội thoại</th><th>Ngôn ngữ</th><th>Thời lượng</th><th>Thời gian</th><th><span className="sr-only">Hành động</span></th></tr></thead><tbody>
+              {filteredSessions.length === 0 ? <tr><td colSpan={6} className="table-empty">Không tìm thấy hội thoại</td></tr> : filteredSessions.map((session) => {
+                const language = getPartnerLanguage(session.partner_language)
+                return <tr key={session.id}><td>{session.username || 'Khách'}</td><td><strong>{session.name}</strong></td><td><span className="language-inline"><b>{language?.shortName || session.partner_language.toUpperCase()}</b>{language?.name || session.partner_language}</span></td><td>{formatDuration(session.duration_seconds)}</td><td>{new Date(session.started_at).toLocaleString('vi-VN')}</td><td><button type="button" onClick={() => void handleOpenSession(session)}>Mở</button></td></tr>
+              })}
+            </tbody></table></div>
+          </section>
+        ) : activeTab === 'usage' ? (
+          <section className="admin-section">
+            <header><div><h3>Mức sử dụng AI</h3><p>{dashboardStats.totalTokens.toLocaleString()} token trong {usageLogs.length} lượt tóm tắt.</p></div><span>${dashboardStats.totalCost.toFixed(5)}</span></header>
+            <div className="table-wrap"><table className="data-table"><thead><tr><th>Người dùng</th><th>Model</th><th>Prompt</th><th>Hoàn thành</th><th>Tổng token</th><th>Chi phí</th><th>Thời gian</th></tr></thead><tbody>
+              {usageLogs.length === 0 ? <tr><td colSpan={7} className="table-empty">Chưa có dữ liệu sử dụng AI</td></tr> : usageLogs.map((log) => <tr key={log.id}><td>{log.username}</td><td><strong>{log.model}</strong></td><td>{log.prompt_tokens.toLocaleString()}</td><td>{log.completion_tokens.toLocaleString()}</td><td>{(log.prompt_tokens + log.completion_tokens).toLocaleString()}</td><td>${Number(log.cost_usd).toFixed(5)}</td><td>{new Date(log.created_at).toLocaleString('vi-VN')}</td></tr>)}
+            </tbody></table></div>
+          </section>
+        ) : (
+          <section className="api-settings-section">
+            <header><span><Cpu aria-hidden="true" /></span><div><h3>Cấu hình dịch vụ AI</h3><p>Áp dụng cho tính năng tóm tắt hội thoại và thư mục.</p></div></header>
+            <form onSubmit={handleSaveApiSettings}>
+              <label htmlFor="api-provider">Nhà cung cấp</label>
+              <select id="api-provider" value={apiProvider} onChange={(event) => { const provider = event.target.value as ApiProvider; setApiProvider(provider); setApiModel(provider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4.1-mini') }}><option value="gemini">Google Gemini</option><option value="openai">OpenAI hoặc endpoint tương thích</option></select>
+              {apiProvider === 'openai' && <><label htmlFor="api-endpoint">Endpoint HTTPS</label><input id="api-endpoint" type="url" value={apiEndpoint} onChange={(event) => setApiEndpoint(event.target.value)} placeholder="https://api.openai.com/v1" required /></>}
+              <label htmlFor="api-model">Tên model</label><input id="api-model" value={apiModel} onChange={(event) => setApiModel(event.target.value)} required maxLength={200} />
+              <label htmlFor="api-key"><KeyRound aria-hidden="true" /> API key</label>
+              <input id="api-key" type="password" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} placeholder={hasApiKey ? 'Đã cấu hình. Nhập khóa mới để thay thế.' : 'Nhập API key'} autoComplete="new-password" required={!hasApiKey} maxLength={1000} />
+              <p className="field-note">Khóa hiện tại không được gửi lại trình duyệt. Để trống nếu chỉ cập nhật provider, endpoint hoặc model.</p>
+              {apiMessage && <div className={`session-alert session-alert--${apiMessage.type === 'success' ? 'success' : 'danger'}`} role="status">{apiMessage.type === 'success' && <Check aria-hidden="true" />}<p>{apiMessage.text}</p></div>}
+              <button type="submit" className="primary-command" disabled={savingApi}>{savingApi ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Settings aria-hidden="true" />}{savingApi ? 'Đang lưu' : 'Lưu cấu hình'}</button>
             </form>
-          </div>
+          </section>
         )}
-
       </main>
 
-      {/* SYSTEM SESSION DETAILED VIEW MODAL */}
       {viewingSession && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 md:p-6 animate-fadeIn">
-          <div className="w-full max-w-4xl h-[90vh] glass-panel rounded-3xl p-5 md:p-8 flex flex-col relative overflow-hidden max-h-[750px] shadow-2xl border border-white/5">
-            
-            {/* Modal Header */}
-            <div className="flex items-start justify-between pb-4 border-b border-white/5 shrink-0">
-              <div className="flex-1 mr-4 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-black text-white leading-none truncate max-w-xs md:max-w-md tracking-wide">
-                    {viewingSession.name}
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded bg-host/10 text-host border border-host/15 font-black uppercase text-[8px] tracking-widest">
-                    {viewingSession.username || 'Khách'}
-                  </span>
-                </div>
-                
-                <p className="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider flex items-center gap-3">
-                  <span>Khởi tạo: {new Date(viewingSession.started_at).toLocaleString('vi-VN')}</span>
-                  <span>Ngôn ngữ đối tác: {PARTNER_LANGUAGES.find(l => l.code === viewingSession.partner_language)?.name}</span>
-                </p>
-              </div>
-
-              {/* Action triggers (Apple Style separation) */}
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={handleExportPDF}
-                  className="h-10 px-4 rounded-full border border-partner/30 bg-partner/5 hover:bg-partner/10 text-partner transition-all duration-300 cursor-pointer flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider active:scale-95"
-                  title="Xuất file PDF"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span className="hidden sm:inline">Xuất PDF</span>
-                </button>
-                
-                <button
-                  onClick={() => handleDeleteSession(viewingSession.id)}
-                  className="w-10 h-10 rounded-full border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all duration-300 cursor-pointer flex items-center justify-center active:scale-95"
-                  title="Xóa vĩnh viễn"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-
-                <button
-                  onClick={() => setViewingSession(null)}
-                  className="w-10 h-10 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all duration-300 cursor-pointer flex items-center justify-center"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+        <div className="dialog-backdrop" role="presentation">
+          <section className="admin-session-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-session-title">
+            <header><div><h2 id="admin-session-title">{viewingSession.name}</h2><p>{viewingSession.username || 'Khách'} · {new Date(viewingSession.started_at).toLocaleString('vi-VN')}</p></div><div><button type="button" onClick={handleExportPDF} aria-label="Xuất PDF" title="Xuất PDF"><Download aria-hidden="true" /></button><button type="button" className="is-danger" onClick={handleDeleteSession} aria-label="Xóa hội thoại" title="Xóa"><Trash2 aria-hidden="true" /></button><button type="button" onClick={() => setViewingSession(null)} aria-label="Đóng"><X aria-hidden="true" /></button></div></header>
+            <div className="admin-transcript">
+              {loadingEntries ? <div className="admin-loading"><Loader2 className="animate-spin" aria-hidden="true" /></div> : sessionEntries.length === 0 ? <div className="transcript-archive__empty"><Volume2 aria-hidden="true" /><strong>Không có transcript</strong></div> : sessionEntries.map((entry) => {
+                const language = getPartnerLanguage(viewingSession.partner_language)
+                const hostText = entry.speaker === 'host' ? entry.original_text : entry.translated_text
+                const partnerText = entry.speaker === 'partner' ? entry.original_text : entry.translated_text
+                return <article key={entry.id} className={`admin-entry admin-entry--${entry.speaker}`}><header><strong>{entry.speaker === 'host' ? 'Bạn' : language?.name || 'Đối tác'}</strong><time>{Math.floor(entry.start_ms / 1000)} giây</time></header>{hostText && <p><b>VI</b>{hostText}</p>}{partnerText && <p><b>{language?.shortName || 'INTL'}</b>{partnerText}</p>}</article>
+              })}
             </div>
-
-            {/* Modal Scrollable Dialog columns */}
-            <div className="flex-1 overflow-y-auto py-5 space-y-4 pr-1 min-h-0">
-              {sessionEntries.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center opacity-30 text-center">
-                  <Volume2 className="w-10 h-10 text-host mb-2" />
-                  <p className="text-xs font-bold text-slate-400">Phiên hội thoại này không có nội dung text</p>
-                </div>
-              ) : (
-                sessionEntries.map((entry) => {
-                  const partObj = PARTNER_LANGUAGES.find(l => l.code === viewingSession.partner_language)
-
-                  return (
-                    <div 
-                      key={entry.id} 
-                      className={`flex flex-col p-3.5 rounded-3xl border transition-all ${
-                        entry.speaker === 'host' 
-                          ? 'bg-host/5 border-host/15 max-w-[90%] mr-auto' 
-                          : 'bg-partner/5 border-partner/15 max-w-[90%] ml-auto'
-                      }`}
-                    >
-                      <div className="space-y-2">
-                        {/* Host Bubble */}
-                        <div className="flex items-start gap-1.5">
-                          <span className="text-[9px] font-extrabold uppercase text-host tracking-wider min-w-[50px]">Host:</span>
-                          <span className="text-xs text-slate-200 font-semibold leading-relaxed">
-                            {entry.speaker === 'host' ? entry.original_text : entry.translated_text}
-                          </span>
-                        </div>
-
-                        {/* Partner Bubble */}
-                        <div className="flex items-start gap-1.5">
-                          <span className="text-[9px] font-extrabold uppercase text-partner tracking-wider min-w-[50px]">{partObj?.name}:</span>
-                          <span className="text-xs text-slate-350 font-medium leading-relaxed">
-                            {entry.speaker === 'partner' ? entry.original_text : entry.translated_text}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
+          </section>
         </div>
       )}
     </div>

@@ -1,41 +1,41 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { 
-  ArrowLeft, 
-  Trash2, 
-  Edit3, 
-  FileText, 
-  Check, 
-  X, 
-  Calendar, 
-  Clock, 
-  Volume2, 
-  Loader2,
-  Sparkles,
-  CloudLightning,
+import {
+  ArrowLeft,
+  CalendarDays,
+  Check,
   ChevronDown,
+  Clock3,
   Copy,
-  Share2,
-  Download
+  Download,
+  Edit3,
+  FileJson,
+  FileText,
+  Link2,
+  Loader2,
+  LockKeyhole,
+  Sparkles,
+  Trash2,
+  Volume2,
+  X,
 } from 'lucide-react'
-import { db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
-import { syncPendingData } from '@/lib/sync-manager'
-import { createClient } from '@/lib/supabase/client'
+import WorkspaceHeader from '@/components/WorkspaceHeader'
+import { claimLegacyLocalData, db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
 import { generatePremiumHTMLReport, downloadSummaryHTML } from '@/lib/html-generator'
+import { getPartnerLanguage } from '@/lib/languages'
+import { createClient } from '@/lib/supabase/client'
+import { syncPendingData } from '@/lib/sync-manager'
 import { formatTimeline } from '@/lib/utils'
 
-const PARTNER_LANGUAGES = [
-  { code: 'any', name: 'Mọi ngôn ngữ (Any)', flag: '🌐' },
-  { code: 'en', name: 'English', flag: '🇬🇧' },
-  { code: 'zh', name: '中文', flag: '🇨🇳' },
-  { code: 'ja', name: '日本語', flag: '🇯🇵' },
-  { code: 'ko', name: '한국어', flag: '🇰🇷' },
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
-  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
-  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'th', name: 'ภาษาไทย', flag: '🇹🇭' },
+type SummaryStyle = 'default' | 'formal' | 'casual' | 'very_casual'
+
+const SUMMARY_STYLES: Array<{ value: SummaryStyle; label: string; description: string }> = [
+  { value: 'default', label: 'Mặc định', description: 'Tự nhiên và rõ ràng' },
+  { value: 'formal', label: 'Trang trọng', description: 'Chuẩn văn bản doanh nghiệp' },
+  { value: 'casual', label: 'Thân mật', description: 'Gần gũi, dễ đọc' },
+  { value: 'very_casual', label: 'Ghi chú nhanh', description: 'Ngắn gọn, trực tiếp' },
 ]
 
 interface PageProps {
@@ -45,685 +45,497 @@ interface PageProps {
 export default function SessionDetailPage({ params }: PageProps) {
   const router = useRouter()
   const { id } = use(params)
-
   const [session, setSession] = useState<LocalSession | null>(null)
   const [entries, setEntries] = useState<LocalTranscriptEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [pageError, setPageError] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState('')
   const [showExportMenu, setShowExportMenu] = useState(false)
-
-  // Editing Message state
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [editOrigText, setEditOrigText] = useState('')
   const [editTransText, setEditTransText] = useState('')
-
-  // AI Summary Modal state
   const [aiLoading, setAiLoading] = useState(false)
   const [aiSummary, setAiSummary] = useState('')
+  const [summaryError, setSummaryError] = useState('')
   const [sharePassword, setSharePassword] = useState('')
   const [shareLink, setShareLink] = useState('')
   const [copied, setCopied] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
-  const [selectedStyle, setSelectedStyle] = useState<'default' | 'formal' | 'casual' | 'very_casual'>('default')
+  const [selectedStyle, setSelectedStyle] = useState<SummaryStyle>('default')
 
-  // Dynamic loading steps to improve perceived speed
-  const [loadingStep, setLoadingStep] = useState(0)
-  const loadingSteps = [
-    "Đang kết nối AI và đọc dữ liệu IndexedDB...",
-    "Đang phân tích cấu trúc cuộc đàm thoại...",
-    "Nhận diện vai trò người nói và chủ đề chính...",
-    "Tổng hợp các quyết định và việc cần làm...",
-    "Đang vẽ Sơ đồ tư duy cuộc họp (Mind Map)...",
-    "Đang xuất bản báo cáo HTML cao cấp..."
-  ]
-
-  useEffect(() => {
-    if (!aiLoading) {
-      setLoadingStep(0)
-      return
-    }
-    const timer = setInterval(() => {
-      setLoadingStep(prev => (prev < loadingSteps.length - 1 ? prev + 1 : prev))
-    }, 1800)
-    return () => clearInterval(timer)
-  }, [aiLoading])
-
-  // Load Session and Entries
-  useEffect(() => {
-    const loadSessionData = async () => {
-      try {
-        // 1. Try IndexedDB first (Local-first!)
-        let localSess = await db.sessions.get(id)
-        let localEntries: LocalTranscriptEntry[] = []
-
-        if (localSess) {
-          localEntries = await db.transcriptEntries
-            .where('session_id')
-            .equals(id)
-            .sortBy('start_ms')
-          
-          setSession(localSess)
-          setNewName(localSess.name)
-          setEntries(localEntries)
-          setLoading(false)
-          return
-        }
-
-        // 2. Fallback to Supabase if not found locally
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          router.push('/')
-          return
-        }
-
-        const { data: supaSess, error: sessError } = await supabase
-          .from('sessions')
-          .select('*')
-          .eq('id', id)
-          .single()
-
-        if (sessError || !supaSess) {
-          router.push('/history')
-          return
-        }
-
-        const { data: supaEntries, error: entriesError } = await supabase
-          .from('transcript_entries')
-          .select('*')
-          .eq('session_id', id)
-          .order('start_ms', { ascending: true })
-
-        // Populate local IndexedDB so next loads are instant offline-first
-        const formattedSession: LocalSession = {
-          id: supaSess.id,
-          username: supaSess.username,
-          folder_id: supaSess.folder_id,
-          name: supaSess.name,
-          partner_language: supaSess.partner_language,
-          started_at: supaSess.started_at,
-          ended_at: supaSess.ended_at,
-          duration_seconds: supaSess.duration_seconds,
-          sync_status: 'synced',
-          updated_at: supaSess.updated_at || new Date().toISOString()
-        }
-
-        const formattedEntries: LocalTranscriptEntry[] = (supaEntries || []).map(e => ({
-          id: e.id,
-          session_id: e.session_id,
-          speaker: e.speaker,
-          original_text: e.original_text,
-          translated_text: e.translated_text,
-          start_ms: e.start_ms,
-          end_ms: e.end_ms,
-          created_at: e.created_at,
-          sync_status: 'synced',
-          updated_at: e.updated_at || new Date().toISOString()
-        }))
-
-        await db.sessions.put(formattedSession)
-        for (const entry of formattedEntries) {
-          await db.transcriptEntries.put(entry)
-        }
-
-        setSession(formattedSession)
-        setNewName(formattedSession.name)
-        setEntries(formattedEntries)
-      } catch (err) {
-        console.error('Error loading session:', err)
-        router.push('/history')
-      } finally {
-        setLoading(false)
+  const loadSessionData = useCallback(async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const username = user?.user_metadata?.username
+      if (!user || !username) {
+        router.replace('/')
+        return
       }
-    }
 
-    loadSessionData()
+      await claimLegacyLocalData(user.id, username)
+      const localSession = await db.sessions.get(id)
+      if (localSession?.owner_id === user.id) {
+        const localEntries = await db.transcriptEntries
+          .where('session_id')
+          .equals(id)
+          .sortBy('start_ms')
+        setSession(localSession)
+        setNewName(localSession.name)
+        setEntries(localEntries)
+        return
+      }
+
+      const { data: cloudSession, error: sessionError } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (sessionError || !cloudSession) {
+        setPageError('Không tìm thấy hội thoại hoặc bạn không có quyền truy cập.')
+        return
+      }
+
+      const { data: cloudEntries, error: entriesError } = await supabase
+        .from('transcript_entries')
+        .select('*')
+        .eq('session_id', id)
+        .order('start_ms', { ascending: true })
+      if (entriesError) throw entriesError
+
+      const formattedSession: LocalSession = {
+        id: cloudSession.id,
+        owner_id: cloudSession.owner_id || user.id,
+        username: cloudSession.username,
+        folder_id: cloudSession.folder_id,
+        name: cloudSession.name,
+        partner_language: cloudSession.partner_language,
+        started_at: cloudSession.started_at,
+        ended_at: cloudSession.ended_at,
+        duration_seconds: cloudSession.duration_seconds,
+        sync_status: 'synced',
+        updated_at: cloudSession.updated_at || new Date().toISOString(),
+      }
+      const formattedEntries: LocalTranscriptEntry[] = (cloudEntries || []).map((entry) => ({
+        id: entry.id,
+        session_id: entry.session_id,
+        speaker: entry.speaker,
+        original_text: entry.original_text,
+        translated_text: entry.translated_text,
+        start_ms: entry.start_ms,
+        end_ms: entry.end_ms,
+        created_at: entry.created_at,
+        sync_status: 'synced',
+        updated_at: entry.updated_at || new Date().toISOString(),
+      }))
+
+      await db.transaction('rw', db.sessions, db.transcriptEntries, async () => {
+        await db.sessions.put(formattedSession)
+        await db.transcriptEntries.bulkPut(formattedEntries)
+      })
+
+      setSession(formattedSession)
+      setNewName(formattedSession.name)
+      setEntries(formattedEntries)
+    } catch (error) {
+      console.error('Error loading session:', error)
+      setPageError('Không thể tải dữ liệu hội thoại. Hãy kiểm tra kết nối và thử lại.')
+    } finally {
+      setLoading(false)
+    }
   }, [id, router])
 
-  // Rename Session
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => void loadSessionData(), 0)
+    return () => window.clearTimeout(loadTimer)
+  }, [loadSessionData])
+
   const handleRename = async () => {
-    if (!session || !newName.trim()) return
-
+    const cleanName = newName.trim()
+    if (!session || !cleanName) return
     const now = new Date().toISOString()
-    await db.sessions.update(session.id, {
-      name: newName,
-      sync_status: 'pending',
-      updated_at: now
-    })
-
-    setSession(prev => prev ? { ...prev, name: newName, sync_status: 'pending', updated_at: now } : null)
+    await db.sessions.update(session.id, { name: cleanName, sync_status: 'pending', updated_at: now })
+    setSession((current) => current ? { ...current, name: cleanName, sync_status: 'pending', updated_at: now } : null)
     setRenaming(false)
-    syncPendingData()
+    void syncPendingData()
   }
 
-  // Delete Session
   const handleDelete = async () => {
-    if (!session || !confirm('Bạn có chắc chắn muốn xóa cuộc hội thoại này?')) return
-
+    if (!session || !confirm('Xóa vĩnh viễn hội thoại và toàn bộ transcript?')) return
+    setPageError('')
     try {
-      await db.sessions.delete(session.id)
-      await db.transcriptEntries.where('session_id').equals(session.id).delete()
-
       const supabase = createClient()
-      await supabase.from('sessions').delete().eq('id', session.id)
+      const { error } = await supabase.from('sessions').delete().eq('id', session.id)
+      if (error) throw error
 
-      router.push('/history')
-      syncPendingData()
-    } catch (err) {
-      console.error('Failed to delete session:', err)
+      await db.transaction('rw', db.sessions, db.transcriptEntries, async () => {
+        await db.transcriptEntries.where('session_id').equals(session.id).delete()
+        await db.sessions.delete(session.id)
+      })
+      router.replace('/history')
+    } catch (error) {
+      console.error('Failed to delete session:', error)
+      setPageError('Chưa thể xóa hội thoại trên máy chủ. Dữ liệu trên thiết bị vẫn được giữ nguyên.')
     }
   }
 
-  // Save entry edit
+  const startEditing = (entry: LocalTranscriptEntry) => {
+    setEditingEntryId(entry.id)
+    setEditOrigText(entry.original_text)
+    setEditTransText(entry.translated_text)
+  }
+
   const handleSaveEntryEdit = async (entryId: string) => {
     if (!editOrigText.trim() && !editTransText.trim()) return
-
     const now = new Date().toISOString()
     await db.transcriptEntries.update(entryId, {
       original_text: editOrigText,
       translated_text: editTransText,
       sync_status: 'pending',
-      updated_at: now
+      updated_at: now,
     })
-
-    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, original_text: editOrigText, translated_text: editTransText, sync_status: 'pending', updated_at: now } : e))
+    setEntries((current) => current.map((entry) => entry.id === entryId
+      ? { ...entry, original_text: editOrigText, translated_text: editTransText, sync_status: 'pending', updated_at: now }
+      : entry
+    ))
     setEditingEntryId(null)
-    syncPendingData()
+    void syncPendingData()
   }
 
-  // Trigger Exports
   const handleExport = async (format: 'pdf' | 'txt' | 'json') => {
     if (!session) return
-    const langObj = PARTNER_LANGUAGES.find(l => l.code === session.partner_language)
-    const langName = langObj?.name || session.partner_language
-
     setShowExportMenu(false)
-
-    const { downloadSessionPDF, downloadSessionTXT, downloadSessionJSON } = await import('@/lib/pdf-generator')
-
-    if (format === 'pdf') {
-      await downloadSessionPDF(session.name, session.partner_language, langName, session.started_at, entries)
-    } else if (format === 'txt') {
-      await downloadSessionTXT(session.name, langName, session.started_at, entries)
-    } else {
-      await downloadSessionJSON(session.name, session.partner_language, langName, session.started_at, entries)
+    setPageError('')
+    try {
+      const languageName = getPartnerLanguage(session.partner_language)?.name || session.partner_language
+      const { downloadSessionPDF, downloadSessionTXT, downloadSessionJSON } = await import('@/lib/pdf-generator')
+      if (format === 'pdf') {
+        await downloadSessionPDF(session.name, session.partner_language, languageName, session.started_at, entries)
+      } else if (format === 'txt') {
+        await downloadSessionTXT(session.name, languageName, session.started_at, entries)
+      } else {
+        await downloadSessionJSON(session.name, session.partner_language, languageName, session.started_at, entries)
+      }
+    } catch (error) {
+      console.error('Failed to export session:', error)
+      setPageError('Không thể tạo tệp xuất. Vui lòng thử lại.')
     }
   }
 
-  // AI Summarization
-  const handleAiSummarize = async (styleToUse = selectedStyle) => {
-    if (!session) return
+  const handleAiSummarize = async (style: SummaryStyle = selectedStyle) => {
+    if (!session || entries.length === 0) return
     setAiLoading(true)
-    setShareLink('')
-    setSharePassword('')
     setShowSummaryModal(true)
-    setSelectedStyle(styleToUse)
+    setSelectedStyle(style)
+    setSummaryError('')
+    setShareLink('')
 
     try {
-      const res = await fetch('/api/ai/summarize', {
+      const response = await fetch('/api/ai/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          sessionId: session.id,
-          sessions: [session],
-          entries: entries,
-          style: styleToUse
-        })
+        body: JSON.stringify({ sessionId: session.id, sessions: [session], entries, style }),
       })
-
-      const data = await res.json()
-      if (data.error) {
-        alert(data.error)
-        setShowSummaryModal(false)
-        return
-      }
-
+      const data: { summary?: string; error?: string } = await response.json()
+      if (!response.ok || !data.summary) throw new Error(data.error || 'Không thể tạo bản tóm tắt.')
       setAiSummary(data.summary)
-    } catch (err) {
-      console.error('Error during AI summarize:', err)
-      alert('Không thể kết nối AI tóm tắt')
-      setShowSummaryModal(false)
+    } catch (error) {
+      console.error('Error during AI summarize:', error)
+      setSummaryError(error instanceof Error ? error.message : 'Không thể kết nối dịch vụ tóm tắt.')
     } finally {
       setAiLoading(false)
     }
   }
 
-  const handleStyleChange = (newStyle: 'default' | 'formal' | 'casual' | 'very_casual') => {
-    setSelectedStyle(newStyle)
-    handleAiSummarize(newStyle)
-  }
-
-  // Create Shared Link
   const handleCreateShareLink = async () => {
     if (!session || !aiSummary) return
     setAiLoading(true)
-
+    setSummaryError('')
     try {
-      const res = await fetch('/api/shared/summary', {
+      const response = await fetch('/api/shared/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: session.id,
           title: `Tóm tắt: ${session.name}`,
           summaryContent: aiSummary,
-          password: sharePassword
-        })
+          password: sharePassword,
+        }),
       })
-
-      const data = await res.json()
-      if (data.error) {
-        alert(data.error)
-        return
-      }
-
-      if (typeof window !== 'undefined') {
-        const link = `${window.location.origin}/shared/summary/${data.id}`
-        setShareLink(link)
-      }
-    } catch (err) {
-      alert('Không thể tạo liên kết chia sẻ')
+      const data: { id?: string; error?: string } = await response.json()
+      if (!response.ok || !data.id) throw new Error(data.error || 'Không thể tạo liên kết.')
+      setShareLink(`${window.location.origin}/shared/summary/${data.id}`)
+    } catch (error) {
+      setSummaryError(error instanceof Error ? error.message : 'Không thể tạo liên kết chia sẻ.')
     } finally {
       setAiLoading(false)
     }
   }
 
+  const handleCopyLink = async () => {
+    await navigator.clipboard.writeText(shareLink)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-host" />
-        <span className="text-slate-400 mt-4 text-sm font-semibold tracking-wide">Đang tải cuộc hội thoại...</span>
+      <div className="app-loading" role="status">
+        <Loader2 className="animate-spin" aria-hidden="true" />
+        <span>Đang tải hội thoại</span>
       </div>
     )
   }
 
-  if (!session) return null
+  if (!session) {
+    return (
+      <div className="detail-not-found">
+        <FileText aria-hidden="true" />
+        <h1>Không mở được hội thoại</h1>
+        <p>{pageError || 'Dữ liệu không tồn tại trên thiết bị này.'}</p>
+        <button type="button" onClick={() => router.replace('/history')}>
+          <ArrowLeft aria-hidden="true" /> Trở về lịch sử
+        </button>
+      </div>
+    )
+  }
 
-  const partnerLangObj = PARTNER_LANGUAGES.find(l => l.code === session.partner_language)
-  const durationMin = Math.floor(session.duration_seconds / 60)
-  const durationSec = session.duration_seconds % 60
-  const firstEntryStartMs = entries[0]?.start_ms ?? 0
+  const partnerLanguage = getPartnerLanguage(session.partner_language)
+  const firstEntryStart = entries[0]?.start_ms ?? 0
+  const duration = `${Math.floor(session.duration_seconds / 60)} phút ${session.duration_seconds % 60} giây`
 
   return (
-    <div className="min-h-screen w-full flex flex-col p-4 md:p-6 relative overflow-hidden bg-background">
-      {/* Decorative Blob */}
-      <div className="absolute top-1/4 left-1/3 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-host/5 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="workspace-shell">
+      <WorkspaceHeader title="Chi tiết hội thoại" subtitle={session.name} />
 
-      {/* Header */}
-      <header className="w-full flex items-center justify-between py-3 px-5 glass-panel rounded-3xl mb-4 relative z-20 border border-white/5">
-        <div className="flex items-center gap-3.5">
-          <button
-            onClick={() => router.push('/history')}
-            className="w-11 h-11 rounded-full border border-white/5 hover:border-white/10 bg-white/5 hover:bg-white/10 text-slate-300 transition-all flex items-center justify-center active:scale-95 cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div>
+      <main className="detail-main">
+        <button type="button" className="back-link" onClick={() => router.push('/history')}>
+          <ArrowLeft aria-hidden="true" /> Lịch sử hội thoại
+        </button>
+
+        <section className="detail-titlebar">
+          <div className="detail-title">
             {renaming ? (
-              <div className="flex items-center gap-2 animate-fadeIn">
+              <div className="rename-control">
+                <label htmlFor="session-name" className="sr-only">Tên hội thoại</label>
                 <input
-                  type="text"
+                  id="session-name"
                   value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="py-1.5 px-4 rounded-full bg-slate-950 border border-white/10 text-xs font-bold text-white focus:outline-none focus:border-host/40"
+                  onChange={(event) => setNewName(event.target.value)}
+                  maxLength={180}
                   autoFocus
                 />
-                <button onClick={handleRename} className="w-8 h-8 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 active:scale-[0.95] transition-all cursor-pointer flex items-center justify-center shrink-0">
-                  <Check className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => setRenaming(false)} className="w-8 h-8 rounded-full bg-white/5 text-slate-400 border border-white/10 active:scale-[0.95] transition-all cursor-pointer flex items-center justify-center shrink-0">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                <button type="button" onClick={handleRename} aria-label="Lưu tên"><Check aria-hidden="true" /></button>
+                <button type="button" onClick={() => setRenaming(false)} aria-label="Hủy đổi tên"><X aria-hidden="true" /></button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm md:text-base font-black text-white leading-none truncate max-w-[150px] sm:max-w-xs md:max-w-md tracking-wide">
-                  {session.name}
-                </h1>
-                <button onClick={() => setRenaming(true)} className="p-1.5 rounded-full hover:bg-white/5 text-slate-400 hover:text-slate-200 cursor-pointer">
-                  <Edit3 className="w-3 h-3" />
+              <div className="title-with-action">
+                <h1>{session.name}</h1>
+                <button type="button" onClick={() => setRenaming(true)} aria-label="Đổi tên hội thoại" title="Đổi tên">
+                  <Edit3 aria-hidden="true" />
                 </button>
               </div>
             )}
-            <p className="text-[9px] text-slate-400 mt-1 font-bold uppercase tracking-wider flex flex-wrap items-center gap-2">
-              <Calendar className="w-3 h-3 text-host" /> {new Date(session.started_at).toLocaleString('vi-VN')}
-              <span className="text-slate-700">•</span>
-              <Clock className="w-3 h-3 text-partner" /> {durationMin}p {durationSec}s
-              <span className="text-slate-700">•</span>
-              <span>{partnerLangObj?.flag} {partnerLangObj?.name}</span>
-            </p>
+            <div className="detail-metadata">
+              <span><CalendarDays aria-hidden="true" />{new Date(session.started_at).toLocaleString('vi-VN')}</span>
+              <span><Clock3 aria-hidden="true" />{duration}</span>
+              <span className="language-inline"><b>{partnerLanguage?.shortName ?? session.partner_language.toUpperCase()}</b>{partnerLanguage?.name ?? session.partner_language}</span>
+            </div>
           </div>
-        </div>
 
-        {/* Action Triggers */}
-        <div className="flex items-center gap-2 z-30">
-          {/* AI Summary Button */}
-          <button
-            onClick={() => handleAiSummarize()}
-            className="h-10 px-4 rounded-full border border-host/30 bg-host/5 hover:bg-host/10 text-host transition-all duration-300 cursor-pointer flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider active:scale-95"
-            title="Tóm tắt AI cuộc họp"
-          >
-            <Sparkles className="w-4 h-4 text-host" />
-            <span className="hidden sm:inline">Tóm tắt AI</span>
-          </button>
-
-          {/* Dropdown Export Button */}
-          <div className="relative">
-            <button
-              onClick={() => setShowExportMenu(!showExportMenu)}
-              className="h-10 px-4 rounded-full border border-partner/30 bg-partner/5 hover:bg-partner/10 text-partner transition-all duration-300 cursor-pointer flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider active:scale-95"
-            >
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">Xuất File</span>
-              <ChevronDown className="w-3 h-3 opacity-60" />
+          <div className="detail-actions">
+            <button type="button" className="ai-command" onClick={() => void handleAiSummarize()} disabled={entries.length === 0}>
+              <Sparkles aria-hidden="true" /> Tóm tắt AI
             </button>
-
-            {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-32 glass-panel rounded-2xl py-1.5 z-50 shadow-2xl border border-white/5 animate-fadeIn">
-                <button
-                  onClick={() => handleExport('pdf')}
-                  className="w-full text-left px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-2.5 cursor-pointer"
-                >
-                  <span className="text-red-400 font-extrabold">PDF</span> Xuất PDF
-                </button>
-                <button
-                  onClick={() => handleExport('txt')}
-                  className="w-full text-left px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-2.5 cursor-pointer"
-                >
-                  <span className="text-blue-400 font-extrabold">TXT</span> Xuất TXT
-                </button>
-                <button
-                  onClick={() => handleExport('json')}
-                  className="w-full text-left px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-2.5 cursor-pointer"
-                >
-                  <span className="text-green-400 font-extrabold">JSON</span> Xuất JSON
-                </button>
-              </div>
-            )}
+            <div className="export-control">
+              <button type="button" onClick={() => setShowExportMenu((current) => !current)} aria-expanded={showExportMenu}>
+                <Download aria-hidden="true" /> Xuất file <ChevronDown aria-hidden="true" />
+              </button>
+              {showExportMenu && (
+                <div className="export-menu">
+                  <button type="button" onClick={() => void handleExport('pdf')}><FileText aria-hidden="true" /> PDF</button>
+                  <button type="button" onClick={() => void handleExport('txt')}><FileText aria-hidden="true" /> Văn bản TXT</button>
+                  <button type="button" onClick={() => void handleExport('json')}><FileJson aria-hidden="true" /> Dữ liệu JSON</button>
+                </div>
+              )}
+            </div>
+            <button type="button" className="delete-command" onClick={handleDelete} aria-label="Xóa hội thoại" title="Xóa vĩnh viễn">
+              <Trash2 aria-hidden="true" />
+            </button>
           </div>
+        </section>
 
-          {/* Delete Button */}
-          <button
-            onClick={handleDelete}
-            className="w-10 h-10 rounded-full border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 transition-all duration-300 cursor-pointer flex items-center justify-center active:scale-95"
-            title="Xóa vĩnh viễn"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
-
-      {/* Main Dialog Screen */}
-      <main className="flex-1 w-full overflow-y-auto space-y-3 relative z-10 pb-6 pr-1">
-        {entries.length === 0 ? (
-          <div className="h-[50vh] flex flex-col items-center justify-center opacity-30 text-center select-none">
-            <Volume2 className="w-14 h-14 text-host mb-3" />
-            <p className="text-sm font-extrabold text-slate-400">Phiên dịch này không có nội dung văn bản nào được lưu</p>
-          </div>
-        ) : (
-          entries.map((entry) => {
-            const isEditing = editingEntryId === entry.id
-
-            return (
-              <div 
-                key={entry.id} 
-                className={`flex flex-col p-4 rounded-3xl border transition-all ${
-                  entry.speaker === 'host' 
-                    ? 'bg-host/5 border-host/15 max-w-[85%] mr-auto' 
-                    : 'bg-partner/5 border-partner/15 max-w-[85%] ml-auto'
-                }`}
-              >
-                {isEditing ? (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-[9px] font-bold text-slate-400 block mb-1">TIẾNG VIỆT:</label>
-                      <textarea
-                        rows={2}
-                        value={entry.speaker === 'host' ? editOrigText : editTransText}
-                        onChange={(e) => {
-                          if (entry.speaker === 'host') setEditOrigText(e.target.value)
-                          else setEditTransText(e.target.value)
-                        }}
-                        className="w-full text-xs p-3 rounded-[14px] bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-host/50 font-medium"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold text-slate-400 block mb-1">{partnerLangObj?.name?.toUpperCase()}:</label>
-                      <textarea
-                        rows={2}
-                        value={entry.speaker === 'partner' ? editOrigText : editTransText}
-                        onChange={(e) => {
-                          if (entry.speaker === 'partner') setEditOrigText(e.target.value)
-                          else setEditTransText(e.target.value)
-                        }}
-                        className="w-full text-xs p-3 rounded-[14px] bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-partner/50 font-medium"
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-2 pt-1">
-                      <button
-                        onClick={() => handleSaveEntryEdit(entry.id)}
-                        className="h-9 px-4 rounded-full bg-host text-white hover:opacity-90 text-xs font-bold cursor-pointer transition-all active:scale-95"
-                      >
-                        Lưu
-                      </button>
-                      <button
-                        onClick={() => setEditingEntryId(null)}
-                        className="h-9 px-4 rounded-full bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 text-xs font-bold cursor-pointer transition-all active:scale-95"
-                      >
-                        Hủy
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative group">
-                    {/* Floating Edit Icon */}
-                    <button
-                      onClick={() => {
-                        setEditingEntryId(entry.id)
-                        setEditOrigText(entry.original_text)
-                        setEditTransText(entry.translated_text)
-                      }}
-                      className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-all cursor-pointer flex items-center justify-center"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <div className="space-y-2 pr-6">
-                      {/* Host translation line */}
-                      {(() => {
-                        const hostText = entry.speaker === 'host' ? entry.original_text : entry.translated_text
-                        const partnerText = entry.speaker === 'partner' ? entry.original_text : entry.translated_text
-                        const timelineStr = formatTimeline(entry.start_ms - firstEntryStartMs)
-
-                        return (
-                          <>
-                            {hostText && hostText.trim() !== '' && (
-                              <div className="flex items-start gap-1.5 animate-fadeIn">
-                                <span className="text-[9px] font-extrabold uppercase text-host tracking-wider min-w-[55px] flex items-center gap-1">
-                                  <span>Host</span>
-                                  <span className="font-mono text-slate-500 text-[8px]">[{timelineStr}]</span>:
-                                </span>
-                                <span className="text-xs text-slate-200 font-semibold leading-relaxed">
-                                  {hostText}
-                                </span>
-                              </div>
-                            )}
-
-                            {partnerText && partnerText.trim() !== '' && (
-                              <div className="flex items-start gap-1.5 animate-fadeIn">
-                                <span className="text-[9px] font-extrabold uppercase text-partner tracking-wider min-w-[55px] truncate flex items-center gap-1">
-                                  <span>{partnerLangObj?.name}</span>
-                                  <span className="font-mono text-slate-500 text-[8px]">[{timelineStr}]</span>:
-                                </span>
-                                <span className="text-xs text-slate-350 leading-relaxed font-medium">
-                                  {partnerText}
-                                </span>
-                              </div>
-                            )}
-                          </>
-                        )
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })
+        {pageError && (
+          <div className="session-alert session-alert--danger" role="alert"><p>{pageError}</p></div>
         )}
+
+        <section className="transcript-archive" aria-labelledby="transcript-heading">
+          <header>
+            <div>
+              <h2 id="transcript-heading">Transcript</h2>
+              <p>{entries.length} đoạn hội thoại đã lưu</p>
+            </div>
+            <span className={`sync-label sync-label--${session.sync_status}`}>
+              {session.sync_status === 'synced' ? 'Đã đồng bộ' : 'Có thay đổi chưa đồng bộ'}
+            </span>
+          </header>
+
+          {entries.length === 0 ? (
+            <div className="transcript-archive__empty">
+              <Volume2 aria-hidden="true" />
+              <strong>Không có nội dung văn bản</strong>
+              <p>Phiên có thể đã kết thúc trước khi nhận diện được lời nói.</p>
+            </div>
+          ) : (
+            <ol className="archive-entry-list">
+              {entries.map((entry) => {
+                const hostText = entry.speaker === 'host' ? entry.original_text : entry.translated_text
+                const partnerText = entry.speaker === 'partner' ? entry.original_text : entry.translated_text
+                const isEditing = editingEntryId === entry.id
+                return (
+                  <li key={entry.id} className={`archive-entry archive-entry--${entry.speaker}`}>
+                    <div className="archive-entry__meta">
+                      <span>{entry.speaker === 'host' ? 'Bạn nói' : `${partnerLanguage?.name ?? 'Đối tác'} nói`}</span>
+                      <time>{formatTimeline(entry.start_ms - firstEntryStart)}</time>
+                      {!isEditing && (
+                        <button type="button" onClick={() => startEditing(entry)} aria-label="Sửa đoạn hội thoại" title="Sửa">
+                          <Edit3 aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+
+                    {isEditing ? (
+                      <div className="entry-editor">
+                        <label>
+                          <span>Tiếng Việt</span>
+                          <textarea
+                            rows={3}
+                            value={entry.speaker === 'host' ? editOrigText : editTransText}
+                            onChange={(event) => entry.speaker === 'host' ? setEditOrigText(event.target.value) : setEditTransText(event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>{partnerLanguage?.name ?? 'Ngôn ngữ đối tác'}</span>
+                          <textarea
+                            rows={3}
+                            value={entry.speaker === 'partner' ? editOrigText : editTransText}
+                            onChange={(event) => entry.speaker === 'partner' ? setEditOrigText(event.target.value) : setEditTransText(event.target.value)}
+                          />
+                        </label>
+                        <footer>
+                          <button type="button" className="secondary-command" onClick={() => setEditingEntryId(null)}>Hủy</button>
+                          <button type="button" className="primary-command" onClick={() => void handleSaveEntryEdit(entry.id)}><Check aria-hidden="true" /> Lưu thay đổi</button>
+                        </footer>
+                      </div>
+                    ) : (
+                      <div className="archive-entry__content">
+                        {hostText.trim() && <div><b>VI</b><p>{hostText}</p></div>}
+                        {partnerText.trim() && <div><b>{partnerLanguage?.shortName ?? 'INTL'}</b><p>{partnerText}</p></div>}
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        </section>
       </main>
 
-      {/* AI SUMMARY POPUP MODAL */}
       {showSummaryModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="w-full max-w-2xl h-[85vh] glass-panel rounded-3xl p-5 md:p-8 flex flex-col relative overflow-hidden shadow-2xl border border-white/5">
-            
-            {/* Modal Title */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/5 shrink-0">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-host animate-pulse" />
-                <h2 className="text-xs font-black text-white uppercase tracking-wider">AI Tóm tắt cuộc họp</h2>
+        <div className="dialog-backdrop" role="presentation">
+          <section className="report-dialog" role="dialog" aria-modal="true" aria-labelledby="summary-title">
+            <header>
+              <div>
+                <span className="dialog-icon dialog-icon--ai"><Sparkles aria-hidden="true" /></span>
+                <div><h2 id="summary-title">Tóm tắt AI</h2><p>{session.name}</p></div>
               </div>
-              <button
-                onClick={() => setShowSummaryModal(false)}
-                className="w-9 h-9 rounded-full border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 cursor-pointer flex items-center justify-center"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+              <button type="button" onClick={() => setShowSummaryModal(false)} aria-label="Đóng"><X aria-hidden="true" /></button>
+            </header>
 
-            {/* Modal scroll contents */}
-            <div className="flex-1 overflow-y-auto py-4 min-h-0 space-y-4">
-              {aiLoading ? (
-                <div className="h-full flex flex-col items-center justify-center py-20 text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-host" />
-                  <p className="text-xs font-black text-slate-200 mt-4 tracking-wide transition-all duration-300 animate-pulse text-center px-4">
-                    {loadingSteps[loadingStep]}
-                  </p>
-                  <div className="w-48 bg-white/5 h-1.5 rounded-full mt-3 overflow-hidden border border-white/5">
-                    <div 
-                      className="bg-host h-full rounded-full transition-all duration-500" 
-                      style={{ width: `${((loadingStep + 1) / loadingSteps.length) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Smart Formatting Selector Panel */}
-                  <div className="glass-panel p-4 rounded-3xl border border-white/5 shrink-0 flex flex-col gap-2 bg-white/[0.01]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Định dạng thông minh (AI Smart Formatting)</span>
-                      <span className="text-[9px] bg-host/10 text-host px-2 py-0.5 rounded-full font-black uppercase tracking-wider">cx/gpt-5.5</span>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
-                      {[
-                        { id: 'default', name: 'Mặc định', desc: 'Dịch tự nhiên, lịch sự', dot: 'bg-blue-500' },
-                        { id: 'formal', name: 'Trang trọng', desc: 'Doanh nghiệp, câu chuẩn', dot: 'bg-indigo-600' },
-                        { id: 'casual', name: 'Thân mật', desc: 'Thoải mái, tự nhiên', dot: 'bg-emerald-500' },
-                        { id: 'very_casual', name: 'Chat nhanh', desc: 'Chữ thường, tối giản', dot: 'bg-amber-500' },
-                      ].map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => handleStyleChange(item.id as any)}
-                          disabled={aiLoading}
-                          className={`p-2.5 rounded-2xl border text-left active:scale-[0.98] transition-all cursor-pointer flex flex-col gap-1 ${
-                            selectedStyle === item.id 
-                              ? 'border-host bg-host/5 ring-1 ring-host' 
-                              : 'border-white/5 bg-white/[0.02] hover:bg-white/5 hover:border-white/10'
-                          }`}
-                        >
-                          <span className="text-[10px] font-black text-white flex items-center gap-1.5 leading-none">
-                            <span className={`w-1.5 h-1.5 rounded-full ${item.dot}`}></span>
-                            {item.name}
-                          </span>
-                          <span className="text-[8px] text-slate-400 font-bold leading-tight truncate">{item.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Share Setup Section */}
-                  <div className="glass-panel bg-white/[0.01] border border-white/5 p-5 rounded-3xl space-y-3.5">
-                    <h3 className="text-xs font-black text-slate-200 flex items-center gap-1.5 uppercase tracking-wide">
-                      <Share2 className="w-4 h-4 text-partner" />
-                      Cấu hình Chia sẻ bảo mật
-                    </h3>
-                    <p className="text-[10px] text-slate-400 leading-normal font-bold">
-                      Bạn có thể tạo một URL chia sẻ công khai cho bất kỳ ai xem bản tóm tắt này. Đặt mật khẩu tùy chọn để bảo vệ tài liệu.
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                      <input
-                        type="text"
-                        placeholder="Đặt mật khẩu bảo mật (để trống nếu công khai)..."
-                        value={sharePassword}
-                        onChange={(e) => setSharePassword(e.target.value)}
-                        className="flex-1 py-3 px-4 rounded-2xl bg-slate-950 border border-white/10 text-xs font-bold text-white focus:outline-none focus:border-host/50 placeholder:text-slate-700"
-                      />
+            {aiLoading && !aiSummary ? (
+              <div className="report-loading" role="status">
+                <Loader2 className="animate-spin" aria-hidden="true" />
+                <strong>Đang phân tích transcript</strong>
+                <p>Thời gian xử lý phụ thuộc độ dài hội thoại và dịch vụ AI đã cấu hình.</p>
+              </div>
+            ) : (
+              <div className="report-layout">
+                <aside className="report-settings">
+                  <fieldset>
+                    <legend>Phong cách trình bày</legend>
+                    {SUMMARY_STYLES.map((style) => (
                       <button
-                        onClick={handleCreateShareLink}
-                        className="h-11 px-5 rounded-full bg-gradient-to-r from-host to-partner text-slate-950 font-black text-xs uppercase tracking-wider cursor-pointer shadow-lg active:scale-95 transition-all duration-300 flex items-center justify-center gap-1"
+                        type="button"
+                        key={style.value}
+                        className={selectedStyle === style.value ? 'is-active' : ''}
+                        onClick={() => void handleAiSummarize(style.value)}
+                        disabled={aiLoading}
                       >
-                        Tạo Link Chia Sẻ
+                        <span><strong>{style.label}</strong><small>{style.description}</small></span>
+                        {selectedStyle === style.value && <Check aria-hidden="true" />}
                       </button>
-                    </div>
+                    ))}
+                  </fieldset>
 
+                  <section className="share-settings">
+                    <h3><LockKeyhole aria-hidden="true" /> Chia sẻ bảo mật</h3>
+                    <p>Mật khẩu là tùy chọn. Người nhận chỉ xem được bản tóm tắt qua liên kết này.</p>
+                    <label htmlFor="share-password">Mật khẩu truy cập</label>
+                    <input
+                      id="share-password"
+                      type="password"
+                      value={sharePassword}
+                      onChange={(event) => setSharePassword(event.target.value)}
+                      placeholder="Để trống nếu không cần"
+                      maxLength={128}
+                    />
+                    <button type="button" onClick={handleCreateShareLink} disabled={!aiSummary || aiLoading}>
+                      <Link2 aria-hidden="true" /> Tạo liên kết
+                    </button>
                     {shareLink && (
-                      <div className="mt-3 p-3.5 bg-partner/5 border border-partner/20 rounded-2xl flex items-center justify-between gap-3 animate-fadeIn">
-                        <span className="text-[10px] font-bold text-slate-300 truncate select-all">{shareLink}</span>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(shareLink)
-                            setCopied(true)
-                            setTimeout(() => setCopied(false), 2000)
-                          }}
-                          className="shrink-0 h-8 px-4.5 rounded-full bg-partner text-slate-950 font-black text-[10px] uppercase tracking-wider hover:opacity-90 flex items-center gap-1 cursor-pointer transition-all duration-300 active:scale-95"
-                        >
-                          {copied ? <Check className="w-3 h-3 stroke-[3]" /> : <Copy className="w-3 h-3" />}
-                          {copied ? 'Đã copy' : 'Copy'}
+                      <div className="share-result">
+                        <input value={shareLink} readOnly aria-label="Liên kết chia sẻ" />
+                        <button type="button" onClick={handleCopyLink} aria-label="Sao chép liên kết">
+                          {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
                         </button>
                       </div>
                     )}
-                  </div>
+                  </section>
+                </aside>
 
-                  {/* HTML Report Publication & Direct View */}
-                  <div className="glass-panel p-4 rounded-3xl border border-white/5 bg-white/[0.01] space-y-3 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Xuất bản tài liệu AI (Publish & Export)</span>
-                      <span className="text-[8px] text-slate-500 font-bold leading-tight">Báo cáo tóm tắt dưới dạng văn bản HTML cấu trúc cao cấp.</span>
-                    </div>
+                <section className="report-preview">
+                  <header>
+                    <div><h3>Bản xem trước</h3><p>Báo cáo HTML từ nội dung tóm tắt</p></div>
                     <button
-                      onClick={() => downloadSummaryHTML(session?.name || 'cuoc_hop', aiSummary, session?.started_at, PARTNER_LANGUAGES.find(l => l.code === session?.partner_language)?.name || session?.partner_language)}
-                      className="h-9 px-4.5 rounded-full bg-host hover:opacity-90 text-white font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-all duration-200 shadow-md active:scale-95 shrink-0"
+                      type="button"
+                      onClick={() => downloadSummaryHTML(session.name, aiSummary, session.started_at, partnerLanguage?.name || session.partner_language)}
+                      disabled={!aiSummary}
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      Tải báo cáo HTML
+                      <Download aria-hidden="true" /> Tải HTML
                     </button>
-                  </div>
-
-                  <div className="glass-panel p-1.5 rounded-3xl border border-white/5 flex flex-col flex-1 min-h-[350px]">
-                    <div className="flex items-center justify-between px-3 py-1.5 shrink-0">
-                      <span className="text-[9px] font-black uppercase text-host tracking-wider">Xem trước báo cáo HTML (Live Report Preview)</span>
-                      <span className="text-[8px] text-slate-500 font-bold">Apple HIG & shadcn UI Style layout</span>
-                    </div>
-                    <iframe 
-                      className="w-full flex-1 border border-white/5 rounded-2xl bg-[#f8fafc] min-h-[350px]"
+                  </header>
+                  {summaryError ? (
+                    <div className="report-error" role="alert"><p>{summaryError}</p><button type="button" onClick={() => void handleAiSummarize()}>Thử lại</button></div>
+                  ) : aiSummary ? (
+                    <iframe
+                      title="Xem trước báo cáo tóm tắt"
+                      sandbox=""
                       srcDoc={generatePremiumHTMLReport({
-                        sessionName: session?.name || 'cuoc_hop',
+                        sessionName: session.name,
                         markdown: aiSummary,
-                        startedAt: session?.started_at,
-                        partnerLang: PARTNER_LANGUAGES.find(l => l.code === session?.partner_language)?.name || session?.partner_language
+                        startedAt: session.started_at,
+                        partnerLang: partnerLanguage?.name || session.partner_language,
                       })}
                     />
-                  </div>
-                </>
-              )}
-            </div>
-
-          </div>
+                  ) : null}
+                </section>
+              </div>
+            )}
+          </section>
         </div>
       )}
-
     </div>
   )
 }

@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.0] - 2026-07-14
+
+### Added
+- **Offline-resilient PWA shell:** The landing page, manifest, icons, and static application assets are cached so the app can open safely when connectivity drops. Pending local records synchronize automatically when connectivity returns.
+- **Ownership migration:** Added a Supabase migration that binds sessions, folders, transcripts, and shared summaries to the authenticated user ID, with legacy data backfill and ownership indexes.
+- **Cloudflare deployment configuration:** Added a Pages worker configuration with the `nodejs_compat` flag required by the generated Next.js Worker.
+- **Regression coverage:** Added tests for salted shared-link passwords, Soniox transcript parsing, and HTML/PDF report escaping.
+
+### Changed
+- **Complete UI/UX redesign:** Rebuilt the Home, live session, history, folder, session detail, administration, and shared-summary experiences for responsive light and dark themes.
+- **Local-first synchronization:** Sessions, folders, and transcript entries are stored locally first and uploaded in owner-safe batches after a connection is available.
+- **Smaller Edge deployment:** Replaced the heavyweight client PDF renderer with browser-native A4 printing. The largest Edge route dropped from approximately 3.1 MiB to 1.6 MiB and the compressed worker estimate is now below 3 MiB.
+
+### Fixed
+- **API security:** Protected the Soniox temporary-key endpoint, validated API inputs, removed embedded provider credentials, and restricted admin/settings access.
+- **Shared summaries:** Replaced legacy password hashes progressively with salted PBKDF2 hashes, added rate-delay protection, and removed unsafe public data reads.
+- **Data quality:** Corrected relative transcript timestamps, deterministic UUID generation, final transcript saving, sync ownership checks, and stale PWA cache recovery.
+
 ## [3.0.3] - 2026-07-13
 
 ### Fixed

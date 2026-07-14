@@ -1,7 +1,27 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { z } from 'zod'
 
 export const runtime = 'edge'
+
+const MASKED_API_KEY = '••••••••••••••••'
+const apiSettingsSchema = z.object({
+  provider: z.enum(['gemini', 'openai']),
+  endpoint: z.string().trim().max(500).optional().default(''),
+  model: z.string().trim().min(1).max(200),
+  api_key: z.string().trim().max(1_000),
+}).superRefine((settings, context) => {
+  if (settings.provider === 'openai' && settings.endpoint) {
+    try {
+      const endpoint = new URL(settings.endpoint)
+      if (endpoint.protocol !== 'https:') {
+        context.addIssue({ code: 'custom', path: ['endpoint'], message: 'Endpoint phải dùng HTTPS' })
+      }
+    } catch {
+      context.addIssue({ code: 'custom', path: ['endpoint'], message: 'Endpoint không hợp lệ' })
+    }
+  }
+})
 
 export async function GET() {
   try {
@@ -24,7 +44,7 @@ export async function GET() {
     }
 
     // Mask the API Key for security
-    const maskedKey = settings?.api_key ? '••••••••••••••••' : ''
+    const maskedKey = settings?.api_key ? MASKED_API_KEY : ''
 
     return NextResponse.json({
       provider: settings?.provider || 'gemini',
@@ -33,8 +53,9 @@ export async function GET() {
       hasApiKey: !!settings?.api_key,
       api_key: maskedKey
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Lỗi hệ thống' }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('Unable to load API settings:', error)
+    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
   }
 }
 
@@ -47,12 +68,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
     }
 
-    const body = await req.json()
-    const { provider, endpoint, model, api_key } = body
-
-    if (!provider || !model) {
-      return NextResponse.json({ error: 'Thiếu thông tin provider hoặc model' }, { status: 400 })
+    const parsedBody = apiSettingsSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: parsedBody.error.issues[0]?.message || 'Cấu hình API không hợp lệ' },
+        { status: 400 }
+      )
     }
+    const { provider, endpoint, model, api_key } = parsedBody.data
 
     const adminSupa = createAdminClient()
     
@@ -64,7 +87,7 @@ export async function POST(req: Request) {
       .single()
 
     let keyToSave = api_key
-    if (api_key === '••••••••••••••••' && existing) {
+    if (api_key === MASKED_API_KEY && existing) {
       keyToSave = existing.api_key // Keep existing key
     } else if (!api_key) {
       return NextResponse.json({ error: 'API Key không được để trống' }, { status: 400 })
@@ -86,7 +109,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Lỗi hệ thống' }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('Unable to save API settings:', error)
+    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
   }
 }

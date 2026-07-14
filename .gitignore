@@ -19,6 +19,15 @@
 
 # production
 /build
+/output/
+
+# local browser automation
+/.playwright-cli/
+
+# Kotlin/Gradle generated state
+/paylingo-mobile/.gradle/
+/paylingo-mobile/**/build/
+/paylingo-mobile/local.properties
 
 # misc
 .DS_Store
@@ -35,6 +44,7 @@ yarn-error.log*
 
 # vercel
 .vercel
+.wrangler
 
 # typescript
 *.tsbuildinfo

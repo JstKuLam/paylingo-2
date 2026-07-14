@@ -1,27 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/supabase/server'
 
 export const runtime = 'edge'
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Check for Mobile app secret bypass
-    const mobileSecret = request.headers.get('x-mobile-secret')
-    const expectedSecret = process.env.PAYLINGO_MOBILE_SECRET || 'REDACTED_LEGACY_MOBILE_HMAC_SECRET'
-    
-    let isAuthorized = false
-    if (mobileSecret === expectedSecret) {
-      isAuthorized = true
-    } else {
-      // Standard user session authentication
-      const supabase = await createClient()
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (!authError && user && user.user_metadata?.username) {
-        isAuthorized = true
-      }
-    }
+    const { data: { user }, error: authError } = await getAuthenticatedUser(request)
 
-    if (!isAuthorized) {
+    if (authError || !user || !user.user_metadata?.username) {
       return NextResponse.json(
         { error: 'Phiên đăng nhập không hợp lệ hoặc không có quyền truy cập' },
         { status: 401 }
@@ -51,19 +37,32 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errText = await response.text()
-      throw new Error(`Soniox API returned status ${response.status}: ${errText}`)
+      console.error('Soniox temporary key request failed:', response.status, errText)
+      return NextResponse.json(
+        { error: 'Dịch vụ nhận dạng giọng nói đang tạm thời không khả dụng' },
+        { status: 502 }
+      )
     }
 
-    const tempKeyResponse = await response.json()
+    const tempKeyResponse: { api_key?: string; expires_at?: string } = await response.json()
+
+    if (!tempKeyResponse.api_key) {
+      console.error('Soniox temporary key response did not include api_key')
+      return NextResponse.json(
+        { error: 'Dịch vụ nhận dạng giọng nói trả về dữ liệu không hợp lệ' },
+        { status: 502 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
       api_key: tempKeyResponse.api_key,
       expires_at: tempKeyResponse.expires_at,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    console.error('Unable to mint Soniox temporary key:', error)
     return NextResponse.json(
-      { error: 'Không thể tạo khóa Soniox tạm thời: ' + error.message },
+      { error: 'Không thể tạo khóa Soniox tạm thời' },
       { status: 500 }
     )
   }

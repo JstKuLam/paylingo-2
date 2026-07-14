@@ -1,10 +1,21 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Geist } from "next/font/google";
+import { Be_Vietnam_Pro, IBM_Plex_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import PwaUpdater from "@/components/PwaUpdater";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const sans = Be_Vietnam_Pro({
+  subsets: ["latin", "vietnamese"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-app-sans",
+  display: "swap",
+});
+const mono = IBM_Plex_Mono({
+  subsets: ["latin", "vietnamese"],
+  weight: ["500", "600"],
+  variable: "--font-app-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "PayLingo - Dịch song ngữ song song real-time",
@@ -18,12 +29,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f3f7f6" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d1518" },
+  ],
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
+
+const themeScript = `(()=>{try{const s=localStorage.getItem('theme');const t=s==='light'||s?.startsWith('light-')?'light':'dark';document.documentElement.dataset.theme=t;document.documentElement.classList.toggle('dark',t==='dark')}catch{}})()`;
 
 export default function RootLayout({
   children,
@@ -31,13 +45,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi" className={cn("h-full antialiased dark", "font-sans", geist.variable)} suppressHydrationWarning>
+    <html
+      lang="vi"
+      data-theme="dark"
+      className={cn("h-full antialiased dark", "font-sans", sans.variable, mono.variable)}
+      suppressHydrationWarning
+    >
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
+      <body className="min-h-full bg-background text-foreground font-sans">
         <PwaUpdater />
         {children}
       </body>

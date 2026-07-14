@@ -43,3 +43,15 @@ export function createAdminClient() {
     }
   )
 }
+
+export async function getAuthenticatedUser(request?: Request) {
+  const authorization = request?.headers.get('authorization')
+  const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]
+
+  if (bearerToken) {
+    return createAdminClient().auth.getUser(bearerToken)
+  }
+
+  const supabase = await createClient()
+  return supabase.auth.getUser()
+}

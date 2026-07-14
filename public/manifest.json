@@ -4,8 +4,8 @@
   "description": "Ứng dụng dịch song ngữ hội thoại trực tiếp 2 chiều độ trễ tối thiểu.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#03000a",
-  "theme_color": "#03000a",
+  "background_color": "#0d1518",
+  "theme_color": "#0b6bcb",
   "orientation": "any",
   "icons": [
     {

@@ -1,9 +1,12 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* standard Next.js config options here */
-  turbopack: {},
-};
+  turbopack: {
+    root: process.cwd(),
+  },
+  experimental: {
+    optimizePackageImports: ['lucide-react', '@base-ui/react'],
+  },
+}
 
-export default nextConfig;
-
+export default nextConfig

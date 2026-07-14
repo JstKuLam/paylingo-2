@@ -25,7 +25,8 @@ export async function GET() {
     }
 
     return NextResponse.json(logs || [])
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Lỗi hệ thống' }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('Unable to load AI usage logs:', error)
+    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
   }
 }

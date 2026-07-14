@@ -18,6 +18,16 @@ export interface TranscriptMessage {
   is_final: boolean
 }
 
+export interface SonioxTranscriptToken {
+  text: string
+  is_final?: boolean
+  language?: string
+  translation_status?: 'original' | 'translation' | 'none'
+  source_language?: string
+  start_ms?: number
+  end_ms?: number
+}
+
 const FILLER_WORDS = new Set([
   'uh', 'um', 'uhm', 'er', 'eh', 'ah', 'umm', 'uhhh', 'ummm',
   'ờ', 'ừm', 'ừ', 'ơ', 'hơ', 'ư', 'ưm', 'oh', 'a', 'ha'
@@ -80,9 +90,8 @@ function cleanTranscriptText(text: string): string {
  * Seamlessly pairs translation tokens (which lack start_ms) with their corresponding original tokens.
  */
 export function parseTokensToMessages(
-  finalTokens: readonly any[],
-  partialTokens: readonly any[],
-  partnerLanguage: string
+  finalTokens: readonly SonioxTranscriptToken[],
+  partialTokens: readonly SonioxTranscriptToken[],
 ): TranscriptMessage[] {
   const allTokens = [...finalTokens, ...partialTokens]
   if (allTokens.length === 0) return []
@@ -128,7 +137,7 @@ export function parseTokensToMessages(
       const startMs = token.start_ms ?? 0
       const endMs = token.end_ms ?? 0
       
-      let lastMsg = speaker === 'host' ? lastHostMessage : lastPartnerMessage
+      const lastMsg = speaker === 'host' ? lastHostMessage : lastPartnerMessage
 
       const shouldStartNew =
         !lastMsg ||
@@ -163,7 +172,7 @@ export function parseTokensToMessages(
       }
     } else {
       // Translation token
-      let lastMsg = speaker === 'host' ? lastHostMessage : lastPartnerMessage
+      const lastMsg = speaker === 'host' ? lastHostMessage : lastPartnerMessage
 
       if (!lastMsg) {
         // Fallback: if no original message exists yet, create a placeholder
@@ -211,26 +220,39 @@ export function parseTokensToMessages(
  * Used to map client-side arbitrary message IDs to standard database UUID format.
  */
 export function stringToUUID(str: string): string {
-  let hash = 0
+  let h1 = 1779033703
+  let h2 = 3144134277
+  let h3 = 1013904242
+  let h4 = 2773480762
+
   for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i)
-    hash |= 0
+    const code = str.charCodeAt(i)
+    h1 = h2 ^ Math.imul(h1 ^ code, 597399067)
+    h2 = h3 ^ Math.imul(h2 ^ code, 2869860233)
+    h3 = h4 ^ Math.imul(h3 ^ code, 951274213)
+    h4 = h1 ^ Math.imul(h4 ^ code, 2716044179)
   }
-  
-  const hex = '0123456789abcdef'
-  let seed = ''
-  let r = Math.abs(hash)
-  for (let i = 0; i < 32; i++) {
-    r = (r * 1103515245 + 12345) & 0x7fffffff
-    seed += hex[r % 16]
-  }
-  
+
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067)
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233)
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213)
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179)
+
+  const bytes = new Uint8Array(16)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(0, (h1 ^ h2 ^ h3 ^ h4) >>> 0)
+  view.setUint32(4, (h2 ^ h1) >>> 0)
+  view.setUint32(8, (h3 ^ h1) >>> 0)
+  view.setUint32(12, (h4 ^ h1) >>> 0)
+  bytes[6] = (bytes[6] & 0x0f) | 0x50
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+
+  const seed = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
   return [
     seed.slice(0, 8),
     seed.slice(8, 12),
-    '4' + seed.slice(13, 16),
-    'a' + seed.slice(17, 20),
+    seed.slice(12, 16),
+    seed.slice(16, 20),
     seed.slice(20, 32)
   ].join('-')
 }
-

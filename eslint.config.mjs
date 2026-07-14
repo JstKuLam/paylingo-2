@@ -9,8 +9,13 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".vercel/**",
+    ".wrangler/**",
     "out/**",
     "build/**",
+    "output/**",
+    "paylingo-mobile/**/build/**",
+    "scratch/**",
     "next-env.d.ts",
   ]),
 ]);
