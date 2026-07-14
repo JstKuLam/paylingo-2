@@ -81,10 +81,12 @@ export default function SessionDetailPage({ params }: PageProps) {
           .where('session_id')
           .equals(id)
           .sortBy('start_ms')
-        setSession(localSession)
-        setNewName(localSession.name)
-        setEntries(localEntries)
-        return
+        if (localEntries.length > 0 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+          setSession(localSession)
+          setNewName(localSession.name)
+          setEntries(localEntries)
+          return
+        }
       }
 
       const { data: cloudSession, error: sessionError } = await supabase
