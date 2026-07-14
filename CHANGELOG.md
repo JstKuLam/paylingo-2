@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.1] - 2026-07-14
+
+### Fixed
+- **Theme fidelity:** Rebuilt the dark palette as a neutral graphite and steel control surface, removing the remaining teal cast from the entry screen.
+- **Tech-blue light mode:** Applied blue-white surfaces, technical blue borders, and consistent blue action states throughout the interface.
+- **Theme consistency:** Replaced fixed blue, teal, white, and report-preview colors in primary, recording, AI, sharing, and archive controls with theme tokens.
+
 ## [3.1.0] - 2026-07-14
 
 ### Added

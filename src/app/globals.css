@@ -5,55 +5,59 @@
 
 :root,
 [data-theme="light"] {
-  --background: #f3f7f6;
-  --foreground: #172124;
+  --background: #edf5ff;
+  --foreground: #10243a;
   --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --surface-muted: #eaf0ef;
-  --surface-strong: #dce6e4;
-  --text-muted: #5d6a6d;
-  --text-soft: #718084;
-  --border: #cdd9d7;
-  --border-strong: #aebfbc;
-  --primary: #0b6bcb;
-  --primary-hover: #0858aa;
-  --primary-soft: #e4f0ff;
-  --partner: #007f77;
-  --partner-soft: #dcf3ef;
-  --danger: #c83f3a;
-  --danger-soft: #fbe7e5;
-  --warning: #986000;
-  --warning-soft: #fff1ce;
-  --success: #287a4b;
-  --success-soft: #e1f2e8;
-  --shadow-sm: 0 1px 2px rgb(23 33 36 / 0.07);
-  --shadow-md: 0 12px 30px rgb(23 33 36 / 0.1);
+  --surface-raised: #f8fbff;
+  --surface-muted: #e3effc;
+  --surface-strong: #c9def5;
+  --text-muted: #52677d;
+  --text-soft: #72869a;
+  --border: #bfd3e8;
+  --border-strong: #96b7d9;
+  --primary: #006fc9;
+  --primary-hover: #005aa5;
+  --primary-soft: #dceeff;
+  --partner: #007f9f;
+  --partner-soft: #daf2f9;
+  --danger: #c3393b;
+  --danger-soft: #fee8e8;
+  --warning: #915b00;
+  --warning-soft: #fff0d3;
+  --success: #087a5b;
+  --success-soft: #dff5ed;
+  --on-primary: #ffffff;
+  --on-danger: #ffffff;
+  --shadow-sm: 0 1px 2px rgb(16 36 58 / 0.08);
+  --shadow-md: 0 12px 30px rgb(16 62 105 / 0.13);
   color-scheme: light;
 }
 
 [data-theme="dark"],
 .dark {
-  --background: #0d1518;
-  --foreground: #edf5f3;
-  --surface: #132024;
-  --surface-raised: #18282d;
-  --surface-muted: #1e3035;
-  --surface-strong: #294047;
-  --text-muted: #a8b7b5;
-  --text-soft: #879a98;
-  --border: #30464b;
-  --border-strong: #496268;
-  --primary: #62aef6;
-  --primary-hover: #85c1fa;
-  --primary-soft: #173a55;
-  --partner: #56c9bd;
-  --partner-soft: #173f3c;
-  --danger: #ff817b;
-  --danger-soft: #4b2728;
-  --warning: #f3ba55;
-  --warning-soft: #49391e;
-  --success: #77cc98;
-  --success-soft: #1c3d2c;
+  --background: #121417;
+  --foreground: #f0f3f6;
+  --surface: #191d22;
+  --surface-raised: #22272d;
+  --surface-muted: #2a3037;
+  --surface-strong: #38414a;
+  --text-muted: #b3bdc7;
+  --text-soft: #8996a4;
+  --border: #39424c;
+  --border-strong: #53606d;
+  --primary: #78b6e7;
+  --primary-hover: #9bcaf0;
+  --primary-soft: #193c56;
+  --partner: #91aabd;
+  --partner-soft: #24343f;
+  --danger: #ff918a;
+  --danger-soft: #4e2b2d;
+  --warning: #f2bd67;
+  --warning-soft: #4b3a22;
+  --success: #83c8a2;
+  --success-soft: #203d30;
+  --on-primary: #0d1821;
+  --on-danger: #281315;
   --shadow-sm: none;
   --shadow-md: 0 18px 44px rgb(0 0 0 / 0.22);
   color-scheme: dark;
@@ -67,7 +71,7 @@
   --color-popover: var(--surface-raised);
   --color-popover-foreground: var(--foreground);
   --color-primary: var(--primary);
-  --color-primary-foreground: var(--background);
+  --color-primary-foreground: var(--on-primary);
   --color-secondary: var(--surface-muted);
   --color-secondary-foreground: var(--foreground);
   --color-muted: var(--surface-muted);
@@ -163,9 +167,9 @@ button,
   flex-direction: column;
   justify-content: space-between;
   padding: clamp(32px, 5vw, 72px);
-  color: #eef8f6;
-  background: #10282d;
-  border-right: 1px solid #345057;
+  color: #f0f3f6;
+  background: #171a1e;
+  border-right: 1px solid #3a444e;
 }
 
 .entry-brand-row {
@@ -176,8 +180,8 @@ button,
 
 .entry-product-name {
   padding-left: 16px;
-  border-left: 1px solid #49666c;
-  color: #b8cdca;
+  border-left: 1px solid #4b5661;
+  color: #b9c4ce;
   font-size: 13px;
   font-weight: 600;
 }
@@ -209,7 +213,7 @@ button,
 .entry-intro > p:last-child {
   max-width: 610px;
   margin: 24px 0 0;
-  color: #b7cbc8;
+  color: #b7c2cc;
   font-size: 17px;
   line-height: 1.7;
 }
@@ -219,14 +223,14 @@ button,
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   padding-top: 24px;
-  border-top: 1px solid #355159;
+  border-top: 1px solid #3a444e;
 }
 
 .entry-proof div {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  color: #c7d8d5;
+  color: #c7d0d8;
   font-size: 13px;
 }
 
@@ -234,7 +238,7 @@ button,
   width: 18px;
   height: 18px;
   flex: 0 0 18px;
-  color: #71d6cb;
+  color: #8bc2e7;
 }
 
 .entry-action {
@@ -396,15 +400,15 @@ button,
   padding: 0 20px;
   border: 1px solid transparent;
   border-radius: 8px;
-  color: #ffffff;
-  background: #0b6bcb;
+  color: var(--on-primary);
+  background: var(--primary);
   font-weight: 700;
   cursor: pointer;
   transition: background 160ms ease, transform 160ms ease;
 }
 
 .primary-command:hover:not(:disabled) {
-  background: #0858aa;
+  background: var(--primary-hover);
 }
 
 .primary-command:active:not(:disabled) {
@@ -1120,25 +1124,25 @@ button,
 }
 
 .record-command--start {
-  color: #ffffff;
-  border-color: #0b6bcb;
-  background: #0b6bcb;
+  color: var(--on-primary);
+  border-color: var(--primary);
+  background: var(--primary);
 }
 
 .record-command--start:hover {
-  border-color: #0858aa;
-  background: #0858aa;
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
 }
 
 .record-command--stop {
-  color: #ffffff;
-  border-color: #b93631;
-  background: #b93631;
+  color: var(--on-danger);
+  border-color: var(--danger);
+  background: var(--danger);
 }
 
 .record-command--stop:hover:not(:disabled) {
-  border-color: #982b27;
-  background: #982b27;
+  border-color: color-mix(in srgb, var(--danger) 82%, #000000);
+  background: color-mix(in srgb, var(--danger) 82%, #000000);
 }
 
 .record-command svg {
@@ -1408,8 +1412,8 @@ button,
   padding: 0 13px;
   border: 1px solid var(--primary);
   border-radius: 6px;
-  color: #ffffff;
-  background: #0b6bcb;
+  color: var(--on-primary);
+  background: var(--primary);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -2004,9 +2008,9 @@ button,
 }
 
 .detail-actions .ai-command {
-  color: #ffffff;
-  border-color: #0b6bcb;
-  background: #0b6bcb;
+  color: var(--on-primary);
+  border-color: var(--primary);
+  background: var(--primary);
 }
 
 .detail-actions .ai-command:disabled {
@@ -2551,8 +2555,8 @@ button,
   margin-top: 8px;
   border: 1px solid var(--partner);
   border-radius: 6px;
-  color: #ffffff;
-  background: #007f77;
+  color: var(--on-primary);
+  background: var(--partner);
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
@@ -2630,7 +2634,7 @@ button,
   flex: 1;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .report-error {
