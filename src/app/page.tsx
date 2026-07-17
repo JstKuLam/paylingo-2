@@ -123,11 +123,7 @@ export default function Home() {
 
         <div className="entry-intro">
           <p className="eyebrow">Phiên dịch hội thoại trực tiếp</p>
-          <h1>Hai người. Hai ngôn ngữ. Một cuộc trò chuyện liền mạch.</h1>
-          <p>
-            Đặt thiết bị giữa bàn, chọn ngôn ngữ của đối tác và bắt đầu nói. Mỗi phía chỉ nhìn thấy
-            phần nội dung dành cho mình.
-          </p>
+          <h1>Phiên dịch hội thoại song ngữ tức thì.</h1>
         </div>
 
         <div className="entry-proof" aria-label="Khả năng chính">
