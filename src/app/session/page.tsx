@@ -622,18 +622,13 @@ export default function SessionPage() {
         return
       }
 
-      // Check if logged in via Azure OAuth
-      const isAzure = session.user.app_metadata?.provider === 'azure' ||
-                      session.user.identities?.some(id => id.provider === 'azure')
       const email = session.user.email
 
-      if (isAzure) {
-        const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-        if (!isAllowedDomain) {
-          await supabase.auth.signOut()
-          router.replace('/?error=domain_restricted')
-          return
-        }
+      const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+      if (!isAllowedDomain) {
+        await supabase.auth.signOut()
+        router.replace('/?error=domain_restricted')
+        return
       }
 
       const username = session?.user?.user_metadata?.username ||

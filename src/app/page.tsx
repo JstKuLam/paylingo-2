@@ -9,6 +9,7 @@ import {
   Languages,
   Loader2,
   LockKeyhole,
+  Mail,
   Moon,
   Sun,
 } from 'lucide-react'
@@ -16,20 +17,23 @@ import PayPayLogo from '@/components/PayPayLogo'
 import { useTheme } from '@/hooks/useTheme'
 import { createClient } from '@/lib/supabase/client'
 
-const MicrosoftIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 21 21" width="21" height="21" {...props}>
-    <rect x="0" y="0" width="9.8" height="9.8" fill="#f25022" />
-    <rect x="11.2" y="0" width="9.8" height="9.8" fill="#7fba00" />
-    <rect x="0" y="11.2" width="9.8" height="9.8" fill="#00a4ef" />
-    <rect x="11.2" y="11.2" width="9.8" height="9.8" fill="#ffb900" />
-  </svg>
-)
-
 export default function Home() {
   const router = useRouter()
   const { theme, changeTheme } = useTheme()
+  const [email, setEmail] = useState('')
+  const [otp, setOtp] = useState('')
+  const [isOtpSent, setIsOtpSent] = useState(false)
+  const [resendCountdown, setResendCountdown] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    if (resendCountdown > 0) {
+      timer = setTimeout(() => setResendCountdown(prev => prev - 1), 1000)
+    }
+    return () => clearTimeout(timer)
+  }, [resendCountdown])
 
   useEffect(() => {
     const checkUser = async () => {
@@ -44,16 +48,12 @@ export default function Home() {
       const { data: { session } } = await supabase.auth.getSession()
 
       if (session) {
-        const email = session.user.email
-        const isAzure = session.user.app_metadata?.provider === 'azure' ||
-                        session.user.identities?.some(id => id.provider === 'azure')
-        if (isAzure) {
-          const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-          if (!isAllowedDomain) {
-            await supabase.auth.signOut()
-            setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
-            return
-          }
+        const userEmail = session.user.email
+        const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+        if (!isAllowedDomain) {
+          await supabase.auth.signOut()
+          setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+          return
         }
         router.replace('/session')
       }
@@ -67,34 +67,88 @@ export default function Home() {
         if (errParam === 'domain_restricted') {
           setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
         } else if (errParam === 'auth_failed') {
-          setError('Đăng nhập SSO thất bại. Vui lòng thử lại.')
+          setError('Xác thực thất bại. Vui lòng thử lại.')
         } else if (errParam === 'unauthorized') {
-          setError('Bạn chưa được cấp quyền truy cập. Vui lòng đăng nhập qua Microsoft SSO.')
+          setError('Bạn chưa được cấp quyền truy cập. Vui lòng đăng nhập bằng email công ty.')
         }
       }, 0)
       return () => clearTimeout(timer)
     }
   }, [router])
 
-  const handleSSOLogin = async () => {
+  const handleSendOTP = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!email) return
+
+    const sanitizedEmail = email.trim().toLowerCase()
+    const isAllowedDomain = sanitizedEmail.endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+    if (!isAllowedDomain) {
+      setError('Chỉ chấp nhận email thuộc domain công ty (@pay2pay.vn).')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
+
     try {
       const supabase = createClient()
-      const { error: authError } = await supabase.auth.signInWithOAuth({
-        provider: 'azure',
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: sanitizedEmail,
         options: {
-          scopes: 'email openid profile',
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
+          shouldCreateUser: true,
+        }
       })
-      if (authError) {
-        setError('Không thể khởi động đăng nhập SSO: ' + authError.message)
-        setIsLoading(false)
+
+      if (otpError) {
+        throw otpError
       }
-    } catch (caughtError) {
-      console.error('SSO sign-in failed:', caughtError)
-      setError('Mất kết nối tới máy chủ SSO. Vui lòng thử lại.')
+
+      setIsOtpSent(true)
+      setResendCountdown(60)
+    } catch (err) {
+      console.error('Failed to send OTP:', err)
+      setError(err instanceof Error ? err.message : 'Không thể gửi mã xác thực. Vui lòng thử lại.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!otp) return
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      const sanitizedEmail = email.trim().toLowerCase()
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email: sanitizedEmail,
+        token: otp.trim(),
+        type: 'email'
+      })
+
+      if (verifyError) {
+        throw verifyError
+      }
+
+      if (data.session) {
+        const userEmail = data.session.user.email
+        const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+        if (!isAllowedDomain) {
+          await supabase.auth.signOut()
+          setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+          return
+        }
+        router.replace('/session')
+      } else {
+        throw new Error('Không nhận được phiên đăng nhập hợp lệ.')
+      }
+    } catch (err) {
+      console.error('Failed to verify OTP:', err)
+      setError(err instanceof Error ? err.message : 'Mã xác thực không hợp lệ hoặc đã hết hạn.')
+    } finally {
       setIsLoading(false)
     }
   }
@@ -151,7 +205,7 @@ export default function Home() {
         <div className="entry-form-wrap">
           <div className="entry-heading">
             <h2>Bắt đầu phiên dịch</h2>
-            <p>Vui lòng đăng nhập bằng tài khoản email công ty để truy cập ứng dụng.</p>
+            <p>Vui lòng xác thực bằng tài khoản email công ty để truy cập ứng dụng.</p>
           </div>
 
           <div style={{ marginTop: '36px' }}>
@@ -161,19 +215,98 @@ export default function Home() {
               </p>
             )}
 
-            <button
-              type="button"
-              onClick={handleSSOLogin}
-              className="primary-command"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : (
-                <MicrosoftIcon aria-hidden="true" style={{ marginRight: '8px' }} />
-              )}
-              <span>Đăng nhập với Microsoft SSO</span>
-            </button>
+            {!isOtpSent ? (
+              <form onSubmit={handleSendOTP} className="entry-form" noValidate>
+                <div className="field-group">
+                  <label htmlFor="email">Email công ty</label>
+                  <div className="input-with-icon">
+                    <Mail aria-hidden="true" />
+                    <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => {
+                        setEmail(event.target.value)
+                        setError(null)
+                      }}
+                      placeholder="Ví dụ: nguyenvan-a@pay2pay.vn"
+                      autoComplete="email"
+                      disabled={isLoading}
+                      aria-invalid={Boolean(error)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="primary-command" disabled={isLoading || !email.trim()}>
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : null}
+                  <span>{isLoading ? 'Đang gửi mã...' : 'Gửi mã xác thực'}</span>
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOTP} className="entry-form" noValidate>
+                <div className="field-group">
+                  <label htmlFor="otp">Mã xác thực OTP (6 chữ số)</label>
+                  <p className="field-help" style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--color-secondary-text)' }}>
+                    Mã xác thực đã được gửi đến email <strong>{email}</strong>. Vui lòng kiểm tra hộp thư.
+                  </p>
+                  <div className="input-with-icon">
+                    <LockKeyhole aria-hidden="true" />
+                    <input
+                      id="otp"
+                      name="otp"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={otp}
+                      onChange={(event) => {
+                        setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))
+                        setError(null)
+                      }}
+                      placeholder="Điền 6 chữ số"
+                      maxLength={6}
+                      disabled={isLoading}
+                      aria-invalid={Boolean(error)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="primary-command" disabled={isLoading || otp.trim().length !== 6}>
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : null}
+                  <span>{isLoading ? 'Đang xác thực...' : 'Đăng nhập'}</span>
+                </button>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', fontSize: '14px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOtpSent(false)
+                      setOtp('')
+                      setError(null)
+                    }}
+                    disabled={isLoading}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-primary-text)', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                  >
+                    Thay đổi email
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendOTP()}
+                    disabled={isLoading || resendCountdown > 0}
+                    style={{ background: 'none', border: 'none', color: resendCountdown > 0 ? 'var(--color-muted)' : 'var(--color-primary-text)', cursor: 'pointer', textDecoration: resendCountdown > 0 ? 'none' : 'underline', padding: 0 }}
+                  >
+                    {resendCountdown > 0 ? `Gửi lại sau (${resendCountdown}s)` : 'Gửi lại mã'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
 
           <div className="entry-footnote">
