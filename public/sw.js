@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'paylingo-';
-const STATIC_CACHE = `${CACHE_PREFIX}static-v2`;
-const SHELL_CACHE = `${CACHE_PREFIX}shell-v2`;
+const STATIC_CACHE = `${CACHE_PREFIX}static-v3`;
+const SHELL_CACHE = `${CACHE_PREFIX}shell-v3`;
 const SHELL_URLS = ['/', '/manifest.json', '/icons/icon-192x192.png', '/icons/icon-512x512.png'];
 
 self.addEventListener('install', (event) => {
