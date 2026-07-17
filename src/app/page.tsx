@@ -21,8 +21,7 @@ export default function Home() {
   const router = useRouter()
   const { theme, changeTheme } = useTheme()
   const [email, setEmail] = useState('')
-  const [otp, setOtp] = useState('')
-  const [isOtpSent, setIsOtpSent] = useState(false)
+  const [isLinkSent, setIsLinkSent] = useState(false)
   const [resendCountdown, setResendCountdown] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -76,7 +75,7 @@ export default function Home() {
     }
   }, [router])
 
-  const handleSendOTP = async (e?: React.FormEvent) => {
+  const handleSendLink = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     if (!email) return
 
@@ -96,6 +95,7 @@ export default function Home() {
         email: sanitizedEmail,
         options: {
           shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         }
       })
 
@@ -103,51 +103,11 @@ export default function Home() {
         throw otpError
       }
 
-      setIsOtpSent(true)
+      setIsLinkSent(true)
       setResendCountdown(60)
     } catch (err) {
-      console.error('Failed to send OTP:', err)
-      setError(err instanceof Error ? err.message : 'Không thể gửi mã xác thực. Vui lòng thử lại.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!otp) return
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const supabase = createClient()
-      const sanitizedEmail = email.trim().toLowerCase()
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        email: sanitizedEmail,
-        token: otp.trim(),
-        type: 'email'
-      })
-
-      if (verifyError) {
-        throw verifyError
-      }
-
-      if (data.session) {
-        const userEmail = data.session.user.email
-        const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-        if (!isAllowedDomain) {
-          await supabase.auth.signOut()
-          setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
-          return
-        }
-        router.replace('/session')
-      } else {
-        throw new Error('Không nhận được phiên đăng nhập hợp lệ.')
-      }
-    } catch (err) {
-      console.error('Failed to verify OTP:', err)
-      setError(err instanceof Error ? err.message : 'Mã xác thực không hợp lệ hoặc đã hết hạn.')
+      console.error('Failed to send magic link:', err)
+      setError(err instanceof Error ? err.message : 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
     } finally {
       setIsLoading(false)
     }
@@ -215,8 +175,8 @@ export default function Home() {
               </p>
             )}
 
-            {!isOtpSent ? (
-              <form onSubmit={handleSendOTP} className="entry-form" noValidate>
+            {!isLinkSent ? (
+              <form onSubmit={handleSendLink} className="entry-form" noValidate>
                 <div className="field-group">
                   <label htmlFor="email">Email công ty</label>
                   <div className="input-with-icon">
@@ -243,51 +203,28 @@ export default function Home() {
                   {isLoading ? (
                     <Loader2 className="animate-spin" aria-hidden="true" />
                   ) : null}
-                  <span>{isLoading ? 'Đang gửi mã...' : 'Gửi mã xác thực'}</span>
+                  <span>{isLoading ? 'Đang gửi liên kết...' : 'Gửi liên kết đăng nhập'}</span>
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleVerifyOTP} className="entry-form" noValidate>
-                <div className="field-group">
-                  <label htmlFor="otp">Mã xác thực OTP (6 chữ số)</label>
-                  <p className="field-help" style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--color-secondary-text)' }}>
-                    Mã xác thực đã được gửi đến email <strong>{email}</strong>. Vui lòng kiểm tra hộp thư.
-                  </p>
-                  <div className="input-with-icon">
-                    <LockKeyhole aria-hidden="true" />
-                    <input
-                      id="otp"
-                      name="otp"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={otp}
-                      onChange={(event) => {
-                        setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))
-                        setError(null)
-                      }}
-                      placeholder="Điền 6 chữ số"
-                      maxLength={6}
-                      disabled={isLoading}
-                      aria-invalid={Boolean(error)}
-                      autoFocus
-                    />
+              <div className="entry-form" style={{ textAlign: 'left' }}>
+                <div className="field-group" style={{ marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', background: 'rgba(59, 130, 246, 0.1)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                    <Mail aria-hidden="true" style={{ color: 'var(--color-primary-text)', flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '15px', color: 'var(--color-primary-text)' }}>Đã gửi link đăng nhập</h4>
+                      <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: 'var(--color-secondary-text)', lineHeight: '1.5' }}>
+                        Chúng tôi đã gửi một liên kết đăng nhập đến email <strong>{email}</strong>. Vui lòng mở hộp thư Outlook và click vào liên kết để đăng nhập.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <button type="submit" className="primary-command" disabled={isLoading || otp.trim().length !== 6}>
-                  {isLoading ? (
-                    <Loader2 className="animate-spin" aria-hidden="true" />
-                  ) : null}
-                  <span>{isLoading ? 'Đang xác thực...' : 'Đăng nhập'}</span>
-                </button>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', fontSize: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginTop: '16px' }}>
                   <button
                     type="button"
                     onClick={() => {
-                      setIsOtpSent(false)
-                      setOtp('')
+                      setIsLinkSent(false)
                       setError(null)
                     }}
                     disabled={isLoading}
@@ -298,14 +235,14 @@ export default function Home() {
 
                   <button
                     type="button"
-                    onClick={() => handleSendOTP()}
+                    onClick={() => handleSendLink()}
                     disabled={isLoading || resendCountdown > 0}
                     style={{ background: 'none', border: 'none', color: resendCountdown > 0 ? 'var(--color-muted)' : 'var(--color-primary-text)', cursor: 'pointer', textDecoration: resendCountdown > 0 ? 'none' : 'underline', padding: 0 }}
                   >
-                    {resendCountdown > 0 ? `Gửi lại sau (${resendCountdown}s)` : 'Gửi lại mã'}
+                    {resendCountdown > 0 ? `Gửi lại sau (${resendCountdown}s)` : 'Gửi lại email'}
                   </button>
                 </div>
-              </form>
+              </div>
             )}
           </div>
 
