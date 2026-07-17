@@ -375,7 +375,7 @@ export default function AdminPage() {
 
       const credential = await navigator.credentials.get({
         publicKey: {
-          challenge: base64ToArrayBuffer(challengeToken),
+          challenge: new TextEncoder().encode(challengeToken),
           allowCredentials: [{
             type: 'public-key',
             id: base64ToArrayBuffer(credentialId)
