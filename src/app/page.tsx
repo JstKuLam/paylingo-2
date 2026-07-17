@@ -117,7 +117,7 @@ export default function Home() {
     <main className="entry-shell">
       <section className="entry-context" aria-label="Giới thiệu ứng dụng">
         <div className="entry-brand-row">
-          <PayPayLogo className="h-10 w-auto" width={118} height={45} />
+          <PayPayLogo className="h-14 w-auto" width={178} height={56} />
           <span className="entry-product-name">Live Interpreter</span>
         </div>
 
