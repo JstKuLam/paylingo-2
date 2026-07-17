@@ -1,6 +1,6 @@
 export const runtime = 'edge'
 
-import FolderDetailClient from './FolderDetailClient'
+import { FolderDetailClient } from './ClientWrapper'
 
 interface PageProps {
   params: Promise<{ id: string }>

@@ -1,6 +1,6 @@
 export const runtime = 'edge'
 
-import SharedSummaryClient from './SharedSummaryClient'
+import { SharedSummaryClient } from './ClientWrapper'
 
 interface PageProps {
   params: Promise<{ id: string }>

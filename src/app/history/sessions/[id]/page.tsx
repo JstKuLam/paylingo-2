@@ -1,6 +1,6 @@
 export const runtime = 'edge'
 
-import SessionDetailClient from './SessionDetailClient'
+import { SessionDetailClient } from './ClientWrapper'
 
 interface PageProps {
   params: Promise<{ id: string }>
