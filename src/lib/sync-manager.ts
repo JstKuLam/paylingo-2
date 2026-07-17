@@ -14,8 +14,11 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
   const supabase = createClient()
   const { data: { session } } = await supabase.auth.getSession()
 
-  const username = session?.user?.user_metadata?.username
   const ownerId = session?.user?.id
+  const username = session?.user?.user_metadata?.username ||
+                   session?.user?.user_metadata?.full_name ||
+                   session?.user?.user_metadata?.name ||
+                   session?.user?.email?.split('@')[0]
   if (!session || !username || !ownerId) {
     return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Unauthenticated' }
   }

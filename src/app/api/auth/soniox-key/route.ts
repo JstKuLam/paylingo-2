@@ -7,9 +7,42 @@ export async function POST(request: NextRequest) {
   try {
     const { data: { user }, error: authError } = await getAuthenticatedUser(request)
 
-    if (authError || !user || !user.user_metadata?.username) {
+    if (authError || !user) {
       return NextResponse.json(
-        { error: 'Phiên đăng nhập không hợp lệ hoặc không có quyền truy cập' },
+        { error: 'Phiên đăng nhập không hợp lệ' },
+        { status: 401 }
+      )
+    }
+
+    const isAzure = user.app_metadata?.provider === 'azure' ||
+                    user.identities?.some(id => id.provider === 'azure')
+    const email = user.email
+
+    if (!email) {
+      return NextResponse.json(
+        { error: 'Không tìm thấy thông tin email đăng nhập' },
+        { status: 401 }
+      )
+    }
+
+    if (isAzure) {
+      const isAllowedDomain = email.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+      if (!isAllowedDomain) {
+        return NextResponse.json(
+          { error: 'Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).' },
+          { status: 403 }
+        )
+      }
+    }
+
+    const username = user.user_metadata?.username ||
+                     user.user_metadata?.full_name ||
+                     user.user_metadata?.name ||
+                     email.split('@')[0]
+
+    if (!username) {
+      return NextResponse.json(
+        { error: 'Không thể xác định thông tin người dùng' },
         { status: 401 }
       )
     }

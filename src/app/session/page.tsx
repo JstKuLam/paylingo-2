@@ -14,6 +14,7 @@ import { useRecording } from '@soniox/react'
 import {
   AlertTriangle,
   ArrowDown,
+  ChevronDown,
   Columns2,
   History,
   Languages,
@@ -25,6 +26,7 @@ import {
   RotateCcw,
   Square,
   Sun,
+  User,
   WifiOff,
 } from 'lucide-react'
 import PayPayLogo from '@/components/PayPayLogo'
@@ -596,6 +598,9 @@ export default function SessionPage() {
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('one_way')
   const [partnerLang, setPartnerLang] = useState('any')
   const [userLabel, setUserLabel] = useState('Khách')
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
   const [isRecordingActive, setIsRecordingActive] = useState(false)
 
@@ -605,16 +610,62 @@ export default function SessionPage() {
     const checkAuth = async () => {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      const username = session?.user?.user_metadata?.username
-      if (!session || !username) {
+      if (!session) {
         router.replace('/')
         return
       }
+
+      // Reject anonymous logins
+      if (!session.user.email) {
+        await supabase.auth.signOut()
+        router.replace('/?error=unauthorized')
+        return
+      }
+
+      // Check if logged in via Azure OAuth
+      const isAzure = session.user.app_metadata?.provider === 'azure' ||
+                      session.user.identities?.some(id => id.provider === 'azure')
+      const email = session.user.email
+
+      if (isAzure) {
+        const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+        if (!isAllowedDomain) {
+          await supabase.auth.signOut()
+          router.replace('/?error=domain_restricted')
+          return
+        }
+      }
+
+      const username = session?.user?.user_metadata?.username ||
+                       session?.user?.user_metadata?.full_name ||
+                       session?.user?.user_metadata?.name ||
+                       email?.split('@')[0]
+
+      if (!username) {
+        router.replace('/')
+        return
+      }
+
       setUserLabel(username)
+      setUserEmail(email || null)
       setIsLoadingAuth(false)
     }
     void checkAuth()
   }, [router])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false)
+      }
+    }
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isMenuOpen])
 
   const handleModeChange = (mode: RecordingMode) => {
     if (isRecordingActive) return
@@ -683,15 +734,45 @@ export default function SessionPage() {
           >
             {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
           </button>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={isRecordingActive}
-            aria-label="Đăng xuất"
-            title="Đăng xuất"
-          >
-            <LogOut aria-hidden="true" />
-          </button>
+          <div className="profile-menu-container" ref={menuRef}>
+            <button
+              type="button"
+              className="profile-trigger"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              disabled={isRecordingActive}
+              aria-haspopup="true"
+              aria-expanded={isMenuOpen}
+              aria-label="Menu tài khoản"
+            >
+              <div className="profile-avatar">
+                {userLabel ? userLabel.charAt(0).toUpperCase() : <User size={14} />}
+              </div>
+              <span className="profile-username">{userLabel}</span>
+              <ChevronDown className={`profile-chevron ${isMenuOpen ? 'is-active' : ''}`} aria-hidden="true" />
+            </button>
+
+            {isMenuOpen && (
+              <div className="profile-dropdown" role="menu">
+                <div className="dropdown-user-info">
+                  <div className="dropdown-username">{userLabel}</div>
+                  <div className="dropdown-email">{userEmail || 'Tài khoản khách'}</div>
+                </div>
+                <div className="dropdown-divider" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false)
+                    void handleLogout()
+                  }}
+                  className="dropdown-item logout-item"
+                  role="menuitem"
+                >
+                  <LogOut aria-hidden="true" />
+                  <span>Đăng xuất</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

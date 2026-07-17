@@ -60,7 +60,10 @@ export function useSessionLifecycle({
     const autoCloseAbandonedSessions = async () => {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      const username = session?.user?.user_metadata?.username
+      const username = session?.user?.user_metadata?.username ||
+                       session?.user?.user_metadata?.full_name ||
+                       session?.user?.user_metadata?.name ||
+                       session?.user?.email?.split('@')[0]
       const ownerId = session?.user?.id
 
       if (username && ownerId) {
@@ -138,7 +141,10 @@ export function useSessionLifecycle({
   const startSession = useCallback(async (langName: string) => {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
-    const username = session?.user?.user_metadata?.username
+    const username = session?.user?.user_metadata?.username ||
+                     session?.user?.user_metadata?.full_name ||
+                     session?.user?.user_metadata?.name ||
+                     session?.user?.email?.split('@')[0]
     const ownerId = session?.user?.id
     
     if (!session || !username || !ownerId) {

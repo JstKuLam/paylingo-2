@@ -68,7 +68,10 @@ export default function SessionDetailPage({ params }: PageProps) {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      const username = user?.user_metadata?.username
+      const username = user?.user_metadata?.username ||
+                       user?.user_metadata?.full_name ||
+                       user?.user_metadata?.name ||
+                       user?.email?.split('@')[0]
       if (!user || !username) {
         router.replace('/')
         return

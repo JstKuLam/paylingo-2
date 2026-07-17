@@ -5,25 +5,29 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
-  ArrowRight,
   Check,
   Languages,
   Loader2,
   LockKeyhole,
   Moon,
   Sun,
-  UserRound,
 } from 'lucide-react'
 import PayPayLogo from '@/components/PayPayLogo'
 import { useTheme } from '@/hooks/useTheme'
 import { createClient } from '@/lib/supabase/client'
 
-const USERNAME_PATTERN = /^[\p{L}\p{N}_ ]+$/u
+const MicrosoftIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 21 21" width="21" height="21" {...props}>
+    <rect x="0" y="0" width="9.8" height="9.8" fill="#f25022" />
+    <rect x="11.2" y="0" width="9.8" height="9.8" fill="#7fba00" />
+    <rect x="0" y="11.2" width="9.8" height="9.8" fill="#00a4ef" />
+    <rect x="11.2" y="11.2" width="9.8" height="9.8" fill="#ffb900" />
+  </svg>
+)
 
 export default function Home() {
   const router = useRouter()
   const { theme, changeTheme } = useTheme()
-  const [username, setUsername] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -38,46 +42,59 @@ export default function Home() {
       }
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user?.user_metadata?.username) router.replace('/session')
+
+      if (session) {
+        const email = session.user.email
+        const isAzure = session.user.app_metadata?.provider === 'azure' ||
+                        session.user.identities?.some(id => id.provider === 'azure')
+        if (isAzure) {
+          const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+          if (!isAllowedDomain) {
+            await supabase.auth.signOut()
+            setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+            return
+          }
+        }
+        router.replace('/session')
+      }
     }
     void checkUser()
+
+    // Handle query params errors in next tick to avoid eslint set-state-in-effect error
+    const errParam = new URLSearchParams(window.location.search).get('error')
+    if (errParam) {
+      const timer = setTimeout(() => {
+        if (errParam === 'domain_restricted') {
+          setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+        } else if (errParam === 'auth_failed') {
+          setError('Đăng nhập SSO thất bại. Vui lòng thử lại.')
+        } else if (errParam === 'unauthorized') {
+          setError('Bạn chưa được cấp quyền truy cập. Vui lòng đăng nhập qua Microsoft SSO.')
+        }
+      }, 0)
+      return () => clearTimeout(timer)
+    }
   }, [router])
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    const normalizedUsername = username.trim().replace(/\s+/g, ' ').toLowerCase()
-
-    if (normalizedUsername.length < 2) {
-      setError('Tên hiển thị cần ít nhất 2 ký tự.')
-      return
-    }
-    if (normalizedUsername.length > 40) {
-      setError('Tên hiển thị không được dài quá 40 ký tự.')
-      return
-    }
-    if (!USERNAME_PATTERN.test(normalizedUsername)) {
-      setError('Chỉ dùng chữ, số, dấu cách hoặc dấu gạch dưới.')
-      return
-    }
-
+  const handleSSOLogin = async () => {
     setIsLoading(true)
     setError(null)
-
     try {
       const supabase = createClient()
-      const { error: authError } = await supabase.auth.signInAnonymously({
-        options: { data: { username: normalizedUsername } },
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: 'azure',
+        options: {
+          scopes: 'email openid profile',
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
       })
-
       if (authError) {
-        setError('Chưa thể tạo phiên truy cập. Vui lòng thử lại.')
-        return
+        setError('Không thể khởi động đăng nhập SSO: ' + authError.message)
+        setIsLoading(false)
       }
-      router.push('/session')
     } catch (caughtError) {
-      console.error('Anonymous sign-in failed:', caughtError)
-      setError('Mất kết nối tới máy chủ. Vui lòng thử lại.')
-    } finally {
+      console.error('SSO sign-in failed:', caughtError)
+      setError('Mất kết nối tới máy chủ SSO. Vui lòng thử lại.')
       setIsLoading(false)
     }
   }
@@ -133,52 +150,35 @@ export default function Home() {
 
         <div className="entry-form-wrap">
           <div className="entry-heading">
-            <span className="step-label">Bước 1 / 2</span>
             <h2>Bắt đầu phiên dịch</h2>
-            <p>Nhập tên để nhận biết lịch sử hội thoại trên thiết bị này.</p>
+            <p>Vui lòng đăng nhập bằng tài khoản email công ty để truy cập ứng dụng.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="entry-form" noValidate>
-            <div className="field-group">
-              <label htmlFor="username">Tên hoặc biệt danh</label>
-              <div className="input-with-icon">
-                <UserRound aria-hidden="true" />
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  value={username}
-                  onChange={(event) => {
-                    setUsername(event.target.value)
-                    setError(null)
-                  }}
-                  placeholder="Ví dụ: Minh Anh"
-                  autoComplete="nickname"
-                  maxLength={40}
-                  disabled={isLoading}
-                  aria-invalid={Boolean(error)}
-                  aria-describedby={error ? 'username-error' : 'username-help'}
-                  autoFocus
-                />
-              </div>
-              {error ? (
-                <p id="username-error" className="field-error" role="alert">
-                  <AlertCircle aria-hidden="true" />{error}
-                </p>
-              ) : (
-                <p id="username-help" className="field-help">Không cần email hoặc mật khẩu.</p>
-              )}
-            </div>
+          <div style={{ marginTop: '36px' }}>
+            {error && (
+              <p className="field-error" role="alert" style={{ marginBottom: '20px' }}>
+                <AlertCircle aria-hidden="true" />{error}
+              </p>
+            )}
 
-            <button type="submit" className="primary-command" disabled={isLoading || username.trim().length < 2}>
-              {isLoading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-              <span>{isLoading ? 'Đang chuẩn bị...' : 'Tiếp tục chọn ngôn ngữ'}</span>
+            <button
+              type="button"
+              onClick={handleSSOLogin}
+              className="primary-command"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <MicrosoftIcon aria-hidden="true" style={{ marginRight: '8px' }} />
+              )}
+              <span>Đăng nhập với Microsoft SSO</span>
             </button>
-          </form>
+          </div>
 
           <div className="entry-footnote">
             <span>v3.1.1</span>
-            <Link href="/admin">Quản trị</Link>
+            <Link href="/kulam">Quản trị</Link>
           </div>
         </div>
       </section>

@@ -4308,6 +4308,230 @@ button,
   }
 }
 
+/* --- MICROSOFT SSO & PROFILE DROPDOWN MENU --- */
+
+.entry-divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.entry-divider::before,
+.entry-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+.entry-divider span {
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.sso-command {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--foreground);
+  background: var(--surface-muted);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.sso-command:hover:not(:disabled) {
+  background: var(--surface-strong);
+  border-color: var(--text-muted);
+}
+
+.sso-command:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.sso-command:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.profile-menu-container {
+  position: relative;
+  display: inline-block;
+}
+
+.profile-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  user-select: none;
+}
+
+.profile-trigger:hover:not(:disabled) {
+  background: var(--surface-muted);
+  border-color: var(--text-muted);
+}
+
+.profile-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.profile-trigger:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.profile-avatar {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.profile-username {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  transition: transform 150ms ease;
+}
+
+.profile-chevron.is-active {
+  transform: rotate(180deg);
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px);
+  z-index: 50;
+  animation: dropdownFadeIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-user-info {
+  padding: 8px 12px;
+}
+
+.dropdown-username {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+  word-break: break-all;
+}
+
+.dropdown-email {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.dropdown-divider {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--border);
+}
+
+.dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.dropdown-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  transition: color 150ms ease;
+}
+
+.dropdown-item:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.dropdown-item:hover svg {
+  color: var(--foreground);
+}
+
+.dropdown-item.logout-item {
+  color: var(--danger);
+}
+
+.dropdown-item.logout-item svg {
+  color: var(--danger);
+  opacity: 0.8;
+}
+
+.dropdown-item.logout-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.dropdown-item.logout-item:hover svg {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -4318,3 +4542,4 @@ button,
     transition-duration: 0.01ms !important;
   }
 }
+

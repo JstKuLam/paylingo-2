@@ -49,8 +49,11 @@ export default function HistoryPage() {
     try {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-      const name = session?.user?.user_metadata?.username
       const currentOwnerId = session?.user?.id
+      const name = session?.user?.user_metadata?.username ||
+                   session?.user?.user_metadata?.full_name ||
+                   session?.user?.user_metadata?.name ||
+                   session?.user?.email?.split('@')[0]
 
       if (!session || !name || !currentOwnerId) {
         router.replace('/')

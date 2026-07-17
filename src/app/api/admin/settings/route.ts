@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
+import { checkAdminSession } from '@/lib/admin-auth'
 import { z } from 'zod'
 
 export const runtime = 'edge'
@@ -25,10 +26,8 @@ const apiSettingsSchema = z.object({
 
 export async function GET() {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user || user.app_metadata?.role !== 'admin') {
+    const isAuthorized = await checkAdminSession()
+    if (!isAuthorized) {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
     }
 
@@ -39,11 +38,10 @@ export async function GET() {
       .eq('key', 'current')
       .single()
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 is code for "no rows returned"
+    if (error && error.code !== 'PGRST116') {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Mask the API Key for security
     const maskedKey = settings?.api_key ? MASKED_API_KEY : ''
 
     return NextResponse.json({
@@ -61,10 +59,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user || user.app_metadata?.role !== 'admin') {
+    const isAuthorized = await checkAdminSession()
+    if (!isAuthorized) {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
     }
 
@@ -79,7 +75,6 @@ export async function POST(req: Request) {
 
     const adminSupa = createAdminClient()
     
-    // Check if row already exists
     const { data: existing } = await adminSupa
       .from('api_settings')
       .select('*')
@@ -88,7 +83,7 @@ export async function POST(req: Request) {
 
     let keyToSave = api_key
     if (api_key === MASKED_API_KEY && existing) {
-      keyToSave = existing.api_key // Keep existing key
+      keyToSave = existing.api_key
     } else if (!api_key) {
       return NextResponse.json({ error: 'API Key không được để trống' }, { status: 400 })
     }
