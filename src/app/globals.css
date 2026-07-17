@@ -573,7 +573,7 @@ button,
   gap: 6px;
 }
 
-.session-header-actions button,
+.session-header-actions > button,
 .icon-segment button {
   width: 38px;
   height: 38px;
@@ -589,7 +589,7 @@ button,
   transition: color 150ms ease, border 150ms ease, background 150ms ease;
 }
 
-.session-header-actions button:hover:not(:disabled),
+.session-header-actions > button:hover:not(:disabled),
 .icon-segment button:hover:not(:disabled),
 .icon-segment button.is-active {
   color: var(--foreground);
@@ -597,7 +597,7 @@ button,
   background: var(--surface-muted);
 }
 
-.session-header-actions button:disabled {
+.session-header-actions > button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
 }
@@ -4098,7 +4098,7 @@ button,
     font-size: 9px;
   }
 
-  .session-header-actions button {
+  .session-header-actions > button {
     width: 34px;
     height: 34px;
   }
@@ -4419,6 +4419,16 @@ button,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .profile-username {
+    display: none;
+  }
+  .profile-trigger {
+    padding: 0 8px;
+    gap: 4px;
+  }
 }
 
 .profile-chevron {
