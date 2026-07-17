@@ -153,7 +153,7 @@ export default function SharedSummaryPage({ params }: PageProps) {
   return (
     <div className="shared-summary-shell">
       <header className="shared-summary-header">
-        <div><PayPayLogo width={76} height={29} /><span>Tài liệu được chia sẻ</span></div>
+        <div><PayPayLogo width={102} height={32} /><span>Tài liệu được chia sẻ</span></div>
         <div>
           <button type="button" onClick={() => router.push('/')}><ArrowLeft aria-hidden="true" /><span>Ứng dụng</span></button>
           <button type="button" onClick={handleCopyLink}>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? 'Đã sao chép' : 'Sao chép link'}</button>

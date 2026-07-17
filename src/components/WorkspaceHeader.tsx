@@ -23,7 +23,7 @@ export default function WorkspaceHeader({
     <header className="workspace-header">
       <div className="workspace-brand">
         <Link href="/session" aria-label="Về bàn phiên dịch">
-          <PayPayLogo width={76} height={29} />
+          <PayPayLogo width={102} height={32} />
         </Link>
         <div>
           <h1>{title}</h1>
@@ -44,8 +44,8 @@ export default function WorkspaceHeader({
 
       <div className="workspace-actions">
         <div className="text-right mr-2 hidden xs:block">
-          <p className="text-[10px] font-bold text-slate-400 leading-none">v3.1.1</p>
-          <p className="text-[9px] text-slate-500 mt-0.5 font-semibold">14/07/2026 14:13 (GMT+7)</p>
+          <p className="text-[10px] font-bold text-slate-400 leading-none">v3.2.0</p>
+          <p className="text-[9px] text-slate-500 mt-0.5 font-semibold">17/07/2026 15:20 (GMT+7)</p>
         </div>
         {actions}
         <button

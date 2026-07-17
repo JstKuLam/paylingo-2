@@ -243,7 +243,7 @@ export default function Home() {
           </div>
 
           <div className="entry-footnote">
-            <span>v3.1.1</span>
+            <span>v3.2.0</span>
             <Link href="/kulam">Quản trị</Link>
           </div>
         </div>

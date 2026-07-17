@@ -688,7 +688,7 @@ export default function SessionPage() {
     <div className="session-shell">
       <header className="session-header">
         <div className="session-brand">
-          <PayPayLogo width={76} height={29} />
+          <PayPayLogo width={102} height={32} />
           <div>
             <strong>Live Interpreter</strong>
             <span>Phòng của {userLabel}</span>

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.0] - 2026-07-17
+
+### Added / Đã thêm
+- **Brand color integration (Violet Theme) / Tích hợp tông màu tím thương hiệu:** Applied pay2pay.vn's official violet/purple theme as the primary color across light and dark themes. / Áp dụng gam màu tím thương hiệu của pay2pay.vn làm tông màu chủ đạo cho cả giao diện sáng (Light mode) và tối (Dark mode).
+- **Branded logo updates / Cập nhật Logo thương hiệu mới:** Replaced old PayPay logo paths with official SVG paths from pay2pay.vn, and increased the dimensions across landing and header sections (login, main session, history workspace, shared summaries) to ensure a premium, sharp, and consistent appearance. / Cập nhật logo PayPay mới theo đúng file vector của pay2pay.vn, tăng kích cỡ hiển thị ở màn hình đăng nhập, thanh tiêu đề (header) của phiên làm việc, trang lịch sử và trang tóm tắt chia sẻ để tăng độ nhận diện sắc nét.
+
+### Changed / Đã thay đổi
+- **Cleaned login screen / Tinh giản màn đăng nhập:** Removed the long description paragraph under the main slogan on the login screen, and replaced the headline with a concise, professional Vietnamese slogan: *"Phiên dịch hội thoại song ngữ tức thì."* / Loại bỏ đoạn văn mô tả dài dòng ở màn hình đăng nhập, thay thế câu tiêu đề cũ bằng slogan ngắn gọn, chuyên nghiệp: *"Phiên dịch hội thoại song ngữ tức thì."*
+
 ## [3.1.1] - 2026-07-14 / 14-07-2026
 
 ### Fixed / Đã sửa
