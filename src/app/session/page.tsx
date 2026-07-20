@@ -571,17 +571,17 @@ function SessionActiveArea({
         </div>
 
         {canStart ? (
-          <button type="button" className="record-command record-command--start glass-button-modern squircle-xl shadow-lg bg-primary hover:bg-primary-hover text-white border-primary hover:border-primary-hover transition-all active:scale-[0.98]" onClick={handleStart}>
+          <button type="button" className="record-command record-command--start active:scale-[0.98]" onClick={handleStart}>
             <Mic aria-hidden="true" />
             Bắt đầu phiên dịch
           </button>
         ) : isStarting ? (
-          <button type="button" className="record-command glass-button-modern squircle-xl" disabled>
+          <button type="button" className="record-command glass-button-modern" disabled>
             <Loader2 className="animate-spin" aria-hidden="true" />
             Đang kết nối
           </button>
         ) : (
-          <button type="button" className={`record-command record-command--stop squircle-xl transition-all active:scale-[0.98] ${state === 'recording' ? 'liquid-record-button is-recording text-white border-none' : ''}`} onClick={handleStop} disabled={state === 'stopping'}>
+          <button type="button" className={`record-command record-command--stop active:scale-[0.98] ${state === 'recording' ? 'is-recording' : ''}`} onClick={handleStop} disabled={state === 'stopping'}>
             {state === 'stopping' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Square aria-hidden="true" />}
             {state === 'stopping' ? 'Đang lưu' : 'Dừng và lưu phiên'}
           </button>

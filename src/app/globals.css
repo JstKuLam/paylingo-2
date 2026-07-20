@@ -531,11 +531,13 @@ button,
 .session-mode-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-muted);
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-muted) 55%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .session-mode-tabs button {
@@ -543,23 +545,33 @@ button,
   height: 36px;
   padding: 0 12px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 8px;
   color: var(--text-muted);
   background: transparent;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  transition: color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .session-mode-tabs button:hover:not(:disabled) {
   color: var(--foreground);
+  background: color-mix(in srgb, var(--surface-raised) 40%, transparent);
 }
 
 .session-mode-tabs button.is-active {
   color: var(--foreground);
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 
+    0 2px 8px -2px rgb(0 0 0 / 0.08),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+}
+
+.dark .session-mode-tabs button.is-active {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 4px 12px -2px rgb(0 0 0 / 0.25),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
 
 .session-mode-tabs button:disabled {
@@ -1109,40 +1121,46 @@ button,
   align-items: center;
   justify-content: center;
   gap: 9px;
-  padding: 0 20px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  color: var(--text-muted);
-  background: var(--surface-muted);
-  font-size: 12px;
-  font-weight: 700;
+  padding: 0 24px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
 }
 
 .record-command:disabled {
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .record-command--start {
   color: var(--on-primary);
-  border-color: var(--primary);
+  border: 1px solid var(--primary);
   background: var(--primary);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
-.record-command--start:hover {
+.record-command--start:hover:not(:disabled) {
   border-color: var(--primary-hover);
   background: var(--primary-hover);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--primary) 38%, transparent);
+  transform: translateY(-1px);
 }
 
 .record-command--stop {
-  color: var(--on-danger);
-  border-color: var(--danger);
+  color: #ffffff;
+  border: 1px solid var(--danger);
   background: var(--danger);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--danger) 28%, transparent);
 }
 
 .record-command--stop:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--danger) 82%, #000000);
-  background: color-mix(in srgb, var(--danger) 82%, #000000);
+  border-color: color-mix(in srgb, var(--danger) 85%, #000);
+  background: color-mix(in srgb, var(--danger) 85%, #000);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--danger) 38%, transparent);
+  transform: translateY(-1px);
 }
 
 .record-command svg {
@@ -4730,39 +4748,24 @@ button,
   box-shadow: 0 1px 4px -1px rgb(0 0 0 / 0.04);
 }
 
-/* Pulse Glow specifically for Recording Button (Liquid HIG style) */
-.liquid-record-button {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--danger);
-  color: #fff;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 20px -2px rgba(195, 57, 59, 0.4);
+/* Pulse Glow specifically for Recording/Stop button (Liquid HIG style) */
+.record-command--stop.is-recording {
+  background: linear-gradient(135deg, var(--danger) 0%, color-mix(in srgb, var(--danger) 80%, #000) 100%) !important;
+  border: 1px solid color-mix(in srgb, var(--danger) 70%, transparent) !important;
+  color: #fff !important;
+  animation: danger-pulse 2s cubic-bezier(0.25, 0, 0, 1) infinite !important;
 }
 
-.liquid-record-button.is-recording {
-  background: #ff4d4f;
-  animation: pulse-ring 2s cubic-bezier(0.25, 0, 0, 1) infinite;
-  box-shadow: 0 0 0 8px rgba(255, 77, 79, 0.15), 0 8px 30px rgba(255, 77, 79, 0.5);
-}
-
-.liquid-record-button::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-  border: 1px solid rgba(195, 57, 59, 0.3);
-  opacity: 0;
-  transition: all 0.3s ease;
-}
-
-.liquid-record-button.is-recording::before {
-  opacity: 1;
-  transform: scale(1.15);
-  animation: pulse-ring 2s cubic-bezier(0.25, 0, 0, 1) infinite 0.5s;
+@keyframes danger-pulse {
+  0% {
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--danger) 40%, transparent), 0 0 0 0px color-mix(in srgb, var(--danger) 30%, transparent);
+  }
+  70% {
+    box-shadow: 0 4px 25px color-mix(in srgb, var(--danger) 50%, transparent), 0 0 0 10px color-mix(in srgb, var(--danger) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--danger) 40%, transparent), 0 0 0 0px color-mix(in srgb, var(--danger) 0%, transparent);
+  }
 }
 
 /* Glassmorphic Overrides for Workspace components */

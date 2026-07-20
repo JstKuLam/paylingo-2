@@ -3,6 +3,10 @@ import { createAdminClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
 export const runtime = 'edge'
 
+function errorKind(error: unknown) {
+  return error instanceof Error ? error.name : 'UnknownError'
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { data: { user }, error: authError } = await getAuthenticatedUser(request)
@@ -15,9 +19,8 @@ export async function POST(request: NextRequest) {
     }
 
     const email = user.email?.trim().toLowerCase()
-    const isAllowedDomain = email && (email.endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development')
 
-    if (!isAllowedDomain) {
+    if (!email?.endsWith('@pay2pay.vn') || !user.email_confirmed_at) {
       return NextResponse.json(
         { error: 'Chỉ chấp nhận tài khoản công ty (@pay2pay.vn).' },
         { status: 403, headers: { 'Cache-Control': 'no-store' } }
@@ -93,7 +96,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error: unknown) {
-    console.error('Unable to mint Soniox temporary key:', error)
+    console.error('Unable to mint Soniox temporary key:', errorKind(error))
     return NextResponse.json(
       { error: 'Không thể tạo khóa Soniox tạm thời' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
@@ -105,10 +108,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const { data: { user }, error: authError } = await getAuthenticatedUser(request)
     const email = user?.email?.trim().toLowerCase()
-    const isAzure = user?.app_metadata?.provider === 'azure' ||
-      user?.identities?.some((identity) => identity.provider === 'azure')
 
-    if (authError || !user || !isAzure || !email?.endsWith('@pay2pay.vn')) {
+    if (authError || !user || !email?.endsWith('@pay2pay.vn') || !user.email_confirmed_at) {
       return NextResponse.json(
         { error: 'Phiên đăng nhập không hợp lệ' },
         { status: 401, headers: { 'Cache-Control': 'no-store' } },
@@ -150,7 +151,7 @@ export async function DELETE(request: NextRequest) {
       },
     )
   } catch (error: unknown) {
-    console.error('Unable to delete PayLingo account:', error)
+    console.error('Unable to delete PayLingo account:', errorKind(error))
     return NextResponse.json(
       { error: 'Không thể xóa tài khoản và dữ liệu. Vui lòng thử lại.' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } },
