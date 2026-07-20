@@ -69,6 +69,7 @@ const MODE_OPTIONS: Array<{
 ]
 
 function subscribeToPreferences(callback: () => void) {
+  if (typeof window === 'undefined') return () => undefined
   window.addEventListener('storage', callback)
   window.addEventListener(PREFERENCE_EVENT, callback)
   return () => {
@@ -78,11 +79,13 @@ function subscribeToPreferences(callback: () => void) {
 }
 
 function readLayoutPreference(): LayoutMode {
+  if (typeof window === 'undefined') return 'split'
   const value = localStorage.getItem('paylingo_layout_mode')
   return value === 'stacked' || value === 'flipped' ? value : 'split'
 }
 
 function readFontPreference(): FontSize {
+  if (typeof window === 'undefined') return 100
   const value = Number(localStorage.getItem('paylingo_font_size'))
   return FONT_SIZES.includes(value as FontSize) ? (value as FontSize) : 100
 }
