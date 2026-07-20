@@ -4633,62 +4633,63 @@ button,
 .liquid-blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.12;
-  mix-blend-mode: screen;
+  filter: blur(120px);
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  transition: all 0.5s ease;
 }
 
 .dark .liquid-blob {
-  opacity: 0.18;
+  opacity: 0.45;
+  mix-blend-mode: screen;
 }
 
 .liquid-blob-primary {
-  top: 10%;
-  left: 15%;
-  width: min(45vw, 450px);
-  height: min(45vw, 450px);
-  background: radial-gradient(circle, var(--primary) 0%, rgba(99, 67, 240, 0) 70%);
-  animation: float-blob-1 25s ease-in-out infinite;
+  top: 5%;
+  left: 10%;
+  width: min(60vw, 600px);
+  height: min(60vw, 600px);
+  background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+  animation: float-blob-1 22s ease-in-out infinite;
 }
 
 .liquid-blob-partner {
-  bottom: 15%;
-  right: 15%;
-  width: min(50vw, 500px);
-  height: min(50vw, 500px);
-  background: radial-gradient(circle, var(--partner) 0%, rgba(0, 127, 159, 0) 70%);
-  animation: float-blob-2 30s ease-in-out infinite;
+  bottom: 10%;
+  right: 10%;
+  width: min(65vw, 650px);
+  height: min(65vw, 650px);
+  background: radial-gradient(circle, var(--partner) 0%, transparent 70%);
+  animation: float-blob-2 26s ease-in-out infinite;
 }
 
 .liquid-blob-warning {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(35vw, 350px);
-  height: min(35vw, 350px);
-  background: radial-gradient(circle, var(--warning) 0%, rgba(145, 91, 0, 0) 75%);
-  animation: float-blob-3 28s ease-in-out infinite;
+  top: 40%;
+  left: 45%;
+  width: min(50vw, 500px);
+  height: min(50vw, 500px);
+  background: radial-gradient(circle, var(--warning) 0%, transparent 70%);
+  animation: float-blob-3 24s ease-in-out infinite;
 }
 
 /* Glassmorphism Panel conforming to Apple HIG */
 .glass-panel-modern {
   position: relative;
   z-index: 10;
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
-  background: color-mix(in srgb, var(--surface) 62%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  backdrop-filter: blur(28px) saturate(210%);
+  -webkit-backdrop-filter: blur(28px) saturate(210%);
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.65);
   box-shadow: 
-    0 10px 40px -10px rgb(0 0 0 / 0.08),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+    0 16px 40px -10px rgba(16, 62, 105, 0.1),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.5);
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .dark .glass-panel-modern {
-  background: rgba(25, 29, 34, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(18, 22, 28, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 
-    0 20px 50px -12px rgb(0 0 0 / 0.35),
+    0 25px 60px -15px rgba(0, 0, 0, 0.65),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
 
