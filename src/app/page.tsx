@@ -114,69 +114,76 @@ export default function Home() {
   }
 
   return (
-    <main className="entry-shell">
-      <section className="entry-context" aria-label="Giới thiệu ứng dụng">
+    <main className="entry-shell relative overflow-hidden">
+      {/* Liquid Glass Background Blobs */}
+      <div className="liquid-bg-container" aria-hidden="true">
+        <div className="liquid-blob liquid-blob-primary" />
+        <div className="liquid-blob liquid-blob-partner" />
+        <div className="liquid-blob liquid-blob-warning" />
+      </div>
+
+      <section className="entry-context z-10 bg-[#121417]/80 backdrop-blur-2xl border-r border-[#3a444e]/30 shadow-2xl" aria-label="Giới thiệu ứng dụng">
         <div className="entry-brand-row">
           <PayPayLogo className="h-14 w-auto" width={178} height={56} />
-          <span className="entry-product-name">Live Interpreter</span>
+          <span className="entry-product-name tracking-wider uppercase text-xs opacity-80">Live Interpreter</span>
         </div>
 
         <div className="entry-intro">
-          <p className="eyebrow">Phiên dịch hội thoại trực tiếp</p>
-          <h1>Phiên dịch hội thoại song ngữ tức thì.</h1>
+          <p className="eyebrow text-primary font-bold tracking-widest text-xs">Phiên dịch hội thoại trực tiếp</p>
+          <h1 className="text-white font-semibold leading-tight tracking-tight">Phiên dịch hội thoại song ngữ tức thì.</h1>
         </div>
 
-        <div className="entry-proof" aria-label="Khả năng chính">
-          <div><Languages aria-hidden="true" /><span>Dịch hai chiều theo thời gian thực</span></div>
-          <div><LockKeyhole aria-hidden="true" /><span>Không lưu âm thanh gốc</span></div>
-          <div><Check aria-hidden="true" /><span>Lưu transcript cục bộ khi mất mạng</span></div>
+        <div className="entry-proof opacity-90" aria-label="Khả năng chính">
+          <div className="flex items-center gap-3 text-sm text-gray-300"><Languages className="text-primary w-5 h-5" aria-hidden="true" /><span>Dịch hai chiều theo thời gian thực</span></div>
+          <div className="flex items-center gap-3 text-sm text-gray-300"><LockKeyhole className="text-primary w-5 h-5" aria-hidden="true" /><span>Không lưu âm thanh gốc</span></div>
+          <div className="flex items-center gap-3 text-sm text-gray-300"><Check className="text-primary w-5 h-5" aria-hidden="true" /><span>Lưu transcript cục bộ khi mất mạng</span></div>
         </div>
       </section>
 
-      <section className="entry-action">
-        <div className="entry-action-top">
-          <span className="entry-mobile-brand">Pay2Pay Live Interpreter</span>
-          <div className="theme-switch" aria-label="Giao diện">
+      <section className="entry-action relative z-10 flex flex-col justify-between min-h-dvh">
+        <div className="entry-action-top flex items-center justify-between sm:justify-end gap-4 w-full">
+          <span className="entry-mobile-brand font-bold text-lg text-primary tracking-tight block sm:hidden">Pay2Pay Interpreter</span>
+          <div className="theme-switch glass-button-modern rounded-lg p-1" aria-label="Giao diện">
             <button
               type="button"
-              className={theme === 'dark' ? 'is-active' : ''}
+              className={`p-2 rounded-md transition-all ${theme === 'dark' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-foreground'}`}
               onClick={() => changeTheme('dark')}
               aria-label="Dùng giao diện tối"
               title="Giao diện tối"
             >
-              <Moon aria-hidden="true" />
+              <Moon className="w-4 h-4" aria-hidden="true" />
             </button>
             <button
               type="button"
-              className={theme === 'light' ? 'is-active' : ''}
+              className={`p-2 rounded-md transition-all ${theme === 'light' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-foreground'}`}
               onClick={() => changeTheme('light')}
               aria-label="Dùng giao diện sáng"
               title="Giao diện sáng"
             >
-              <Sun aria-hidden="true" />
+              <Sun className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>
 
-        <div className="entry-form-wrap">
+        <div className="entry-form-wrap glass-panel-modern squircle-3xl p-8 sm:p-10 shadow-2xl border border-white/10 dark:border-white/5 relative z-10 max-w-[480px] w-full mx-auto my-auto transition-all">
           <div className="entry-heading">
-            <h2>Bắt đầu phiên dịch</h2>
-            <p>Vui lòng xác thực bằng tài khoản email công ty để truy cập ứng dụng.</p>
+            <h2 className="text-2xl font-bold tracking-tight">Bắt đầu phiên dịch</h2>
+            <p className="text-text-muted text-sm mt-2">Vui lòng xác thực bằng tài khoản email công ty để truy cập ứng dụng.</p>
           </div>
 
-          <div style={{ marginTop: '36px' }}>
+          <div style={{ marginTop: '30px' }}>
             {error && (
-              <p className="field-error" role="alert" style={{ marginBottom: '20px' }}>
-                <AlertCircle aria-hidden="true" />{error}
+              <p className="field-error text-danger text-sm flex items-center gap-2 mb-4 bg-danger/10 p-3 rounded-lg border border-danger/25" role="alert">
+                <AlertCircle className="w-4 h-4" aria-hidden="true" />{error}
               </p>
             )}
 
             {!isLinkSent ? (
-              <form onSubmit={handleSendLink} className="entry-form" noValidate>
+              <form onSubmit={handleSendLink} className="entry-form space-y-4" noValidate>
                 <div className="field-group">
-                  <label htmlFor="email">Email công ty</label>
-                  <div className="input-with-icon">
-                    <Mail aria-hidden="true" />
+                  <label htmlFor="email" className="block text-sm font-semibold mb-2">Email công ty</label>
+                  <div className="input-with-icon relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" aria-hidden="true" />
                     <input
                       id="email"
                       name="email"
@@ -191,32 +198,37 @@ export default function Home() {
                       disabled={isLoading}
                       aria-invalid={Boolean(error)}
                       autoFocus
+                      className="w-full h-[52px] pl-12 pr-4 rounded-xl border border-border-strong bg-surface/50 backdrop-blur-sm focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none"
                     />
                   </div>
                 </div>
 
-                <button type="submit" className="primary-command" disabled={isLoading || !email.trim()}>
+                <button 
+                  type="submit" 
+                  className="primary-command glass-button-modern squircle-xl w-full h-[52px] font-bold text-sm tracking-wide bg-primary hover:bg-primary-hover text-white transition-all shadow-lg shadow-primary/20 hover:shadow-primary/30 flex items-center justify-center gap-2 active:scale-[0.98]"
+                  disabled={isLoading || !email.trim()}
+                >
                   {isLoading ? (
-                    <Loader2 className="animate-spin" aria-hidden="true" />
+                    <Loader2 className="animate-spin w-4 h-4" aria-hidden="true" />
                   ) : null}
                   <span>{isLoading ? 'Đang gửi liên kết...' : 'Gửi liên kết đăng nhập'}</span>
                 </button>
               </form>
             ) : (
-              <div className="entry-form" style={{ textAlign: 'left' }}>
-                <div className="field-group" style={{ marginBottom: '24px' }}>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', background: 'rgba(59, 130, 246, 0.1)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                    <Mail aria-hidden="true" style={{ color: 'var(--color-primary-text)', flexShrink: 0, marginTop: '2px' }} />
+              <div className="entry-form text-left">
+                <div className="field-group mb-6">
+                  <div className="flex gap-4 items-start bg-primary/10 dark:bg-primary/20 p-5 rounded-xl border border-primary/20 backdrop-blur-sm">
+                    <Mail className="text-primary w-6 h-6 flex-shrink-0 mt-1" aria-hidden="true" />
                     <div>
-                      <h4 style={{ margin: 0, fontSize: '15px', color: 'var(--color-primary-text)' }}>Đã gửi link đăng nhập</h4>
-                      <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: 'var(--color-secondary-text)', lineHeight: '1.5' }}>
-                        Chúng tôi đã gửi một liên kết đăng nhập đến email <strong>{email}</strong>. Vui lòng mở hộp thư Outlook và click vào liên kết để đăng nhập.
+                      <h4 className="font-semibold text-base text-foreground">Đã gửi link đăng nhập</h4>
+                      <p className="text-sm text-text-muted mt-2 leading-relaxed">
+                        Chúng tôi đã gửi một liên kết đăng nhập đến email <strong className="text-foreground">{email}</strong>. Vui lòng mở hộp thư Outlook và click vào liên kết để đăng nhập.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginTop: '16px' }}>
+                <div className="flex justify-between items-center text-sm mt-4">
                   <button
                     type="button"
                     onClick={() => {
@@ -224,7 +236,7 @@ export default function Home() {
                       setError(null)
                     }}
                     disabled={isLoading}
-                    style={{ background: 'none', border: 'none', color: 'var(--color-primary-text)', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                    className="text-primary hover:text-primary-hover font-semibold transition-all hover:underline"
                   >
                     Thay đổi email
                   </button>
@@ -233,7 +245,7 @@ export default function Home() {
                     type="button"
                     onClick={() => handleSendLink()}
                     disabled={isLoading || resendCountdown > 0}
-                    style={{ background: 'none', border: 'none', color: resendCountdown > 0 ? 'var(--color-muted)' : 'var(--color-primary-text)', cursor: 'pointer', textDecoration: resendCountdown > 0 ? 'none' : 'underline', padding: 0 }}
+                    className={`font-semibold transition-all ${resendCountdown > 0 ? 'text-text-soft cursor-not-allowed' : 'text-primary hover:text-primary-hover hover:underline'}`}
                   >
                     {resendCountdown > 0 ? `Gửi lại sau (${resendCountdown}s)` : 'Gửi lại email'}
                   </button>
@@ -242,9 +254,9 @@ export default function Home() {
             )}
           </div>
 
-          <div className="entry-footnote">
+          <div className="entry-footnote flex justify-between items-center border-t border-border/40 mt-8 pt-4 text-xs text-text-soft">
             <span>v3.2.0</span>
-            <Link href="/kulam">Quản trị</Link>
+            <Link href="/kulam" className="hover:text-primary transition-colors font-medium">Quản trị</Link>
           </div>
         </div>
       </section>

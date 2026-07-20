@@ -94,6 +94,7 @@ export async function POST(req: Request) {
       const hashHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('')
       const challengeToken = `${challengeStr}.${hashHex}`
 
+      // Also return the registered Credential ID so client can pass it to allowCredentials
       return NextResponse.json({
         challengeToken,
         credentialId: creds.passkeyCredId
@@ -106,6 +107,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Thiếu dữ liệu xác thực passkey' }, { status: 400 })
       }
 
+      // Verify challenge token
       try {
         const parts = challengeToken.split('.')
         if (parts.length !== 2) throw new Error()
@@ -135,9 +137,11 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'Chữ ký yêu cầu không hợp lệ' }, { status: 400 })
         }
 
+        // Verify clientDataJSON contains the challengeToken (in base64url encoded format)
         const clientDataStr = new TextDecoder().decode(base64ToArrayBuffer(clientDataJSON))
         const clientData = JSON.parse(clientDataStr)
         
+        // base64url encode the challengeToken
         const encoder = new TextEncoder()
         const data = encoder.encode(challengeToken)
         const base64 = btoa(String.fromCharCode(...data))
@@ -147,6 +151,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'Thử thách xác thực không khớp' }, { status: 400 })
         }
 
+        // Verify signature
         if (!creds.passkeySpki) {
           return NextResponse.json({ error: 'Chưa đăng ký Passkey trên thiết bị này' }, { status: 400 })
         }
@@ -162,6 +167,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'Mã xác thực sinh trắc không hợp lệ' }, { status: 400 })
         }
 
+        // Login successful
         const token = await createSessionToken(creds.passwordHash)
         cookieStore.set(SESSION_COOKIE_NAME, token, {
           httpOnly: true,
@@ -178,6 +184,7 @@ export async function POST(req: Request) {
       }
     }
 
+    // --- PROTECTED ACTIONS ---
     const isAuthorized = await checkAdminSession()
     if (!isAuthorized) {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
@@ -195,6 +202,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Không thể lưu mật khẩu mới' }, { status: 500 })
       }
 
+      // Re-sign session with new hash
       const token = await createSessionToken(newHash)
       cookieStore.set(SESSION_COOKIE_NAME, token, {
         httpOnly: true,

@@ -190,7 +190,7 @@ function TranscriptPanel({
   }
 
   return (
-    <section className={`transcript-panel transcript-panel--${side}`}>
+    <section className={`transcript-panel transcript-panel--${side} glass-panel-modern`}>
       <header className="transcript-panel__header">
         <div className="language-identity">
           <span className="language-code" aria-hidden="true">{languageCode}</span>
@@ -429,7 +429,7 @@ function SessionActiveArea({
 
   return (
     <div className="session-workspace">
-      <div className="session-setup-bar">
+      <div className="session-setup-bar glass-panel-modern squircle-xl shadow-md border border-white/10 dark:border-white/5 relative z-10">
         <div className="language-route">
           <label htmlFor="partner-language">Ngôn ngữ đối tác</label>
           <div>
@@ -561,9 +561,9 @@ function SessionActiveArea({
         </div>
       </main>
 
-      <footer className="session-command-bar">
+      <footer className="session-command-bar glass-panel-modern squircle-xl shadow-md border border-white/10 dark:border-white/5 relative z-10">
         <div className={`recording-status recording-status--${state === 'recording' ? 'live' : state === 'error' ? 'error' : 'idle'}`} aria-live="polite">
-          <span aria-hidden="true" />
+          <span aria-hidden="true" className={state === 'recording' ? 'animate-pulse' : ''} />
           <div>
             <strong>{stateLabel}</strong>
             <small>{state === 'recording' ? 'Âm thanh đang được xử lý trực tiếp' : 'Micro chỉ bật khi bạn bắt đầu'}</small>
@@ -571,17 +571,17 @@ function SessionActiveArea({
         </div>
 
         {canStart ? (
-          <button type="button" className="record-command record-command--start" onClick={handleStart}>
+          <button type="button" className="record-command record-command--start glass-button-modern squircle-xl shadow-lg bg-primary hover:bg-primary-hover text-white border-primary hover:border-primary-hover transition-all active:scale-[0.98]" onClick={handleStart}>
             <Mic aria-hidden="true" />
             Bắt đầu phiên dịch
           </button>
         ) : isStarting ? (
-          <button type="button" className="record-command" disabled>
+          <button type="button" className="record-command glass-button-modern squircle-xl" disabled>
             <Loader2 className="animate-spin" aria-hidden="true" />
             Đang kết nối
           </button>
         ) : (
-          <button type="button" className="record-command record-command--stop" onClick={handleStop} disabled={state === 'stopping'}>
+          <button type="button" className={`record-command record-command--stop squircle-xl transition-all active:scale-[0.98] ${state === 'recording' ? 'liquid-record-button is-recording text-white border-none' : ''}`} onClick={handleStop} disabled={state === 'stopping'}>
             {state === 'stopping' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Square aria-hidden="true" />}
             {state === 'stopping' ? 'Đang lưu' : 'Dừng và lưu phiên'}
           </button>
@@ -685,8 +685,15 @@ export default function SessionPage() {
   }
 
   return (
-    <div className="session-shell">
-      <header className="session-header">
+    <div className="session-shell relative overflow-hidden">
+      {/* Liquid Glass Background Blobs */}
+      <div className="liquid-bg-container" aria-hidden="true">
+        <div className="liquid-blob liquid-blob-primary" />
+        <div className="liquid-blob liquid-blob-partner" />
+        <div className="liquid-blob liquid-blob-warning" />
+      </div>
+
+      <header className="session-header glass-panel-modern border-b border-white/10 shadow-lg relative z-20 bg-opacity-70 dark:bg-opacity-50">
         <div className="session-brand">
           <PayPayLogo width={102} height={32} />
           <div>

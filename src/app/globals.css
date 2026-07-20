@@ -4553,3 +4553,232 @@ button,
   }
 }
 
+/* --- Apple HIG & Liquid Glass Design System --- */
+
+@keyframes float-blob-1 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  33% {
+    transform: translate(10vw, -15dvh) scale(1.15) rotate(120deg);
+  }
+  66% {
+    transform: translate(-5vw, 10dvh) scale(0.9) rotate(240deg);
+  }
+}
+
+@keyframes float-blob-2 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate(-12vw, 12dvh) scale(1.2) rotate(-180deg);
+  }
+}
+
+@keyframes float-blob-3 {
+  0%, 100% {
+    transform: translate(0, 0) scale(0.9) rotate(0deg);
+  }
+  50% {
+    transform: translate(8vw, -8dvh) scale(1.1) rotate(180deg);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+}
+
+.liquid-bg-container {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--background);
+  transition: background 0.5s ease;
+}
+
+.liquid-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.12;
+  mix-blend-mode: screen;
+}
+
+.dark .liquid-blob {
+  opacity: 0.18;
+}
+
+.liquid-blob-primary {
+  top: 10%;
+  left: 15%;
+  width: min(45vw, 450px);
+  height: min(45vw, 450px);
+  background: radial-gradient(circle, var(--primary) 0%, rgba(99, 67, 240, 0) 70%);
+  animation: float-blob-1 25s ease-in-out infinite;
+}
+
+.liquid-blob-partner {
+  bottom: 15%;
+  right: 15%;
+  width: min(50vw, 500px);
+  height: min(50vw, 500px);
+  background: radial-gradient(circle, var(--partner) 0%, rgba(0, 127, 159, 0) 70%);
+  animation: float-blob-2 30s ease-in-out infinite;
+}
+
+.liquid-blob-warning {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(35vw, 350px);
+  height: min(35vw, 350px);
+  background: radial-gradient(circle, var(--warning) 0%, rgba(145, 91, 0, 0) 75%);
+  animation: float-blob-3 28s ease-in-out infinite;
+}
+
+/* Glassmorphism Panel conforming to Apple HIG */
+.glass-panel-modern {
+  position: relative;
+  z-index: 10;
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  box-shadow: 
+    0 10px 40px -10px rgb(0 0 0 / 0.08),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.dark .glass-panel-modern {
+  background: rgba(25, 29, 34, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 
+    0 20px 50px -12px rgb(0 0 0 / 0.35),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Rounded squircle values typical of iOS */
+.squircle-lg {
+  border-radius: 16px;
+}
+
+.squircle-xl {
+  border-radius: 20px;
+}
+
+.squircle-2xl {
+  border-radius: 24px;
+}
+
+.squircle-3xl {
+  border-radius: 32px;
+}
+
+/* Interactive Glass Button */
+.glass-button-modern {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--surface-muted) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  color: var(--foreground);
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  box-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.04);
+}
+
+.dark .glass-button-modern {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-button-modern:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.08);
+}
+
+.dark .glass-button-modern:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.glass-button-modern:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 4px -1px rgb(0 0 0 / 0.04);
+}
+
+/* Pulse Glow specifically for Recording Button (Liquid HIG style) */
+.liquid-record-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 20px -2px rgba(195, 57, 59, 0.4);
+}
+
+.liquid-record-button.is-recording {
+  background: #ff4d4f;
+  animation: pulse-ring 2s cubic-bezier(0.25, 0, 0, 1) infinite;
+  box-shadow: 0 0 0 8px rgba(255, 77, 79, 0.15), 0 8px 30px rgba(255, 77, 79, 0.5);
+}
+
+.liquid-record-button::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px solid rgba(195, 57, 59, 0.3);
+  opacity: 0;
+  transition: all 0.3s ease;
+}
+
+.liquid-record-button.is-recording::before {
+  opacity: 1;
+  transform: scale(1.15);
+  animation: pulse-ring 2s cubic-bezier(0.25, 0, 0, 1) infinite 0.5s;
+}
+
+/* Glassmorphic Overrides for Workspace components */
+.transcript-panel.glass-panel-modern {
+  border-radius: 20px;
+  border-top-width: 4px;
+}
+
+.transcript-panel.glass-panel-modern .transcript-panel__header {
+  background: transparent;
+  border-bottom-color: color-mix(in srgb, var(--border) 30%, transparent);
+}
+
+.transcript-panel.glass-panel-modern .transcript-panel__body {
+  background: transparent;
+}
+
+
+
