@@ -1,0 +1,3 @@
+/history/sessions/*  /history/sessions/fallback  200
+/history/folders/*   /history/folders/fallback   200
+/shared/summary/*    /shared/summary/fallback    200

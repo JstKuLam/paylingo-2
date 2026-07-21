@@ -1,7 +1,9 @@
 import { SessionDetailClient } from './ClientWrapper'
 
+export const dynamicParams = true
+
 export function generateStaticParams() {
-  return [{ id: '1' }]
+  return [{ id: 'fallback' }]
 }
 
 interface PageProps {

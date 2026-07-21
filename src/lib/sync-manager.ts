@@ -27,24 +27,25 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
   let syncedEntries = 0
 
   try {
-    await claimLegacyLocalData(ownerId, username)
-
-    // Automatically claim any local unowned sessions or reset failed items for retry
-    const localSessionsToSync = await db.sessions.where('sync_status').anyOf(['pending', 'failed']).toArray()
-    for (const s of localSessionsToSync) {
-      if (!s.owner_id || s.username === username) {
-        if (s.owner_id !== ownerId || s.sync_status === 'failed') {
-          await db.sessions.update(s.id, { owner_id: ownerId, username, sync_status: 'pending' })
-        }
+    // Automatically claim ALL local sessions, folders, and entries for current user and retry failed/pending items
+    const allSessions = await db.sessions.toArray()
+    for (const s of allSessions) {
+      if (!s.owner_id || s.owner_id !== ownerId || s.sync_status === 'failed') {
+        await db.sessions.update(s.id, { owner_id: ownerId, username, sync_status: 'pending' })
       }
     }
 
-    const localFoldersToSync = await db.folders.where('sync_status').anyOf(['pending', 'failed']).toArray()
-    for (const f of localFoldersToSync) {
-      if (!f.owner_id || f.username === username) {
-        if (f.owner_id !== ownerId || f.sync_status === 'failed') {
-          await db.folders.update(f.id, { owner_id: ownerId, username, sync_status: 'pending' })
-        }
+    const allFolders = await db.folders.toArray()
+    for (const f of allFolders) {
+      if (!f.owner_id || f.owner_id !== ownerId || f.sync_status === 'failed') {
+        await db.folders.update(f.id, { owner_id: ownerId, username, sync_status: 'pending' })
+      }
+    }
+
+    const allEntries = await db.transcriptEntries.toArray()
+    for (const e of allEntries) {
+      if (e.sync_status === 'failed') {
+        await db.transcriptEntries.update(e.id, { sync_status: 'pending' })
       }
     }
 
