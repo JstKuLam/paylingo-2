@@ -30,6 +30,7 @@ import {
   WifiOff,
 } from 'lucide-react'
 import PayPayLogo from '@/components/PayPayLogo'
+import ProfileMenu from '@/components/ProfileMenu'
 import { useSessionLifecycle } from '@/hooks/useSessionLifecycle'
 import { useTheme } from '@/hooks/useTheme'
 import { createClient } from '@/lib/supabase/client'
@@ -739,45 +740,7 @@ export default function SessionPage() {
           >
             {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
           </button>
-          <div className="profile-menu-container" ref={menuRef}>
-            <button
-              type="button"
-              className="profile-trigger"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              disabled={isRecordingActive}
-              aria-haspopup="true"
-              aria-expanded={isMenuOpen}
-              aria-label="Menu tài khoản"
-            >
-              <div className="profile-avatar">
-                {userLabel ? userLabel.charAt(0).toUpperCase() : <User size={14} />}
-              </div>
-              <span className="profile-username">{userLabel}</span>
-              <ChevronDown className={`profile-chevron ${isMenuOpen ? 'is-active' : ''}`} aria-hidden="true" />
-            </button>
-
-            {isMenuOpen && (
-              <div className="profile-dropdown" role="menu">
-                <div className="dropdown-user-info">
-                  <div className="dropdown-username">{userLabel}</div>
-                  <div className="dropdown-email">{userEmail || 'Tài khoản khách'}</div>
-                </div>
-                <div className="dropdown-divider" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMenuOpen(false)
-                    void handleLogout()
-                  }}
-                  className="dropdown-item logout-item"
-                  role="menuitem"
-                >
-                  <LogOut aria-hidden="true" />
-                  <span>Đăng xuất</span>
-                </button>
-              </div>
-            )}
-          </div>
+          <ProfileMenu disabled={isRecordingActive} />
         </div>
       </header>
 

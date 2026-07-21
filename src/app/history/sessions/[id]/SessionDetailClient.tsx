@@ -78,7 +78,16 @@ export default function SessionDetailPage({ params }: PageProps) {
       }
 
       await claimLegacyLocalData(user.id, username)
-      const localSession = await db.sessions.get(id)
+      void syncPendingData()
+
+      let localSession = await db.sessions.get(id)
+      if (localSession && (!localSession.owner_id || localSession.username === username)) {
+        if (localSession.owner_id !== user.id) {
+          await db.sessions.update(id, { owner_id: user.id, username, sync_status: 'pending' })
+          localSession = await db.sessions.get(id)
+        }
+      }
+
       if (localSession?.owner_id === user.id) {
         const localEntries = await db.transcriptEntries
           .where('session_id')

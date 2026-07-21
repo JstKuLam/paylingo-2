@@ -29,8 +29,27 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
   try {
     await claimLegacyLocalData(ownerId, username)
 
-    // 0. Sync pending folders
-    const pendingFolders = await db.folders.where('sync_status').equals('pending').toArray()
+    // Automatically claim any local unowned sessions or reset failed items for retry
+    const localSessionsToSync = await db.sessions.where('sync_status').anyOf(['pending', 'failed']).toArray()
+    for (const s of localSessionsToSync) {
+      if (!s.owner_id || s.username === username) {
+        if (s.owner_id !== ownerId || s.sync_status === 'failed') {
+          await db.sessions.update(s.id, { owner_id: ownerId, username, sync_status: 'pending' })
+        }
+      }
+    }
+
+    const localFoldersToSync = await db.folders.where('sync_status').anyOf(['pending', 'failed']).toArray()
+    for (const f of localFoldersToSync) {
+      if (!f.owner_id || f.username === username) {
+        if (f.owner_id !== ownerId || f.sync_status === 'failed') {
+          await db.folders.update(f.id, { owner_id: ownerId, username, sync_status: 'pending' })
+        }
+      }
+    }
+
+    // 0. Sync pending/failed folders
+    const pendingFolders = await db.folders.where('sync_status').anyOf(['pending', 'failed']).toArray()
     const ownedFolders = pendingFolders.filter((folder) => folder.owner_id === ownerId)
 
     if (ownedFolders.length > 0) {
@@ -58,8 +77,8 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
       }
     }
 
-    // 1. Sync pending sessions
-    const pendingSessions = await db.sessions.where('sync_status').equals('pending').toArray()
+    // 1. Sync pending/failed sessions
+    const pendingSessions = await db.sessions.where('sync_status').anyOf(['pending', 'failed']).toArray()
     const ownedSessions = pendingSessions.filter((localSession) => localSession.owner_id === ownerId)
 
     if (ownedSessions.length > 0) {
@@ -93,8 +112,8 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
       }
     }
 
-    // 2. Sync pending transcript entries
-    const pendingEntries = await db.transcriptEntries.where('sync_status').equals('pending').toArray()
+    // 2. Sync pending/failed transcript entries
+    const pendingEntries = await db.transcriptEntries.where('sync_status').anyOf(['pending', 'failed']).toArray()
 
     if (pendingEntries.length > 0) {
       // Group entries by session to verify RLS safety

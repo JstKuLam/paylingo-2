@@ -90,24 +90,28 @@ export default function Home() {
     setError(null)
 
     try {
-      const supabase = createClient()
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: sanitizedEmail,
-        options: {
-          shouldCreateUser: true,
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        }
+      const res = await fetch('/api/auth/send-magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: sanitizedEmail }),
       })
 
-      if (otpError) {
-        throw otpError
+      const data = await res.json()
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
       }
 
       setIsLinkSent(true)
       setResendCountdown(60)
     } catch (err) {
       console.error('Failed to send magic link:', err)
-      setError(err instanceof Error ? err.message : 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
+      const rawMsg = err instanceof Error ? err.message : ''
+      if (rawMsg.toLowerCase().includes('rate limit')) {
+        setError('Đã vượt quá giới hạn gửi email đăng nhập trong thời gian ngắn (Rate limit). Vui lòng đợi từ vài phút đến 1 giờ trước khi thử lại, hoặc liên hệ Admin.')
+      } else {
+        setError(rawMsg || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
+      }
     } finally {
       setIsLoading(false)
     }

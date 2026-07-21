@@ -484,6 +484,7 @@ button,
 }
 
 .session-header {
+  position: relative;
   min-height: 66px;
   display: grid;
   grid-template-columns: minmax(210px, 1fr) auto minmax(210px, 1fr);
@@ -493,7 +494,7 @@ button,
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  z-index: 10;
+  z-index: 500;
 }
 
 .session-brand {
@@ -1175,6 +1176,7 @@ button,
 }
 
 .workspace-header {
+  position: relative;
   min-height: 68px;
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto minmax(260px, 1fr);
@@ -1184,6 +1186,7 @@ button,
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+  z-index: 500;
 }
 
 .workspace-brand {
@@ -4384,6 +4387,7 @@ button,
 .profile-menu-container {
   position: relative;
   display: inline-block;
+  z-index: 100;
 }
 
 .profile-trigger {
@@ -4464,15 +4468,26 @@ button,
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 200px;
-  padding: 6px;
+  min-width: 220px;
+  padding: 8px;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow-md);
-  backdrop-filter: blur(8px);
-  z-index: 50;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 
+    0 20px 45px -10px rgba(0, 0, 0, 0.15),
+    0 4px 12px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 10000;
   animation: dropdownFadeIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .profile-dropdown {
+  background: #181c22;
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 24px 55px -10px rgba(0, 0, 0, 0.85),
+    0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 @keyframes dropdownFadeIn {

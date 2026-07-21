@@ -7,6 +7,8 @@ import { History, Mic2, Moon, Sun } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 import PayPayLogo from '@/components/PayPayLogo'
 
+import ProfileMenu from '@/components/ProfileMenu'
+
 export default function WorkspaceHeader({
   title,
   subtitle,
@@ -56,6 +58,7 @@ export default function WorkspaceHeader({
         >
           {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
         </button>
+        <ProfileMenu />
       </div>
     </header>
   )
