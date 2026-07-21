@@ -1,6 +1,8 @@
-export const runtime = 'edge'
-
 import { FolderDetailClient } from './ClientWrapper'
+
+export function generateStaticParams() {
+  return [{ id: '1' }]
+}
 
 interface PageProps {
   params: Promise<{ id: string }>
