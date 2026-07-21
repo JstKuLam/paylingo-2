@@ -1,3 +1,6 @@
 /history/sessions/*  /history/sessions/fallback.html  200
 /history/folders/*   /history/folders/fallback.html   200
 /shared/summary/*    /shared/summary/fallback.html    200
+/history/sessions/:id /history/sessions/fallback.html 200
+/history/folders/:id /history/folders/fallback.html 200
+/shared/summary/:id /shared/summary/fallback.html 200

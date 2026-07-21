@@ -44,7 +44,10 @@ interface PageProps {
 
 export default function SessionDetailPage({ params }: PageProps) {
   const router = useRouter()
-  const { id } = use(params)
+  const rawParams = use(params)
+  const id = (typeof rawParams.id === 'string' && rawParams.id !== 'fallback' && rawParams.id !== '')
+    ? rawParams.id
+    : (typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean).pop() || '' : '')
   const [session, setSession] = useState<LocalSession | null>(null)
   const [entries, setEntries] = useState<LocalTranscriptEntry[]>([])
   const [loading, setLoading] = useState(true)

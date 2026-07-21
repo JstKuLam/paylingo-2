@@ -7,7 +7,7 @@ import { ArrowLeft, Check, Copy, Eye, EyeOff, FileText, Loader2, LockKeyhole } f
 import PayPayLogo from '@/components/PayPayLogo'
 
 interface PageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id?: string | string[] }>
 }
 
 interface SharedSummary {
@@ -49,7 +49,10 @@ function SummaryDocument({ content }: { content: string }) {
 
 export default function SharedSummaryPage({ params }: PageProps) {
   const router = useRouter()
-  const { id } = use(params)
+  const rawParams = use(params)
+  const id = (typeof rawParams.id === 'string' && rawParams.id !== 'fallback' && rawParams.id !== '')
+    ? rawParams.id
+    : (typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean).pop() || '' : '')
   const [loading, setLoading] = useState(true)
   const [locked, setLocked] = useState(false)
   const [password, setPassword] = useState('')

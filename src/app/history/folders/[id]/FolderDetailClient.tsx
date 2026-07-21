@@ -49,7 +49,10 @@ function formatDuration(totalSeconds: number) {
 
 export default function FolderDetailPage({ params }: PageProps) {
   const router = useRouter()
-  const { id } = use(params)
+  const rawParams = use(params)
+  const id = (typeof rawParams.id === 'string' && rawParams.id !== 'fallback' && rawParams.id !== '')
+    ? rawParams.id
+    : (typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean).pop() || '' : '')
   const [folder, setFolder] = useState<LocalFolder | null>(null)
   const [sessions, setSessions] = useState<LocalSession[]>([])
   const [ownerId, setOwnerId] = useState('')
