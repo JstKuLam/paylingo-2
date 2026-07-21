@@ -36,6 +36,29 @@ export default function Home() {
 
   useEffect(() => {
     const checkUser = async () => {
+      const searchParams = new URLSearchParams(window.location.search)
+      const code = searchParams.get('code')
+      const supabase = createClient()
+
+      if (code) {
+        setIsLoading(true)
+        const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
+        if (!exchangeErr && data?.session) {
+          const userEmail = data.session.user.email
+          const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+          if (!isAllowedDomain) {
+            await supabase.auth.signOut()
+            setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+            setIsLoading(false)
+            return
+          }
+          window.history.replaceState({}, document.title, window.location.pathname)
+          router.replace('/session')
+          return
+        }
+        setIsLoading(false)
+      }
+
       if (!navigator.onLine) return
       try {
         const originCheck = await fetch('/api/app-version', { cache: 'no-store' })
@@ -43,7 +66,7 @@ export default function Home() {
       } catch {
         return
       }
-      const supabase = createClient()
+
       const { data: { session } } = await supabase.auth.getSession()
 
       if (session) {

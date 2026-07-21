@@ -1,6 +1,6 @@
-import { SessionDetailClient } from './ClientWrapper'
+export const runtime = 'edge'
 
-export const dynamic = 'force-static'
+import { SessionDetailClient } from './ClientWrapper'
 
 interface PageProps {
   params: Promise<{ id: string }>

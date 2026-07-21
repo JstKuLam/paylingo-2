@@ -369,7 +369,7 @@ export default function FolderDetailPage({ params }: PageProps) {
                   </section>
                 </aside>
                 <section className="report-preview report-preview--text">
-                  <header><div><h3>Bản tóm tắt</h3><p>Tổng hợp từ {sessions.length} hội thoại</p></div><button type="button" onClick={() => downloadSummaryHTML(folder.name, aiSummary, folder.created_at, 'Nhiều ngôn ngữ')} disabled={!aiSummary}><Download aria-hidden="true" /> Tải HTML</button></header>
+                  <header><div><h3>Bản tóm tắt</h3><p>Tổng hợp từ {sessions.length} hội thoại</p></div><button type="button" onClick={async () => { const { downloadSummaryHTML } = await import('@/lib/html-generator'); downloadSummaryHTML(folder.name, aiSummary, folder.created_at, 'Nhiều ngôn ngữ') }} disabled={!aiSummary}><Download aria-hidden="true" /> Tải HTML</button></header>
                   {summaryError ? <div className="report-error" role="alert"><p>{summaryError}</p><button type="button" onClick={() => void handleAiSummarize()}>Thử lại</button></div> : <article>{aiSummary}</article>}
                 </section>
               </div>

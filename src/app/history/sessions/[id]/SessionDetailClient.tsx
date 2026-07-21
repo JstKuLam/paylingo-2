@@ -524,7 +524,10 @@ export default function SessionDetailPage({ params }: PageProps) {
                     <div><h3>Bản xem trước</h3><p>Báo cáo HTML từ nội dung tóm tắt</p></div>
                     <button
                       type="button"
-                      onClick={() => downloadSummaryHTML(session.name, aiSummary, session.started_at, partnerLanguage?.name || session.partner_language)}
+                      onClick={async () => {
+                        const { downloadSummaryHTML } = await import('@/lib/html-generator')
+                        downloadSummaryHTML(session.name, aiSummary, session.started_at, partnerLanguage?.name || session.partner_language)
+                      }}
                       disabled={!aiSummary}
                     >
                       <Download aria-hidden="true" /> Tải HTML
