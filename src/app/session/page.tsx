@@ -608,46 +608,51 @@ export default function SessionPage() {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
   const [isRecordingActive, setIsRecordingActive] = useState(false)
 
-  useEffect(() => initAutoSync(), [])
+  useEffect(() => {
+    try {
+      return initAutoSync()
+    } catch (err) {
+      console.error('Failed to init auto sync:', err)
+    }
+  }, [])
 
   useEffect(() => {
     const checkAuth = async () => {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+      try {
+        const supabase = createClient()
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError || !session) {
+          router.replace('/')
+          return
+        }
+
+        if (!session.user?.email) {
+          await supabase.auth.signOut()
+          router.replace('/?error=unauthorized')
+          return
+        }
+
+        const email = session.user.email
+
+        const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+        if (!isAllowedDomain) {
+          await supabase.auth.signOut()
+          router.replace('/?error=domain_restricted')
+          return
+        }
+
+        const username = session?.user?.user_metadata?.username ||
+                         session?.user?.user_metadata?.full_name ||
+                         session?.user?.user_metadata?.name ||
+                         email?.split('@')[0] || 'User'
+
+        setUserLabel(username)
+        setUserEmail(email || null)
+        setIsLoadingAuth(false)
+      } catch (err) {
+        console.error('Error checking auth in SessionPage:', err)
         router.replace('/')
-        return
       }
-
-      // Reject anonymous logins
-      if (!session.user.email) {
-        await supabase.auth.signOut()
-        router.replace('/?error=unauthorized')
-        return
-      }
-
-      const email = session.user.email
-
-      const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-      if (!isAllowedDomain) {
-        await supabase.auth.signOut()
-        router.replace('/?error=domain_restricted')
-        return
-      }
-
-      const username = session?.user?.user_metadata?.username ||
-                       session?.user?.user_metadata?.full_name ||
-                       session?.user?.user_metadata?.name ||
-                       email?.split('@')[0]
-
-      if (!username) {
-        router.replace('/')
-        return
-      }
-
-      setUserLabel(username)
-      setUserEmail(email || null)
-      setIsLoadingAuth(false)
     }
     void checkAuth()
   }, [router])

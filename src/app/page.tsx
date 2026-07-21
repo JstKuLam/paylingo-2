@@ -36,48 +36,58 @@ export default function Home() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const searchParams = new URLSearchParams(window.location.search)
-      const code = searchParams.get('code')
-      const supabase = createClient()
+      try {
+        const searchParams = new URLSearchParams(window.location.search)
+        const code = searchParams.get('code')
+        const supabase = createClient()
 
-      if (code) {
-        setIsLoading(true)
-        const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
-        if (!exchangeErr && data?.session) {
-          const userEmail = data.session.user.email
+        if (code) {
+          setIsLoading(true)
+          const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
+          window.history.replaceState({}, document.title, window.location.pathname)
+
+          if (!exchangeErr && data?.session) {
+            const userEmail = data.session.user.email
+            const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+            if (!isAllowedDomain) {
+              await supabase.auth.signOut()
+              setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+              setIsLoading(false)
+              return
+            }
+            router.replace('/session')
+            return
+          } else if (exchangeErr) {
+            console.error('Exchange code error:', exchangeErr)
+            setError('Liên kết đăng nhập đã hết hạn hoặc đã được sử dụng. Vui lòng nhập email và gửi liên kết mới.')
+            setIsLoading(false)
+            return
+          }
+          setIsLoading(false)
+        }
+
+        if (!navigator.onLine) return
+        try {
+          const originCheck = await fetch('/api/app-version', { cache: 'no-store' })
+          if (!originCheck.ok) return
+        } catch {
+          return
+        }
+
+        const { data: { session } } = await supabase.auth.getSession()
+
+        if (session) {
+          const userEmail = session.user.email
           const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
           if (!isAllowedDomain) {
             await supabase.auth.signOut()
             setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
-            setIsLoading(false)
             return
           }
-          window.history.replaceState({}, document.title, window.location.pathname)
           router.replace('/session')
-          return
         }
-        setIsLoading(false)
-      }
-
-      if (!navigator.onLine) return
-      try {
-        const originCheck = await fetch('/api/app-version', { cache: 'no-store' })
-        if (!originCheck.ok) return
-      } catch {
-        return
-      }
-
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (session) {
-        const userEmail = session.user.email
-        const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-        if (!isAllowedDomain) {
-          await supabase.auth.signOut()
-          setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
-          return
-        }
-        router.replace('/session')
+      } catch (err) {
+        console.error('Error checking user session:', err)
       }
     }
     void checkUser()
