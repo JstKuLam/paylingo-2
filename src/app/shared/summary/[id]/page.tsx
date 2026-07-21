@@ -1,6 +1,6 @@
 import { SharedSummaryClient } from './ClientWrapper'
 
-export const dynamicParams = true
+export const dynamicParams = false
 
 export function generateStaticParams() {
   return [{ id: 'fallback' }]
