@@ -1,6 +1,6 @@
-export const runtime = 'edge'
-
 import { FolderDetailClient } from './ClientWrapper'
+
+export const dynamic = 'force-static'
 
 interface PageProps {
   params: Promise<{ id: string }>
