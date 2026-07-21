@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'edge'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://plokbhbcegrpxiczthvc.supabase.co'
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_SUPABASE_LEGACY_SERVICE_ROLE_KEY'
 
 export async function POST(request: Request) {
   try {
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     }
 
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
-    const origin = request.headers.get('origin') || 'http://localhost:3000'
+    const origin = request.headers.get('origin') || 'https://noidi.9phut.org'
 
     // Send magic link directly via Supabase Auth
     const { error: otpError } = await supabaseAdmin.auth.signInWithOtp({
@@ -38,18 +38,7 @@ export async function POST(request: Request) {
 
     if (otpError) {
       console.error('Failed to send magic link via Supabase:', otpError)
-      // Fallback: Generate magic link and try HTTP REST API if available
-      const { data, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-        type: 'magiclink',
-        email: sanitizedEmail,
-        options: {
-          redirectTo: redirectTo || `${origin}/auth/callback`,
-        },
-      })
-
-      if (linkError || !data?.properties?.action_link) {
-        return NextResponse.json({ error: otpError.message || linkError?.message || 'Không thể gửi liên kết đăng nhập.' }, { status: 500 })
-      }
+      return NextResponse.json({ error: otpError.message || 'Không thể gửi liên kết đăng nhập.' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

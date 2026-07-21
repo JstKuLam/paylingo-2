@@ -96,7 +96,13 @@ export default function Home() {
         body: JSON.stringify({ email: sanitizedEmail }),
       })
 
-      const data = await res.json()
+      const text = await res.text()
+      let data: { error?: string; success?: boolean } = {}
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch {
+        data = { error: 'Không thể đọc phản hồi từ server. Vui lòng thử lại.' }
+      }
 
       if (!res.ok || data.error) {
         throw new Error(data.error || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
