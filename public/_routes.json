@@ -1,5 +1,1 @@
-{
-  "version": 1,
-  "include": ["/*"],
-  "exclude": ["/_next/static/*", "/icons/*", "/manifest.json", "/sw.js", "/favicon.ico"]
-}
+{"version":1,"description":"Built with @cloudflare/next-on-pages@1.13.16.","include":["/*"],"exclude":["/_next/static/*"]}
