@@ -1,6 +1,9 @@
-export const runtime = 'edge'
-
 import { SessionDetailClient } from './ClientWrapper'
+
+export const dynamicParams = true
+export function generateStaticParams() {
+  return []
+}
 
 interface PageProps {
   params: Promise<{ id: string }>
