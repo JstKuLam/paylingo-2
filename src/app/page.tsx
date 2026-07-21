@@ -90,22 +90,17 @@ export default function Home() {
     setError(null)
 
     try {
-      const res = await fetch('/api/auth/send-magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: sanitizedEmail }),
+      const supabase = createClient()
+      const origin = window.location.origin
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: sanitizedEmail,
+        options: {
+          emailRedirectTo: `${origin}/auth/callback`,
+        },
       })
 
-      const text = await res.text()
-      let data: { error?: string; success?: boolean } = {}
-      try {
-        data = text ? JSON.parse(text) : {}
-      } catch {
-        data = { error: 'Không thể đọc phản hồi từ server. Vui lòng thử lại.' }
-      }
-
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
+      if (otpError) {
+        throw new Error(otpError.message || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
       }
 
       setIsLinkSent(true)
