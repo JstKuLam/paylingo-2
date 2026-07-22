@@ -54,19 +54,19 @@ const MODE_OPTIONS: Array<{
   description: string
 }> = [
   {
+    value: 'scribe',
+    label: 'Ghi chú cuộc họp',
+    description: 'Ghi lời nói, không tạo bản dịch',
+  },
+  {
     value: 'one_way',
-    label: 'Dịch sang Việt',
+    label: 'Dịch 1 chiều',
     description: 'Tự nhận diện ngôn ngữ và dịch sang tiếng Việt',
   },
   {
     value: 'two_way',
-    label: 'Đối thoại 2 chiều',
+    label: 'Dịch 2 chiều',
     description: 'Dịch qua lại giữa tiếng Việt và ngôn ngữ đã chọn',
-  },
-  {
-    value: 'scribe',
-    label: 'Ghi nguyên bản',
-    description: 'Ghi lời nói, không tạo bản dịch',
   },
 ]
 
@@ -600,7 +600,7 @@ export default function SessionPage() {
   const router = useRouter()
   const { theme, changeTheme } = useTheme()
   const { layoutMode, fontSize, setLayoutMode, setFontSize } = useDisplayPreferences()
-  const [recordingMode, setRecordingMode] = useState<RecordingMode>('one_way')
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>('scribe')
   const [partnerLang, setPartnerLang] = useState('any')
   const [userLabel, setUserLabel] = useState('Khách')
   const [userEmail, setUserEmail] = useState<string | null>(null)
