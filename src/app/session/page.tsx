@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { useRouter } from 'next/navigation'
 import { useRecording } from '@soniox/react'
+import { isAllowedEmail } from '@/lib/auth-utils'
 import {
   AlertTriangle,
   ArrowDown,
@@ -634,8 +635,8 @@ export default function SessionPage() {
 
         const email = session.user.email
 
-        const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-        if (!isAllowedDomain) {
+        const isAllowed = isAllowedEmail(email)
+        if (!isAllowed) {
           await supabase.auth.signOut()
           router.replace('/?error=domain_restricted')
           return

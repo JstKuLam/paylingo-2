@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { isAllowedEmail } from '@/lib/auth-utils'
 
 export const runtime = 'edge'
 
@@ -15,10 +16,10 @@ export async function POST(request: Request) {
     }
 
     const sanitizedEmail = email.trim().toLowerCase()
-    const isAllowedDomain = sanitizedEmail.endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+    const isAllowed = isAllowedEmail(sanitizedEmail)
 
-    if (!isAllowedDomain) {
-      return NextResponse.json({ error: 'Chỉ chấp nhận email thuộc domain công ty (@pay2pay.vn).' }, { status: 400 })
+    if (!isAllowed) {
+      return NextResponse.json({ error: 'Chỉ chấp nhận email thuộc domain công ty (@pay2pay.vn) hoặc email được cấp quyền.' }, { status: 400 })
     }
 
     if (!supabaseUrl || !serviceRoleKey) {

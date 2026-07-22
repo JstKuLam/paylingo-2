@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { isAllowedEmail } from '@/lib/auth-utils'
 
 export const runtime = 'edge'
 
@@ -38,10 +39,9 @@ export async function GET(request: Request) {
 
     if (!error && data?.session?.user) {
       const email = data.session.user.email
-      // Enforce @pay2pay.vn domain in production, allow any in development
-      const isAllowedDomain = email?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
+      const isAllowed = isAllowedEmail(email)
 
-      if (!isAllowedDomain) {
+      if (!isAllowed) {
         // Sign out immediately to clear cookies
         await supabase.auth.signOut()
         return NextResponse.redirect(`${origin}/?error=domain_restricted`)

@@ -16,6 +16,7 @@ import {
 import PayPayLogo from '@/components/PayPayLogo'
 import { useTheme } from '@/hooks/useTheme'
 import { createClient } from '@/lib/supabase/client'
+import { isAllowedEmail } from '@/lib/auth-utils'
 
 export default function Home() {
   const router = useRouter()
@@ -48,10 +49,10 @@ export default function Home() {
 
           if (!exchangeErr && data?.session) {
             const userEmail = data.session.user.email
-            const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-            if (!isAllowedDomain) {
+            const isAllowed = isAllowedEmail(userEmail)
+            if (!isAllowed) {
               await supabase.auth.signOut()
-              setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+              setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
               setIsLoading(false)
               return
             }
@@ -78,10 +79,10 @@ export default function Home() {
 
         if (session) {
           const userEmail = session.user.email
-          const isAllowedDomain = userEmail?.toLowerCase().endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-          if (!isAllowedDomain) {
+          const isAllowed = isAllowedEmail(userEmail)
+          if (!isAllowed) {
             await supabase.auth.signOut()
-            setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+            setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
             return
           }
           router.replace('/session')
@@ -97,11 +98,11 @@ export default function Home() {
     if (errParam) {
       const timer = setTimeout(() => {
         if (errParam === 'domain_restricted') {
-          setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+          setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
         } else if (errParam === 'auth_failed') {
           setError('Xác thực thất bại. Vui lòng thử lại.')
         } else if (errParam === 'unauthorized') {
-          setError('Bạn chưa được cấp quyền truy cập. Vui lòng đăng nhập bằng email công ty.')
+          setError('Bạn chưa được cấp quyền truy cập. Vui lòng đăng nhập bằng email công ty hoặc email được cấp quyền.')
         }
       }, 0)
       return () => clearTimeout(timer)
@@ -113,9 +114,9 @@ export default function Home() {
     if (!email) return
 
     const sanitizedEmail = email.trim().toLowerCase()
-    const isAllowedDomain = sanitizedEmail.endsWith('@pay2pay.vn') || process.env.NODE_ENV === 'development'
-    if (!isAllowedDomain) {
-      setError('Chỉ chấp nhận email thuộc domain công ty (@pay2pay.vn).')
+    const isAllowed = isAllowedEmail(sanitizedEmail)
+    if (!isAllowed) {
+      setError('Chỉ chấp nhận email thuộc domain công ty (@pay2pay.vn) hoặc email được cấp quyền.')
       return
     }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, getAuthenticatedUser } from '@/lib/supabase/server'
+import { isAllowedEmail } from '@/lib/auth-utils'
 
 export const runtime = 'edge'
 
@@ -20,9 +21,9 @@ export async function POST(request: NextRequest) {
 
     const email = user.email?.trim().toLowerCase()
 
-    if (!email?.endsWith('@pay2pay.vn') || !user.email_confirmed_at) {
+    if (!email || !isAllowedEmail(email) || !user.email_confirmed_at) {
       return NextResponse.json(
-        { error: 'Chỉ chấp nhận tài khoản công ty (@pay2pay.vn).' },
+        { error: 'Chỉ chấp nhận tài khoản công ty hoặc tài khoản được cấp quyền.' },
         { status: 403, headers: { 'Cache-Control': 'no-store' } }
       )
     }
@@ -109,7 +110,7 @@ export async function DELETE(request: NextRequest) {
     const { data: { user }, error: authError } = await getAuthenticatedUser(request)
     const email = user?.email?.trim().toLowerCase()
 
-    if (authError || !user || !email?.endsWith('@pay2pay.vn') || !user.email_confirmed_at) {
+    if (authError || !user || !isAllowedEmail(email) || !user.email_confirmed_at) {
       return NextResponse.json(
         { error: 'Phiên đăng nhập không hợp lệ' },
         { status: 401, headers: { 'Cache-Control': 'no-store' } },
