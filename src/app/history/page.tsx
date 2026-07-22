@@ -71,9 +71,57 @@ export default function HistoryPage() {
       setFolders(localFolders)
       setSessions(localSessions)
       setLoadError('')
+
+      // Sync cloud sessions and folders from Supabase
+      const [cloudFoldersRes, cloudSessionsRes] = await Promise.all([
+        supabase.from('folders').select('id, username, name, created_at, updated_at').order('created_at', { ascending: false }),
+        supabase.from('sessions').select('id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds').order('started_at', { ascending: false }),
+      ])
+
+      const cloudFolders: LocalFolder[] = (cloudFoldersRes.data || []).map((f) => ({
+        id: f.id,
+        owner_id: f.owner_id || currentOwnerId,
+        username: f.username,
+        name: f.name,
+        created_at: f.created_at,
+        updated_at: f.updated_at || new Date().toISOString(),
+        sync_status: 'synced',
+      }))
+
+      const cloudSessions: LocalSession[] = (cloudSessionsRes.data || []).map((s) => ({
+        id: s.id,
+        owner_id: s.owner_id || currentOwnerId,
+        username: s.username,
+        folder_id: s.folder_id,
+        name: s.name,
+        partner_language: s.partner_language,
+        started_at: s.started_at,
+        ended_at: s.ended_at,
+        duration_seconds: s.duration_seconds,
+        sync_status: 'synced',
+        updated_at: s.updated_at || new Date().toISOString(),
+      }))
+
+      if (cloudFolders.length > 0 || cloudSessions.length > 0) {
+        await db.transaction('rw', db.folders, db.sessions, async () => {
+          if (cloudFolders.length > 0) {
+            await db.folders.bulkPut(cloudFolders)
+          }
+          if (cloudSessions.length > 0) {
+            await db.sessions.bulkPut(cloudSessions)
+          }
+        })
+
+        const [updatedFolders, updatedSessions] = await Promise.all([
+          db.folders.where('owner_id').equals(currentOwnerId).reverse().sortBy('created_at'),
+          db.sessions.where('owner_id').equals(currentOwnerId).reverse().sortBy('started_at'),
+        ])
+        setFolders(updatedFolders)
+        setSessions(updatedSessions)
+      }
     } catch (error) {
-      console.error('Failed to load local history:', error)
-      setLoadError('Không thể đọc lịch sử trên thiết bị này. Hãy tải lại trang và thử lại.')
+      console.error('Failed to load history:', error)
+      setLoadError('Không thể đọc lịch sử. Hãy kiểm tra kết nối và thử lại.')
     } finally {
       setLoading(false)
     }

@@ -69,8 +69,16 @@ export const db = new PayLingoDatabase()
 
 export async function claimLegacyLocalData(ownerId: string, username: string) {
   await db.transaction('rw', db.sessions, db.folders, async () => {
-    const legacySessions = await db.sessions.where('username').equals(username).toArray()
-    const legacyFolders = await db.folders.where('username').equals(username).toArray()
+    const cleanUsername = username.trim().toLowerCase()
+    const allSessions = await db.sessions.toArray()
+    const allFolders = await db.folders.toArray()
+
+    const legacySessions = allSessions.filter(
+      (session) => !session.owner_id || session.username.trim().toLowerCase() === cleanUsername
+    )
+    const legacyFolders = allFolders.filter(
+      (folder) => !folder.owner_id || folder.username.trim().toLowerCase() === cleanUsername
+    )
 
     await Promise.all(
       legacySessions

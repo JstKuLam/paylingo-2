@@ -1,6 +1,6 @@
 import { FolderDetailClient } from './ClientWrapper'
 
-export const dynamicParams = false
+export const dynamicParams = true
 
 export function generateStaticParams() {
   return [{ id: 'fallback' }]
