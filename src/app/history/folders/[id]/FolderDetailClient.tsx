@@ -96,7 +96,7 @@ export default function FolderDetailPage({ params }: PageProps) {
 
       const { data: cloudFolder, error: folderError } = await supabase
         .from('folders')
-        .select('id, username, name, created_at, updated_at')
+        .select('id, owner_id, username, name, created_at, updated_at')
         .eq('id', id)
         .single()
       if (folderError || !cloudFolder) {
@@ -106,7 +106,7 @@ export default function FolderDetailPage({ params }: PageProps) {
 
       const { data: cloudSessions, error: sessionsError } = await supabase
         .from('sessions')
-        .select('id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds')
+        .select('id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at')
         .eq('folder_id', id)
         .order('started_at', { ascending: false })
       if (sessionsError) throw sessionsError

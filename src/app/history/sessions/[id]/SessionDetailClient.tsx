@@ -106,7 +106,7 @@ export default function SessionDetailPage({ params }: PageProps) {
 
       const { data: cloudSession, error: sessionError } = await supabase
         .from('sessions')
-        .select('id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds')
+        .select('id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at')
         .eq('id', id)
         .single()
 

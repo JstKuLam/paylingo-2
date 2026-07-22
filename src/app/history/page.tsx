@@ -74,8 +74,8 @@ export default function HistoryPage() {
 
       // Sync cloud sessions and folders from Supabase
       const [cloudFoldersRes, cloudSessionsRes] = await Promise.all([
-        supabase.from('folders').select('id, username, name, created_at, updated_at').order('created_at', { ascending: false }),
-        supabase.from('sessions').select('id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds').order('started_at', { ascending: false }),
+        supabase.from('folders').select('id, owner_id, username, name, created_at, updated_at').order('created_at', { ascending: false }),
+        supabase.from('sessions').select('id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at').order('started_at', { ascending: false }),
       ])
 
       const cloudFolders: LocalFolder[] = (cloudFoldersRes.data || []).map((f) => ({
