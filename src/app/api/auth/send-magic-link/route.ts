@@ -7,6 +7,80 @@ export const runtime = 'edge'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://plokbhbcegrpxiczthvc.supabase.co'
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_SUPABASE_LEGACY_SERVICE_ROLE_KEY'
 
+async function sendSmtpEdge(options: {
+  host: string
+  port: number
+  user: string
+  pass: string
+  from: string
+  to: string
+  subject: string
+  html: string
+}) {
+  // @ts-ignore
+  const cfSockets: any = await import(/* webpackIgnore: true */ 'cloudflare:sockets')
+  const socket: any = cfSockets.connect({ hostname: options.host, port: options.port })
+  const writer = socket.writable.getWriter()
+  const reader = socket.readable.getReader()
+  const encoder = new TextEncoder()
+  const decoder = new TextDecoder()
+
+  let buffer = ''
+
+  async function readLine(): Promise<string> {
+    let attempts = 0
+    while (!buffer.includes('\r\n') && attempts < 20) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      attempts++
+    }
+    const idx = buffer.indexOf('\r\n')
+    if (idx === -1) return buffer
+    const line = buffer.slice(0, idx)
+    buffer = buffer.slice(idx + 2)
+    return line
+  }
+
+  async function sendCmd(cmd: string): Promise<string> {
+    await writer.write(encoder.encode(cmd + '\r\n'))
+    return await readLine()
+  }
+
+  try {
+    await readLine() // Read 220 banner
+    await sendCmd('EHLO pay2pay.vn')
+    await sendCmd('AUTH LOGIN')
+    await sendCmd(btoa(options.user))
+    const authRes = await sendCmd(btoa(options.pass))
+
+    if (!authRes.startsWith('235')) {
+      throw new Error('SMTP Auth failed: ' + authRes)
+    }
+
+    await sendCmd(`MAIL FROM:<${options.user}>`)
+    await sendCmd(`RCPT TO:<${options.to}>`)
+    await sendCmd('DATA')
+
+    const message = [
+      `From: ${options.from}`,
+      `To: ${options.to}`,
+      `Subject: ${options.subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=utf-8',
+      '',
+      options.html,
+      '.'
+    ].join('\r\n')
+
+    const res = await sendCmd(message)
+    await sendCmd('QUIT')
+    return res
+  } finally {
+    try { writer.close() } catch {}
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { email, redirectTo } = await request.json()
@@ -51,20 +125,12 @@ export async function POST(request: Request) {
       const directMagicLink = `${origin}/auth/callback?token_hash=${hashedToken}&type=magiclink`
 
       try {
-        const nodemailer = (await import('nodemailer')).default
-        const transporter = nodemailer.createTransport({
+        const mailFrom = process.env.MAIL_FROM || `"PayLingo System" <${smtpUser}>`
+        await sendSmtpEdge({
           host: smtpHost,
           port: parseInt(process.env.SMTP_PORT || '587', 10),
-          secure: false,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass,
-          },
-        })
-
-        const mailFrom = process.env.MAIL_FROM || `"PayLingo System" <${smtpUser}>`
-
-        await transporter.sendMail({
+          user: smtpUser,
+          pass: smtpPass,
           from: mailFrom,
           to: sanitizedEmail,
           subject: 'Liên kết đăng nhập PayLingo',
@@ -91,10 +157,10 @@ export async function POST(request: Request) {
           `,
         })
 
-        console.log('Successfully sent custom email via Maileroo SMTP to:', sanitizedEmail)
+        console.log('Successfully sent custom email via Cloudflare Sockets SMTP to:', sanitizedEmail)
         return NextResponse.json({ success: true })
       } catch (mailErr) {
-        console.error('Maileroo SMTP send error, falling back to Supabase OTP:', mailErr)
+        console.error('Cloudflare Sockets SMTP send error, falling back to Supabase OTP:', mailErr)
       }
     }
 
