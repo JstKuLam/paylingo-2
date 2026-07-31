@@ -41,8 +41,19 @@ export async function GET(request: Request) {
 
   let userSession = null
 
-  // 1. Try exchanging code via SSR client
-  if (code) {
+  // 1. Try verifyOtp via token_hash FIRST (direct magic link, works cross-device and on mobile)
+  if (token_hash) {
+    const otpType = (type as any) || 'magiclink'
+    const { data, error } = await supabase.auth.verifyOtp({ token_hash, type: otpType })
+    if (!error && data?.session) {
+      userSession = data.session
+    } else if (error) {
+      console.warn('verifyOtp with token_hash failed:', error.message)
+    }
+  }
+
+  // 2. Try exchanging code via SSR client (PKCE flow)
+  if (!userSession && code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error && data?.session) {
       userSession = data.session
@@ -63,15 +74,6 @@ export async function GET(request: Request) {
       } catch (adminFail) {
         console.error('Admin code exchange failed:', adminFail)
       }
-    }
-  }
-
-  // 2. Try verifyOtp via token_hash if code failed or token_hash present
-  if (!userSession && token_hash) {
-    const otpType = (type as any) || 'magiclink'
-    const { data, error } = await supabase.auth.verifyOtp({ token_hash, type: otpType })
-    if (!error && data?.session) {
-      userSession = data.session
     }
   }
 

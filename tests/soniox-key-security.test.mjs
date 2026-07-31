@@ -9,7 +9,7 @@ test('Soniox endpoint requires a verified corporate email and only mints scoped 
   )
 
   assert.doesNotMatch(source, /PAYLINGO_MOBILE_SECRET|x-mobile-secret/)
-  assert.match(source, /endsWith\('@pay2pay\.vn'\)/)
+  assert.match(source, /isAllowedEmail\(email\)/)
   assert.match(source, /email_confirmed_at/)
   assert.match(source, /expires_in_seconds:\s*60/)
   assert.match(source, /single_use:\s*true/)
@@ -28,7 +28,7 @@ test('account deletion is authenticated and removes owned data before auth user'
 
   assert.match(source, /export async function DELETE/)
   assert.match(source, /getAuthenticatedUser\(request\)/)
-  assert.match(source, /endsWith\('@pay2pay\.vn'\)/)
+  assert.match(source, /isAllowedEmail\(email\)/)
   assert.match(source, /email_confirmed_at/)
   assert.match(source, /\.from\('sessions'\)/)
   assert.match(source, /\.from\('folders'\)/)
