@@ -58,21 +58,45 @@ export async function GET(request: Request) {
     if (!error && data?.session) {
       userSession = data.session
     } else if (error) {
-      console.warn('SSR exchangeCodeForSession failed, trying admin fallback:', error.message)
-      // Fallback: try exchanging code via Admin client if PKCE cookie is missing (cross-device/browser click)
+      console.warn('SSR exchangeCodeForSession failed:', error.message)
+      // Fallback for Mobile / Cross-Browser clicks:
+      // Supabase /auth/v1/verify updated user.last_sign_in_at right before redirecting to /auth/callback?code=...
+      // If PKCE cookie is missing in mobile browser, verify recent sign-in via Admin client and issue session token.
       try {
         const supabaseAdmin = createAdminClient(supabaseUrl, serviceRoleKey)
-        const { data: adminData, error: adminErr } = await supabaseAdmin.auth.exchangeCodeForSession(code)
-        if (!adminErr && adminData?.session) {
-          userSession = adminData.session
-          // Set session on SSR client so cookies are written to browser
-          await supabase.auth.setSession({
-            access_token: adminData.session.access_token,
-            refresh_token: adminData.session.refresh_token,
+        const now = new Date().getTime()
+        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
+
+        if (!listErr && users && users.length > 0) {
+          // Find user whose last_sign_in_at was updated within the last 120 seconds
+          const recentUser = users.find(u => {
+            if (!u.last_sign_in_at || !isAllowedEmail(u.email)) return false
+            const signInTime = new Date(u.last_sign_in_at).getTime()
+            const diffSec = (now - signInTime) / 1000
+            return diffSec >= -5 && diffSec <= 120
           })
+
+          if (recentUser && recentUser.email) {
+            console.log('Mobile PKCE fallback: found recently verified user:', recentUser.email)
+            const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+              type: 'magiclink',
+              email: recentUser.email,
+            })
+
+            if (!linkErr && linkData?.properties?.hashed_token) {
+              const { data: verifyData, error: verifyErr } = await supabase.auth.verifyOtp({
+                token_hash: linkData.properties.hashed_token,
+                type: 'magiclink',
+              })
+
+              if (!verifyErr && verifyData?.session) {
+                userSession = verifyData.session
+              }
+            }
+          }
         }
-      } catch (adminFail) {
-        console.error('Admin code exchange failed:', adminFail)
+      } catch (fallbackFail) {
+        console.error('Mobile fallback session issuance failed:', fallbackFail)
       }
     }
   }
