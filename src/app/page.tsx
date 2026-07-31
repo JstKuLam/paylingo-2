@@ -190,12 +190,12 @@ export default function Home() {
       }
 
       setIsLinkSent(true)
-      setResendCountdown(60)
+      setResendCountdown(10)
     } catch (err) {
       console.error('Failed to send magic link:', err)
       const rawMsg = err instanceof Error ? err.message : ''
-      if (rawMsg.toLowerCase().includes('rate limit')) {
-        setError('Đã vượt quá giới hạn gửi email đăng nhập trong thời gian ngắn (Rate limit). Vui lòng đợi từ vài phút đến 1 giờ trước khi thử lại, hoặc liên hệ Admin.')
+      if (rawMsg.toLowerCase().includes('rate limit') || rawMsg.toLowerCase().includes('seconds')) {
+        setError('Vui lòng đợi 10 giây trước khi thử gửi lại liên kết mới.')
       } else {
         setError(rawMsg || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
       }
