@@ -38,9 +38,43 @@ export default function Home() {
   useEffect(() => {
     const checkUser = async () => {
       try {
+        const supabase = createClient()
+
+        // 1. Check if hash fragment contains access_token and refresh_token (Implicit Flow / Magic Link Hash)
+        const hash = window.location.hash
+        if (hash && hash.includes('access_token=')) {
+          setIsLoading(true)
+          const hashParams = new URLSearchParams(hash.replace(/^#/, ''))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+
+          if (accessToken && refreshToken) {
+            const { data, error: setSessionErr } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+
+            window.history.replaceState({}, document.title, window.location.pathname)
+
+            if (!setSessionErr && data?.session) {
+              const userEmail = data.session.user.email
+              const isAllowed = isAllowedEmail(userEmail)
+              if (!isAllowed) {
+                await supabase.auth.signOut()
+                setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
+                setIsLoading(false)
+                return
+              }
+              setError(null)
+              router.replace('/session')
+              return
+            }
+          }
+        }
+
+        // 2. Check if code search parameter exists (PKCE Flow)
         const searchParams = new URLSearchParams(window.location.search)
         const code = searchParams.get('code')
-        const supabase = createClient()
 
         if (code) {
           setIsLoading(true)
@@ -56,6 +90,7 @@ export default function Home() {
               setIsLoading(false)
               return
             }
+            setError(null)
             router.replace('/session')
             return
           } else if (exchangeErr) {
@@ -85,6 +120,7 @@ export default function Home() {
             setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
             return
           }
+          setError(null)
           router.replace('/session')
         }
       } catch (err) {
@@ -93,19 +129,22 @@ export default function Home() {
     }
     void checkUser()
 
-    // Handle query params errors in next tick to avoid eslint set-state-in-effect error
-    const errParam = new URLSearchParams(window.location.search).get('error')
-    if (errParam) {
-      const timer = setTimeout(() => {
-        if (errParam === 'domain_restricted') {
-          setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
-        } else if (errParam === 'auth_failed') {
-          setError('Xác thực thất bại. Vui lòng thử lại.')
-        } else if (errParam === 'unauthorized') {
-          setError('Bạn chưa được cấp quyền truy cập. Vui lòng đăng nhập bằng email công ty hoặc email được cấp quyền.')
-        }
-      }, 0)
-      return () => clearTimeout(timer)
+    // Handle query params errors ONLY if hash doesn't have a valid access_token
+    const hash = window.location.hash
+    if (!hash || !hash.includes('access_token=')) {
+      const errParam = new URLSearchParams(window.location.search).get('error')
+      if (errParam) {
+        const timer = setTimeout(() => {
+          if (errParam === 'domain_restricted') {
+            setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
+          } else if (errParam === 'auth_failed') {
+            setError('Xác thực thất bại. Vui lòng thử lại.')
+          } else if (errParam === 'unauthorized') {
+            setError('Bạn chưa được cấp quyền truy cập. Vui lòng đăng nhập bằng email công ty hoặc email được cấp quyền.')
+          }
+        }, 0)
+        return () => clearTimeout(timer)
+      }
     }
   }, [router])
 
