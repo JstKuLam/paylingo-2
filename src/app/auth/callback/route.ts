@@ -18,6 +18,8 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? '/session'
 
   const cookieStore = await cookies()
+  const response = NextResponse.redirect(`${origin}${next}`)
+
   const supabase = createServerClient(
     supabaseUrl,
     supabaseAnonKey,
@@ -28,11 +30,12 @@ export async function GET(request: Request) {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
+            cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, options)
-            )
+              response.cookies.set(name, value, options)
+            })
           } catch {
-            // The `setAll` method was called from a Server Component.
+            // Handled in server environment
           }
         },
       },
@@ -110,7 +113,7 @@ export async function GET(request: Request) {
       await supabase.auth.signOut()
       return NextResponse.redirect(`${origin}/?error=domain_restricted`)
     }
-    return NextResponse.redirect(`${origin}${next}`)
+    return response
   }
 
   return NextResponse.redirect(`${origin}/?error=auth_failed`)
