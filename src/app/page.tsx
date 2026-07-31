@@ -190,12 +190,12 @@ export default function Home() {
       }
 
       setIsLinkSent(true)
-      setResendCountdown(10)
+      setResendCountdown(60)
     } catch (err) {
       console.error('Failed to send magic link:', err)
       const rawMsg = err instanceof Error ? err.message : ''
       if (rawMsg.toLowerCase().includes('rate limit') || rawMsg.toLowerCase().includes('seconds')) {
-        setError('Vui lòng đợi 10 giây trước khi thử gửi lại liên kết mới.')
+        setError('Hệ thống email đang trong thời gian chờ an toàn. Vui lòng đợi khoảng 60 giây rồi bấm gửi lại.')
       } else {
         setError(rawMsg || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
       }
