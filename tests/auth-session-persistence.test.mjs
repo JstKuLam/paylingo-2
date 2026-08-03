@@ -19,9 +19,9 @@ test('browser auth persists and refreshes long-lived sessions', async () => {
   assert.match(config, /sameSite:\s*['"]lax['"]/)
 })
 
-test('Next.js proxy refreshes Supabase cookies on incoming requests', async () => {
-  const proxy = await readFile(
-    new URL('../src/proxy.ts', import.meta.url),
+test('Next.js edge middleware refreshes Supabase cookies on incoming requests', async () => {
+  const middleware = await readFile(
+    new URL('../src/middleware.ts', import.meta.url),
     'utf8',
   )
   const sessionRefresh = await readFile(
@@ -29,8 +29,8 @@ test('Next.js proxy refreshes Supabase cookies on incoming requests', async () =
     'utf8',
   )
 
-  assert.match(proxy, /export async function proxy/)
-  assert.match(proxy, /updateSession\(request\)/)
+  assert.match(middleware, /export async function middleware/)
+  assert.match(middleware, /updateSession\(request\)/)
   assert.match(sessionRefresh, /supabase\.auth\.getUser\(\)/)
   assert.match(sessionRefresh, /cookieOptions:\s*AUTH_COOKIE_OPTIONS/)
   assert.match(sessionRefresh, /supabaseResponse\.cookies\.set/)

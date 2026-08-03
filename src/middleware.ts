@@ -1,7 +1,9 @@
 import type { NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
 
-export async function proxy(request: NextRequest) {
+// Next.js 16 Proxy is Node-only. Keep the deprecated Middleware convention
+// temporarily because Cloudflare Pages requires the Edge runtime.
+export async function middleware(request: NextRequest) {
   return updateSession(request)
 }
 

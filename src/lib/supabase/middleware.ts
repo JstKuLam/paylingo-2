@@ -3,6 +3,20 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { AUTH_COOKIE_OPTIONS } from './auth-config'
 import { isAllowedEmail } from '../auth-utils'
 
+const SECURITY_HEADERS = {
+  'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.soniox.com wss://stt-rt.soniox.com; upgrade-insecure-requests",
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Permissions-Policy': 'camera=(), geolocation=(), microphone=(self), payment=(), usb=()',
+}
+
+function applySecurityHeaders(response: NextResponse) {
+  Object.entries(SECURITY_HEADERS).forEach(([name, value]) => response.headers.set(name, value))
+  return response
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -45,8 +59,8 @@ export async function updateSession(request: NextRequest) {
     redirectUrl.search = '?error=unauthorized'
     const redirectResponse = NextResponse.redirect(redirectUrl)
     supabaseResponse.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie))
-    return redirectResponse
+    return applySecurityHeaders(redirectResponse)
   }
 
-  return supabaseResponse
+  return applySecurityHeaders(supabaseResponse)
 }

@@ -95,11 +95,15 @@ test('expensive and password-protected APIs have abuse controls', async () => {
 
 test('web and mobile ship with baseline data-exposure defenses', async () => {
   const config = await source('next.config.ts')
+  const middleware = await source('src/lib/supabase/middleware.ts')
+  const pagesHeaders = await source('public/_headers')
   const manifest = await source('paylingo-mobile/androidApp/src/main/AndroidManifest.xml')
   const viewModel = await source('paylingo-mobile/shared/src/commonMain/kotlin/com/paylingo/viewmodel/SessionViewModel.kt')
   const socket = await source('paylingo-mobile/shared/src/commonMain/kotlin/com/paylingo/network/SonioxWebSocketClient.kt')
   assert.match(config, /Content-Security-Policy/)
   assert.match(config, /frame-ancestors 'none'/)
+  assert.match(middleware, /Content-Security-Policy/)
+  assert.match(pagesHeaders, /X-Frame-Options: DENY/)
   assert.match(manifest, /android:allowBackup="false"/)
   assert.doesNotMatch(viewModel, /auth response:|API key fetch response:|live transcript JSON/)
   assert.doesNotMatch(socket, /Setup payload:|Raw transcript frame:/)
