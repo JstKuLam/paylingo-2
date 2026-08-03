@@ -23,7 +23,6 @@ import {
 } from 'lucide-react'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import { claimLegacyLocalData, db, LocalFolder, LocalSession } from '@/lib/db'
-import { downloadSummaryHTML } from '@/lib/html-generator'
 import { getPartnerLanguage } from '@/lib/languages'
 import { createClient } from '@/lib/supabase/client'
 import { syncPendingData } from '@/lib/sync-manager'
@@ -77,12 +76,13 @@ export default function FolderDetailPage({ params }: PageProps) {
                        user?.user_metadata?.full_name ||
                        user?.user_metadata?.name ||
                        user?.email?.split('@')[0]
-      if (!user || !username) {
+      const legacyUsername = user?.email?.split('@')[0]
+      if (!user || !username || !legacyUsername) {
         router.replace('/')
         return
       }
       setOwnerId(user.id)
-      await claimLegacyLocalData(user.id, username)
+      await claimLegacyLocalData(user.id, legacyUsername)
 
       const localFolder = await db.folders.get(id)
       if (localFolder?.owner_id === user.id) {

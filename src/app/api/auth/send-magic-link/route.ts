@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAllowedEmail } from '@/lib/auth-utils'
+import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'edge'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://plokbhbcegrpxiczthvc.supabase.co'
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_SUPABASE_LEGACY_SERVICE_ROLE_KEY'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 export async function POST(request: Request) {
   try {
-    const { email, redirectTo } = await request.json()
+    const { email } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json({ error: 'Email không hợp lệ.' }, { status: 400 })
@@ -25,16 +26,25 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json({ error: 'Chưa cấu hình Supabase Service Role Key.' }, { status: 500 })
+    const requestLimit = checkRateLimit({
+      key: `magic-link:${getRequestIp(request)}:${sanitizedEmail}`,
+      limit: 3,
+      windowMs: 15 * 60_000,
+    })
+    if (!requestLimit.allowed) return rateLimitResponse(requestLimit.retryAfterSeconds)
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({ error: 'Chưa cấu hình Supabase.' }, { status: 500 })
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
-    const origin = request.headers.get('origin') || 'https://noidi.9phut.org'
-    const targetRedirect = redirectTo || `${origin}/auth/callback`
+    const supabase = createClient(supabaseUrl, supabaseAnonKey)
+    const requestOrigin = new URL(request.url).origin
+    const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.NODE_ENV === 'development' ? requestOrigin : 'https://noidi.9phut.org')
+    const targetRedirect = new URL('/auth/callback', configuredOrigin).toString()
 
     // Call Supabase Auth signInWithOtp to actually DISPATCH the magic link email to the user's Inbox
-    const { error: otpError } = await supabaseAdmin.auth.signInWithOtp({
+    const { error: otpError } = await supabase.auth.signInWithOtp({
       email: sanitizedEmail,
       options: {
         emailRedirectTo: targetRedirect,
@@ -52,7 +62,7 @@ export async function POST(request: Request) {
         )
       }
       return NextResponse.json(
-        { error: rawMsg || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.' },
+        { error: 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.' },
         { status: 500 }
       )
     }

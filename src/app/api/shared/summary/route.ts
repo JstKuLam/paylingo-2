@@ -6,6 +6,7 @@ import {
   isLegacySharedPasswordHash,
   verifySharedPassword,
 } from '@/lib/shared-password'
+import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'edge'
 
@@ -19,8 +20,6 @@ const shareRequestSchema = z.object({
   summaryContent: z.string().min(1).max(500_000).optional(),
 })
 
-const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds))
-
 /**
  * GET handler: Fetch info about a shared summary.
  * If password is set, it only returns metadata (title, hasPassword: true) and NOT the content.
@@ -30,7 +29,6 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
-    const password = searchParams.get('password') || ''
 
     if (!id) {
       return NextResponse.json({ error: 'Thiếu ID chia sẻ' }, { status: 400 })
@@ -49,19 +47,8 @@ export async function GET(req: Request) {
 
     const hasPassword = !!summary.password_hash
 
-    // If password-protected, verify
     if (hasPassword) {
-      const isValid = await verifySharedPassword(password, summary.password_hash)
-      if (!isValid) {
-        await wait(600)
-        return NextResponse.json({
-          id: summary.id,
-          title: summary.title,
-          hasPassword: true,
-          isLocked: true,
-          created_at: summary.created_at
-        })
-      }
+      return NextResponse.json({ id: summary.id, hasPassword: true, isLocked: true })
     }
 
     // Return full content if no password or password verified
@@ -98,6 +85,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Thiếu ID chia sẻ' }, { status: 400 })
       }
 
+      const verifyLimit = checkRateLimit({
+        key: `shared-summary:${getRequestIp(req)}:${id}`,
+        limit: 5,
+        windowMs: 15 * 60_000,
+      })
+      if (!verifyLimit.allowed) return rateLimitResponse(verifyLimit.retryAfterSeconds)
+
       const supabase = createAdminClient()
       const { data: summary, error } = await supabase
         .from('shared_summaries')
@@ -113,7 +107,6 @@ export async function POST(req: Request) {
       if (hasPassword) {
         const isValid = await verifySharedPassword(password, summary.password_hash)
         if (!isValid) {
-          await wait(600)
           return NextResponse.json({ error: 'Mật khẩu không chính xác', isLocked: true }, { status: 401 })
         }
 

@@ -291,8 +291,7 @@ fun MainScreen(viewModel: SessionViewModel) {
                         )
                     }
 
-                    // Debug Log Button
-                    IconButton(
+                    if (BuildConfig.DEBUG) IconButton(
                         onClick = { showDebugDialog = true },
                         modifier = Modifier
                             .size(28.dp)
@@ -778,7 +777,7 @@ fun MainScreen(viewModel: SessionViewModel) {
         }
 
         // Premium Debug Logs Viewer Dialog
-        if (showDebugDialog) {
+        if (BuildConfig.DEBUG && showDebugDialog) {
             Dialog(onDismissRequest = { showDebugDialog = false }) {
                 Card(
                     modifier = Modifier

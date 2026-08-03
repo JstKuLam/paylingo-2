@@ -3,6 +3,7 @@ package com.paylingo.utils
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.Url
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -48,6 +49,12 @@ class UpdateManager {
 
             val minRequired = if (isAndroid) config.minVersionAndroid else config.minVersionIos
             val updateUrl = if (isAndroid) config.updateUrlAndroid else config.updateUrlIos
+
+            val parsedUpdateUrl = Url(updateUrl)
+            val allowedHosts = if (isAndroid) setOf("noidi.9phut.org") else setOf("testflight.apple.com", "apps.apple.com")
+            if (parsedUpdateUrl.protocol.name != "https" || parsedUpdateUrl.host.lowercase() !in allowedHosts) {
+                return UpdateCheckResult.Failure("Untrusted update URL")
+            }
 
             val needsUpdate = VersionComparator.isUpdateRequired(current, minRequired)
 

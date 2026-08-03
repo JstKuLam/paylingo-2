@@ -394,6 +394,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           action: 'passkey-login',
           challengeToken,
+          credentialId: arrayBufferToBase64(credential.rawId),
           clientDataJSON: arrayBufferToBase64(assertion.clientDataJSON),
           authenticatorData: arrayBufferToBase64(assertion.authenticatorData),
           signature: arrayBufferToBase64(assertion.signature)

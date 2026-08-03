@@ -15,13 +15,13 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
   useEffect(() => {
     const fetchUser = async () => {
       const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        const email = session.user.email
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const email = user.email
         const username =
-          session.user.user_metadata?.username ||
-          session.user.user_metadata?.full_name ||
-          session.user.user_metadata?.name ||
+          user.user_metadata?.username ||
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
           email?.split('@')[0] ||
           'Khách'
         setUserLabel(username)

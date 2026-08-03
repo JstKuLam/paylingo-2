@@ -19,7 +19,8 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
                    session?.user?.user_metadata?.full_name ||
                    session?.user?.user_metadata?.name ||
                    session?.user?.email?.split('@')[0]
-  if (!session || !username || !ownerId) {
+  const legacyUsername = session?.user?.email?.split('@')[0]
+  if (!session || !username || !legacyUsername || !ownerId) {
     return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Unauthenticated' }
   }
   let syncedFolders = 0
@@ -27,25 +28,21 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
   let syncedEntries = 0
 
   try {
-    // Automatically claim ALL local sessions, folders, and entries for current user and retry failed/pending items
-    const allSessions = await db.sessions.toArray()
-    for (const s of allSessions) {
-      if (!s.owner_id || s.owner_id !== ownerId || s.sync_status === 'failed') {
-        await db.sessions.update(s.id, { owner_id: ownerId, username, sync_status: 'pending' })
+    // Claim only ownerless legacy records that already match this trusted account name.
+    // A non-null owner is immutable here so shared browsers cannot transfer another user's data.
+    await claimLegacyLocalData(ownerId, legacyUsername)
+
+    const allSessions = await db.sessions.where('owner_id').equals(ownerId).toArray()
+    for (const sessionRecord of allSessions) {
+      if (sessionRecord.sync_status === 'failed') {
+        await db.sessions.update(sessionRecord.id, { sync_status: 'pending' })
       }
     }
 
-    const allFolders = await db.folders.toArray()
-    for (const f of allFolders) {
-      if (!f.owner_id || f.owner_id !== ownerId || f.sync_status === 'failed') {
-        await db.folders.update(f.id, { owner_id: ownerId, username, sync_status: 'pending' })
-      }
-    }
-
-    const allEntries = await db.transcriptEntries.toArray()
-    for (const e of allEntries) {
-      if (e.sync_status === 'failed') {
-        await db.transcriptEntries.update(e.id, { sync_status: 'pending' })
+    const allFolders = await db.folders.where('owner_id').equals(ownerId).toArray()
+    for (const folder of allFolders) {
+      if (folder.sync_status === 'failed') {
+        await db.folders.update(folder.id, { sync_status: 'pending' })
       }
     }
 

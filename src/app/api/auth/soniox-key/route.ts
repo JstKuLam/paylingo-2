@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, getAuthenticatedUser } from '@/lib/supabase/server'
 import { isAllowedEmail } from '@/lib/auth-utils'
+import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'edge'
 
@@ -27,6 +28,13 @@ export async function POST(request: NextRequest) {
         { status: 403, headers: { 'Cache-Control': 'no-store' } }
       )
     }
+
+    const keyLimit = checkRateLimit({
+      key: `soniox-key:${user.id}:${getRequestIp(request)}`,
+      limit: 20,
+      windowMs: 60 * 60_000,
+    })
+    if (!keyLimit.allowed) return rateLimitResponse(keyLimit.retryAfterSeconds)
 
     const username = user.user_metadata?.username ||
                      user.user_metadata?.full_name ||
@@ -114,6 +122,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { error: 'Phiên đăng nhập không hợp lệ' },
         { status: 401, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+
+    const lastSignIn = user.last_sign_in_at ? new Date(user.last_sign_in_at).getTime() : 0
+    if (!lastSignIn || Date.now() - lastSignIn > 15 * 60_000) {
+      return NextResponse.json(
+        { error: 'Vui lòng đăng nhập lại trước khi xóa tài khoản' },
+        { status: 403, headers: { 'Cache-Control': 'no-store' } },
       )
     }
 

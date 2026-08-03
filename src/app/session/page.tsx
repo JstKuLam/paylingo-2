@@ -15,19 +15,16 @@ import { isAllowedEmail } from '@/lib/auth-utils'
 import {
   AlertTriangle,
   ArrowDown,
-  ChevronDown,
   Columns2,
   History,
   Languages,
   Loader2,
-  LogOut,
   Mic,
   Moon,
   PanelTop,
   RotateCcw,
   Square,
   Sun,
-  User,
   WifiOff,
 } from 'lucide-react'
 import PayPayLogo from '@/components/PayPayLogo'
@@ -603,7 +600,6 @@ export default function SessionPage() {
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('scribe')
   const [partnerLang, setPartnerLang] = useState('any')
   const [userLabel, setUserLabel] = useState('Khách')
-  const [userEmail, setUserEmail] = useState<string | null>(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
@@ -621,19 +617,19 @@ export default function SessionPage() {
     const checkAuth = async () => {
       try {
         const supabase = createClient()
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        if (sessionError || !session) {
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        if (userError || !user) {
           router.replace('/')
           return
         }
 
-        if (!session.user?.email) {
+        if (!user.email) {
           await supabase.auth.signOut()
           router.replace('/?error=unauthorized')
           return
         }
 
-        const email = session.user.email
+        const email = user.email
 
         const isAllowed = isAllowedEmail(email)
         if (!isAllowed) {
@@ -642,13 +638,12 @@ export default function SessionPage() {
           return
         }
 
-        const username = session?.user?.user_metadata?.username ||
-                         session?.user?.user_metadata?.full_name ||
-                         session?.user?.user_metadata?.name ||
+        const username = user.user_metadata?.username ||
+                         user.user_metadata?.full_name ||
+                         user.user_metadata?.name ||
                          email?.split('@')[0] || 'User'
 
         setUserLabel(username)
-        setUserEmail(email || null)
         setIsLoadingAuth(false)
       } catch (err) {
         console.error('Error checking auth in SessionPage:', err)
@@ -677,12 +672,6 @@ export default function SessionPage() {
     setRecordingMode(mode)
     if (mode === 'one_way') setPartnerLang('any')
     if (mode === 'two_way' && partnerLang === 'any') setPartnerLang('en')
-  }
-
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.replace('/')
   }
 
   if (isLoadingAuth) {

@@ -110,10 +110,10 @@ export default function Home() {
           return
         }
 
-        const { data: { session } } = await supabase.auth.getSession()
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-        if (session) {
-          const userEmail = session.user.email
+        if (!userError && user) {
+          const userEmail = user.email
           const isAllowed = isAllowedEmail(userEmail)
           if (!isAllowed) {
             await supabase.auth.signOut()
@@ -163,30 +163,16 @@ export default function Home() {
     setError(null)
 
     try {
-      const origin = window.location.origin
       const res = await fetch('/api/auth/send-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: sanitizedEmail,
-          redirectTo: `${origin}/auth/callback`,
-        }),
+        body: JSON.stringify({ email: sanitizedEmail }),
       })
 
       const resData = await res.json()
 
       if (!res.ok || resData.error) {
-        // Fallback to client-side signInWithOtp if API route returns an error
-        const supabase = createClient()
-        const { error: otpError } = await supabase.auth.signInWithOtp({
-          email: sanitizedEmail,
-          options: {
-            emailRedirectTo: `${origin}/auth/callback`,
-          },
-        })
-        if (otpError) {
-          throw new Error(resData.error || otpError.message || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
-        }
+        throw new Error(resData.error || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
       }
 
       setIsLinkSent(true)

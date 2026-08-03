@@ -2,64 +2,115 @@ import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/server'
 
 const ENCODER = new TextEncoder()
-const DEFAULT_PASSWORD = 'hoilamgi229@'
 const SESSION_COOKIE_NAME = 'admin_session'
-const SIGNING_SALT = 'paylingo_admin_salt_2026'
+const PBKDF2_ITERATIONS = 100_000
+const ADMIN_HASH_PREFIX = 'pbkdf2-sha256'
 
-export async function hashPassword(password: string): Promise<string> {
-  const data = ENCODER.encode(password)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+function toBase64Url(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 
-export async function createSessionToken(passwordHash: string, maxAgeSeconds = 86400 * 7): Promise<string> {
-  const expiresAt = Date.now() + maxAgeSeconds * 1000
-  const data = `${expiresAt}`
-  
+function fromBase64Url(value: string): Uint8Array {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=')
+  const binary = atob(padded)
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+}
+
+function timingSafeEqualBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) return false
+  let difference = 0
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index]
+  return difference === 0
+}
+
+export function timingSafeEqualStr(left: string, right: string): boolean {
+  return timingSafeEqualBytes(ENCODER.encode(left), ENCODER.encode(right))
+}
+
+async function pbkdf2Bits(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+  const keyMaterial = await crypto.subtle.importKey('raw', ENCODER.encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: salt as BufferSource, iterations },
+    keyMaterial,
+    256
+  )
+  return new Uint8Array(bits)
+}
+
+async function legacyHashPassword(password: string): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', ENCODER.encode(password))
+  return Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export function isLegacyAdminHash(stored: string): boolean {
+  return Boolean(stored) && !stored.startsWith(`${ADMIN_HASH_PREFIX}$`)
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const derived = await pbkdf2Bits(password, salt, PBKDF2_ITERATIONS)
+  return `${ADMIN_HASH_PREFIX}$${PBKDF2_ITERATIONS}$${toBase64Url(salt)}$${toBase64Url(derived)}`
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  if (!stored) return false
+  if (stored.startsWith(`${ADMIN_HASH_PREFIX}$`)) {
+    const parts = stored.split('$')
+    if (parts.length !== 4) return false
+    const iterations = Number(parts[1])
+    if (!Number.isSafeInteger(iterations) || iterations < 40_000 || iterations > 1_000_000) return false
+    const derived = await pbkdf2Bits(password, fromBase64Url(parts[2]), iterations)
+    return timingSafeEqualBytes(derived, fromBase64Url(parts[3]))
+  }
+  return timingSafeEqualStr(await legacyHashPassword(password), stored)
+}
+
+function getSigningSecret(): string {
+  const secret = process.env.ADMIN_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!secret || secret.length < 32) throw new Error('ADMIN_SESSION_SECRET chưa được cấu hình an toàn')
+  return secret
+}
+
+async function adminHmac(passwordHash: string, value: string): Promise<string> {
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    ENCODER.encode(passwordHash + SIGNING_SALT),
+    ENCODER.encode(`${getSigningSecret()}:${passwordHash}`),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
   )
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    keyMaterial,
-    ENCODER.encode(data)
-  )
-  const hashArray = Array.from(new Uint8Array(signature))
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-  
-  return `${data}.${hashHex}`
+  const signature = await crypto.subtle.sign('HMAC', keyMaterial, ENCODER.encode(value))
+  return Array.from(new Uint8Array(signature)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export async function createSignedAdminValue(value: string, passwordHash: string): Promise<string> {
+  return `${value}.${await adminHmac(passwordHash, value)}`
+}
+
+export async function verifySignedAdminValue(token: string, passwordHash: string): Promise<string | null> {
+  const separator = token.lastIndexOf('.')
+  if (separator < 1) return null
+  const value = token.slice(0, separator)
+  const signature = token.slice(separator + 1)
+  const expected = await adminHmac(passwordHash, value)
+  return timingSafeEqualStr(expected, signature) ? value : null
+}
+
+export async function createSessionToken(passwordHash: string, maxAgeSeconds = 86400 * 7): Promise<string> {
+  const expiresAt = Date.now() + maxAgeSeconds * 1000
+  return createSignedAdminValue(`${expiresAt}:${crypto.randomUUID()}`, passwordHash)
 }
 
 export async function verifySessionToken(token: string, passwordHash: string): Promise<boolean> {
   try {
-    const parts = token.split('.')
-    if (parts.length !== 2) return false
-    const [expiresAtStr, sig] = parts
+    const value = await verifySignedAdminValue(token, passwordHash)
+    if (!value) return false
+    const [expiresAtStr] = value.split(':')
     const expiresAt = parseInt(expiresAtStr, 10)
-    
     if (isNaN(expiresAt) || expiresAt < Date.now()) return false
-    
-    const keyMaterial = await crypto.subtle.importKey(
-      'raw',
-      ENCODER.encode(passwordHash + SIGNING_SALT),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    )
-    const signature = await crypto.subtle.sign(
-      'HMAC',
-      keyMaterial,
-      ENCODER.encode(expiresAtStr)
-    )
-    const hashArray = Array.from(new Uint8Array(signature))
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-    
-    return hashHex === sig
+    return true
   } catch {
     return false
   }
@@ -74,9 +125,19 @@ export async function getAdminCredentials() {
     .single()
     
   if (error || !data) {
-    const defaultHash = await hashPassword(DEFAULT_PASSWORD)
+    const bootstrap = process.env.ADMIN_BOOTSTRAP_PASSWORD
+    if (bootstrap && bootstrap.length >= 12) {
+      return {
+        configured: true,
+        passwordHash: await legacyHashPassword(bootstrap),
+        passkeyEnabled: false,
+        passkeySpki: '',
+        passkeyCredId: ''
+      }
+    }
     return {
-      passwordHash: defaultHash,
+      configured: false,
+      passwordHash: '',
       passkeyEnabled: false,
       passkeySpki: '',
       passkeyCredId: ''
@@ -84,6 +145,7 @@ export async function getAdminCredentials() {
   }
   
   return {
+    configured: true,
     passwordHash: data.api_key,
     passkeyEnabled: data.provider === 'passkey_enabled',
     passkeySpki: data.endpoint || '',
@@ -112,6 +174,7 @@ export async function checkAdminSession(): Promise<boolean> {
   if (!token) return false
   
   const creds = await getAdminCredentials()
+  if (!creds.configured || !creds.passwordHash) return false
   return await verifySessionToken(token, creds.passwordHash)
 }
 
@@ -133,17 +196,71 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer
 }
 
+function webAuthnDerSignatureToRaw(signature: Uint8Array): Uint8Array | null {
+  if (signature.length < 8 || signature[0] !== 0x30) return null
+  let offset = 1
+  const sequenceLength = signature[offset] & 0x80
+    ? signature[offset + 1]
+    : signature[offset]
+  offset += signature[offset] & 0x80 ? 2 : 1
+  if (sequenceLength <= 0 || offset + sequenceLength > signature.length || signature[offset++] !== 0x02) return null
+
+  const rLength = signature[offset++]
+  const r = signature.slice(offset, offset + rLength)
+  offset += rLength
+  if (signature[offset++] !== 0x02) return null
+  const sLength = signature[offset++]
+  const s = signature.slice(offset, offset + sLength)
+  if (offset + sLength > signature.length) return null
+
+  const normalize = (value: Uint8Array) => {
+    let normalized = value
+    while (normalized.length > 32 && normalized[0] === 0) normalized = normalized.slice(1)
+    if (normalized.length > 32) return null
+    const result = new Uint8Array(32)
+    result.set(normalized, 32 - normalized.length)
+    return result
+  }
+  const rawR = normalize(r)
+  const rawS = normalize(s)
+  if (!rawR || !rawS) return null
+  const raw = new Uint8Array(64)
+  raw.set(rawR, 0)
+  raw.set(rawS, 32)
+  return raw
+}
+
 export async function verifyPasskeyAssertion(
   clientDataJSONBase64: string,
   authenticatorDataBase64: string,
   signatureBase64: string,
-  spkiBase64: string
+  spkiBase64: string,
+  expectedOrigin: string,
+  expectedRpId: string
 ): Promise<boolean> {
   try {
     const spki = base64ToArrayBuffer(spkiBase64)
     const authData = base64ToArrayBuffer(authenticatorDataBase64)
     const clientDataJSON = base64ToArrayBuffer(clientDataJSONBase64)
-    const signature = base64ToArrayBuffer(signatureBase64)
+    const signatureDer = new Uint8Array(base64ToArrayBuffer(signatureBase64))
+    const signature = webAuthnDerSignatureToRaw(signatureDer)
+    if (!signature) return false
+
+    const clientData = JSON.parse(new TextDecoder().decode(clientDataJSON)) as {
+      type?: string
+      origin?: string
+    }
+    if (clientData.type !== 'webauthn.get' || clientData.origin !== expectedOrigin) return false
+
+    const authBytes = new Uint8Array(authData)
+    if (authBytes.byteLength < 37) return false
+    const expectedRpIdHash = new Uint8Array(await crypto.subtle.digest('SHA-256', ENCODER.encode(expectedRpId)))
+    if (!timingSafeEqualBytes(authBytes.slice(0, 32), expectedRpIdHash)) return false
+
+    const flags = authBytes[32]
+    const userPresent = (flags & 0x01) !== 0
+    const userVerified = (flags & 0x04) !== 0
+    if (!userPresent || !userVerified) return false
 
     const clientDataHash = await crypto.subtle.digest('SHA-256', clientDataJSON)
 
@@ -162,8 +279,8 @@ export async function verifyPasskeyAssertion(
     return await crypto.subtle.verify(
       { name: 'ECDSA', hash: { name: 'SHA-256' } },
       key,
-      signature,
-      concat
+      signature as BufferSource,
+      concat as BufferSource
     )
   } catch (err) {
     console.error('Failed to verify passkey signature:', err)

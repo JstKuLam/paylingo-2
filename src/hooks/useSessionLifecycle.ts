@@ -65,9 +65,10 @@ export function useSessionLifecycle({
                        session?.user?.user_metadata?.name ||
                        session?.user?.email?.split('@')[0]
       const ownerId = session?.user?.id
+      const legacyUsername = session?.user?.email?.split('@')[0]
 
-      if (username && ownerId) {
-        await claimLegacyLocalData(ownerId, username)
+      if (username && legacyUsername && ownerId) {
+        await claimLegacyLocalData(ownerId, legacyUsername)
         const abandonedSessions = await db.sessions
           .where('owner_id')
           .equals(ownerId)

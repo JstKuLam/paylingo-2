@@ -1,28 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { SessionDetailClient } from './history/sessions/[id]/ClientWrapper'
 import { FolderDetailClient } from './history/folders/[id]/ClientWrapper'
 import { SharedSummaryClient } from './shared/summary/[id]/ClientWrapper'
 
 export default function NotFoundClient() {
-  const [routeType, setRouteType] = useState<'session' | 'folder' | 'shared' | '404' | 'loading'>('loading')
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const path = window.location.pathname
-
-    if (path.startsWith('/history/sessions/')) {
-      setRouteType('session')
-    } else if (path.startsWith('/history/folders/')) {
-      setRouteType('folder')
-    } else if (path.startsWith('/shared/summary/')) {
-      setRouteType('shared')
-    } else {
-      setRouteType('404')
-    }
-  }, [])
+  const path = usePathname()
+  const routeType = path.startsWith('/history/sessions/')
+    ? 'session'
+    : path.startsWith('/history/folders/')
+      ? 'folder'
+      : path.startsWith('/shared/summary/')
+        ? 'shared'
+        : '404'
 
   if (routeType === 'session') {
     return <SessionDetailClient params={Promise.resolve({ id: '' })} />
@@ -34,14 +26,6 @@ export default function NotFoundClient() {
 
   if (routeType === 'shared') {
     return <SharedSummaryClient params={Promise.resolve({ id: '' })} />
-  }
-
-  if (routeType === 'loading') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-200">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500" />
-      </div>
-    )
   }
 
   return (

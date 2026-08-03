@@ -68,7 +68,7 @@ export default function SharedSummaryPage({ params }: PageProps) {
       if (!response.ok || data.error) throw new Error(data.error || 'Không thể tải bản tóm tắt.')
       if (data.isLocked) {
         setLocked(true)
-        setSummary({ title: data.title, created_at: data.created_at })
+        setSummary({ title: 'Bản tóm tắt được bảo vệ', created_at: '' })
       } else {
         setLocked(false)
         setSummary(data)

@@ -48,19 +48,20 @@ export default function HistoryPage() {
   const loadData = useCallback(async () => {
     try {
       const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      const currentOwnerId = session?.user?.id
-      const name = session?.user?.user_metadata?.username ||
-                   session?.user?.user_metadata?.full_name ||
-                   session?.user?.user_metadata?.name ||
-                   session?.user?.email?.split('@')[0]
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      const currentOwnerId = user?.id
+      const legacyUsername = user?.email?.split('@')[0]
+      const name = user?.user_metadata?.username ||
+                   user?.user_metadata?.full_name ||
+                   user?.user_metadata?.name ||
+                   user?.email?.split('@')[0]
 
-      if (!session || !name || !currentOwnerId) {
+      if (userError || !user || !name || !legacyUsername || !currentOwnerId) {
         router.replace('/')
         return
       }
 
-      await claimLegacyLocalData(currentOwnerId, name)
+      await claimLegacyLocalData(currentOwnerId, legacyUsername)
       const [localFolders, localSessions] = await Promise.all([
         db.folders.where('owner_id').equals(currentOwnerId).reverse().sortBy('created_at'),
         db.sessions.where('owner_id').equals(currentOwnerId).reverse().sortBy('started_at'),

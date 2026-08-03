@@ -2,19 +2,24 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import {
   hashPassword,
+  verifyPassword,
+  isLegacyAdminHash,
   createSessionToken,
+  createSignedAdminValue,
+  verifySignedAdminValue,
   getAdminCredentials,
   saveAdminCredentials,
   checkAdminSession,
   verifyPasskeyAssertion,
-  base64ToArrayBuffer
+  base64ToArrayBuffer,
+  timingSafeEqualStr,
 } from '@/lib/admin-auth'
+import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'edge'
 
 const SESSION_COOKIE_NAME = 'admin_session'
-const SIGNING_SALT = 'paylingo_admin_salt_2026'
-const ENCODER = new TextEncoder()
+const CHALLENGE_COOKIE_NAME = 'admin_passkey_challenge'
 
 export async function GET() {
   try {
@@ -46,12 +51,34 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Mật khẩu trống' }, { status: 400 })
       }
 
-      const inputHash = await hashPassword(password)
-      if (inputHash !== creds.passwordHash) {
+      const loginLimit = checkRateLimit({
+        key: `admin-login:${getRequestIp(req)}`,
+        limit: 5,
+        windowMs: 15 * 60_000,
+      })
+      if (!loginLimit.allowed) return rateLimitResponse(loginLimit.retryAfterSeconds)
+
+      if (!creds.configured) {
+        return NextResponse.json({ error: 'Admin chưa được cấu hình an toàn' }, { status: 503 })
+      }
+
+      if (!(await verifyPassword(password, creds.passwordHash))) {
         return NextResponse.json({ error: 'Sai mật khẩu' }, { status: 400 })
       }
 
-      const token = await createSessionToken(creds.passwordHash)
+      let activePasswordHash = creds.passwordHash
+      if (isLegacyAdminHash(creds.passwordHash)) {
+        activePasswordHash = await hashPassword(password)
+        const migrated = await saveAdminCredentials(
+          activePasswordHash,
+          creds.passkeySpki,
+          creds.passkeyCredId,
+          creds.passkeyEnabled
+        )
+        if (!migrated) return NextResponse.json({ error: 'Không thể nâng cấp bảo mật mật khẩu' }, { status: 500 })
+      }
+
+      const token = await createSessionToken(activePasswordHash)
       cookieStore.set(SESSION_COOKIE_NAME, token, {
         httpOnly: true,
         secure: true,
@@ -75,24 +102,28 @@ export async function POST(req: Request) {
     }
 
     if (action === 'get-challenge') {
-      const expiresAt = Date.now() + 300000 // 5 mins
+      if (!creds.configured || !creds.passkeyEnabled || !creds.passkeySpki || !creds.passkeyCredId) {
+        return NextResponse.json({ error: 'Passkey chưa được cấu hình' }, { status: 400 })
+      }
+      const challengeLimit = checkRateLimit({
+        key: `admin-passkey:${getRequestIp(req)}`,
+        limit: 10,
+        windowMs: 15 * 60_000,
+      })
+      if (!challengeLimit.allowed) return rateLimitResponse(challengeLimit.retryAfterSeconds)
+
+      const expiresAt = Date.now() + 120_000
       const randomVal = crypto.randomUUID()
       const challengeStr = `${expiresAt}:${randomVal}`
-      
-      const keyMaterial = await crypto.subtle.importKey(
-        'raw',
-        ENCODER.encode(creds.passwordHash + SIGNING_SALT),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      )
-      const signature = await crypto.subtle.sign(
-        'HMAC',
-        keyMaterial,
-        ENCODER.encode(challengeStr)
-      )
-      const hashHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('')
-      const challengeToken = `${challengeStr}.${hashHex}`
+      const challengeToken = await createSignedAdminValue(challengeStr, creds.passwordHash)
+
+      cookieStore.set(CHALLENGE_COOKIE_NAME, challengeToken, {
+        httpOnly: true,
+        secure: true,
+        path: '/api/auth/admin',
+        sameSite: 'strict',
+        maxAge: 120,
+      })
 
       // Also return the registered Credential ID so client can pass it to allowCredentials
       return NextResponse.json({
@@ -102,39 +133,30 @@ export async function POST(req: Request) {
     }
 
     if (action === 'passkey-login') {
-      const { challengeToken, clientDataJSON, authenticatorData, signature } = body
-      if (!challengeToken || !clientDataJSON || !authenticatorData || !signature) {
+      const { challengeToken, credentialId, clientDataJSON, authenticatorData, signature } = body
+      if (!challengeToken || !credentialId || !clientDataJSON || !authenticatorData || !signature) {
         return NextResponse.json({ error: 'Thiếu dữ liệu xác thực passkey' }, { status: 400 })
       }
 
       // Verify challenge token
       try {
-        const parts = challengeToken.split('.')
-        if (parts.length !== 2) throw new Error()
-        const [challengeStr, sig] = parts
+        const cookieChallenge = cookieStore.get(CHALLENGE_COOKIE_NAME)?.value
+        cookieStore.delete(CHALLENGE_COOKIE_NAME)
+        if (
+          !cookieChallenge ||
+          !timingSafeEqualStr(cookieChallenge, challengeToken) ||
+          !timingSafeEqualStr(credentialId, creds.passkeyCredId)
+        ) {
+          return NextResponse.json({ error: 'Yêu cầu xác thực không hợp lệ hoặc đã được sử dụng' }, { status: 400 })
+        }
+
+        const challengeStr = await verifySignedAdminValue(challengeToken, creds.passwordHash)
+        if (!challengeStr) return NextResponse.json({ error: 'Chữ ký yêu cầu không hợp lệ' }, { status: 400 })
         const [expiresAtStr] = challengeStr.split(':')
         const expiresAt = parseInt(expiresAtStr || '0', 10)
 
         if (isNaN(expiresAt) || expiresAt < Date.now()) {
           return NextResponse.json({ error: 'Yêu cầu xác thực đã hết hạn' }, { status: 400 })
-        }
-
-        const keyMaterial = await crypto.subtle.importKey(
-          'raw',
-          ENCODER.encode(creds.passwordHash + SIGNING_SALT),
-          { name: 'HMAC', hash: 'SHA-256' },
-          false,
-          ['sign']
-        )
-        const signatureBuffer = await crypto.subtle.sign(
-          'HMAC',
-          keyMaterial,
-          ENCODER.encode(challengeStr)
-        )
-        const hashHex = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
-
-        if (hashHex !== sig) {
-          return NextResponse.json({ error: 'Chữ ký yêu cầu không hợp lệ' }, { status: 400 })
         }
 
         // Verify clientDataJSON contains the challengeToken (in base64url encoded format)
@@ -160,7 +182,9 @@ export async function POST(req: Request) {
           clientDataJSON,
           authenticatorData,
           signature,
-          creds.passkeySpki
+          creds.passkeySpki,
+          process.env.PASSKEY_ORIGIN || new URL(req.url).origin,
+          process.env.PASSKEY_RP_ID || new URL(req.url).hostname
         )
 
         if (!isPasskeyValid) {
@@ -192,8 +216,8 @@ export async function POST(req: Request) {
 
     if (action === 'change-password') {
       const { newPassword } = body
-      if (!newPassword || newPassword.length < 6) {
-        return NextResponse.json({ error: 'Mật khẩu phải tối thiểu 6 ký tự' }, { status: 400 })
+      if (!newPassword || newPassword.length < 12) {
+        return NextResponse.json({ error: 'Mật khẩu phải tối thiểu 12 ký tự' }, { status: 400 })
       }
 
       const newHash = await hashPassword(newPassword)

@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import { claimLegacyLocalData, db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
-import { generatePremiumHTMLReport, downloadSummaryHTML } from '@/lib/html-generator'
+import { generatePremiumHTMLReport } from '@/lib/html-generator'
 import { getPartnerLanguage } from '@/lib/languages'
 import { createClient } from '@/lib/supabase/client'
 import { syncPendingData } from '@/lib/sync-manager'
@@ -75,17 +75,18 @@ export default function SessionDetailPage({ params }: PageProps) {
                        user?.user_metadata?.full_name ||
                        user?.user_metadata?.name ||
                        user?.email?.split('@')[0]
-      if (!user || !username) {
+      const legacyUsername = user?.email?.split('@')[0]
+      if (!user || !username || !legacyUsername) {
         router.replace('/')
         return
       }
 
-      await claimLegacyLocalData(user.id, username)
+      await claimLegacyLocalData(user.id, legacyUsername)
       void syncPendingData()
 
       let localSession = await db.sessions.get(id)
-      if (localSession && (!localSession.owner_id || localSession.username === username)) {
-        if (localSession.owner_id !== user.id) {
+      if (localSession && !localSession.owner_id && localSession.username.trim().toLowerCase() === legacyUsername.toLowerCase()) {
+        if (!localSession.owner_id) {
           await db.sessions.update(id, { owner_id: user.id, username, sync_status: 'pending' })
           localSession = await db.sessions.get(id)
         }

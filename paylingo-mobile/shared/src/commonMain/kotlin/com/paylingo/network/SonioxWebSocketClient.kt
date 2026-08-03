@@ -25,7 +25,6 @@ class SonioxWebSocketClient(private val apiKey: String) {
         
         val jsonSerializer = Json { encodeDefaults = true }
         val initialRequestJson = jsonSerializer.encodeToString(initialRequest)
-        AppLog.d("SonioxWebSocketClient", "Setup payload: $initialRequestJson")
 
         try {
             AppLog.d("SonioxWebSocketClient", "Opening WebSocket connection: wss://stt-rt.soniox.com/transcribe-websocket")
@@ -62,7 +61,6 @@ class SonioxWebSocketClient(private val apiKey: String) {
             for (frame in session.incoming) {
                 if (frame is Frame.Text) {
                     val rawText = frame.readText()
-                    AppLog.d("SonioxWebSocketClient", "Raw transcript frame: $rawText")
                     onTranscriptReceived(rawText)
                 }
             }

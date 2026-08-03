@@ -74,21 +74,17 @@ export async function claimLegacyLocalData(ownerId: string, username: string) {
     const allFolders = await db.folders.toArray()
 
     const legacySessions = allSessions.filter(
-      (session) => !session.owner_id || session.username.trim().toLowerCase() === cleanUsername
+      (session) => !session.owner_id && session.username.trim().toLowerCase() === cleanUsername
     )
     const legacyFolders = allFolders.filter(
-      (folder) => !folder.owner_id || folder.username.trim().toLowerCase() === cleanUsername
+      (folder) => !folder.owner_id && folder.username.trim().toLowerCase() === cleanUsername
     )
 
     await Promise.all(
-      legacySessions
-        .filter((session) => !session.owner_id)
-        .map((session) => db.sessions.update(session.id, { owner_id: ownerId }))
+      legacySessions.map((session) => db.sessions.update(session.id, { owner_id: ownerId }))
     )
     await Promise.all(
-      legacyFolders
-        .filter((folder) => !folder.owner_id)
-        .map((folder) => db.folders.update(folder.id, { owner_id: ownerId }))
+      legacyFolders.map((folder) => db.folders.update(folder.id, { owner_id: ownerId }))
     )
   })
 }

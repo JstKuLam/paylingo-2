@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 object AppLog {
+    private const val MAX_LOG_LINES = 200
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs: StateFlow<List<String>> = _logs.asStateFlow()
 
@@ -20,9 +21,9 @@ object AppLog {
     }
 
     private fun addLog(line: String) {
-        val timestamp = "now" // Simple timestamp or tag
-        val formatted = "$line"
-        _logs.update { it + formatted }
+        val sanitized = line
+            .replace(Regex("(?i)(access[_ -]?token|refresh[_ -]?token|api[_ -]?key|authorization|cookie)\\s*[:=]\\s*[^\\s,}]+"), "${'$'}1=[REDACTED]")
+        _logs.update { (it + sanitized).takeLast(MAX_LOG_LINES) }
     }
     
     fun clear() {

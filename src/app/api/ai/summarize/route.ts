@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { z } from 'zod'
+import { isAllowedEmail } from '@/lib/auth-utils'
+import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
+import { getSafeAiEndpoint } from '@/lib/ai-security'
 
 export const runtime = 'edge'
 
 const transcriptEntrySchema = z.object({
   speaker: z.enum(['host', 'partner']),
-  original_text: z.string().max(10_000),
-  translated_text: z.string().max(10_000),
+  original_text: z.string().max(4_000),
+  translated_text: z.string().max(4_000),
   start_ms: z.number().finite(),
   sessionName: z.string().max(200).optional(),
 }).passthrough()
@@ -22,8 +25,8 @@ const localSessionSchema = z.object({
 const summarizeRequestSchema = z.object({
   sessionId: z.string().uuid().optional(),
   folderId: z.string().uuid().optional(),
-  sessions: z.array(localSessionSchema).max(100).optional(),
-  entries: z.array(transcriptEntrySchema).max(5_000).optional(),
+  sessions: z.array(localSessionSchema).max(50).optional(),
+  entries: z.array(transcriptEntrySchema).max(500).optional(),
   style: z.enum(['default', 'formal', 'casual', 'very_casual']).default('default'),
 }).refine(
   (value) => Boolean(value.sessionId || value.folderId || value.entries?.length),
@@ -32,7 +35,7 @@ const summarizeRequestSchema = z.object({
   (value) => (value.entries || []).reduce(
     (total, entry) => total + entry.original_text.length + entry.translated_text.length,
     0
-  ) <= 500_000,
+  ) <= 120_000,
   { message: 'Transcript quá dài để tóm tắt trong một lần' }
 )
 
@@ -49,12 +52,24 @@ function formatOffset(milliseconds: number) {
 
 export async function POST(req: Request) {
   try {
+    const contentLength = Number(req.headers.get('content-length') || 0)
+    if (contentLength > 300_000) {
+      return NextResponse.json({ error: 'Yêu cầu quá lớn' }, { status: 413 })
+    }
+
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+    if (authError || !user || !isAllowedEmail(user.email) || !user.email_confirmed_at) {
+      return NextResponse.json({ error: 'Tài khoản không được phép sử dụng tính năng AI' }, { status: 403 })
     }
+
+    const requestLimit = checkRateLimit({
+      key: `ai-summary:${user.id}:${getRequestIp(req)}`,
+      limit: 5,
+      windowMs: 60 * 60_000,
+    })
+    if (!requestLimit.allowed) return rateLimitResponse(requestLimit.retryAfterSeconds)
 
     const username = user.user_metadata?.username || 'unknown'
     const parsedBody = summarizeRequestSchema.safeParse(await req.json())
@@ -136,6 +151,14 @@ export async function POST(req: Request) {
 
     if (allEntries.length === 0) {
       return NextResponse.json({ error: 'Hội thoại trống, không có dữ liệu để tóm tắt' }, { status: 400 })
+    }
+
+    const totalTranscriptChars = allEntries.reduce(
+      (total, entry) => total + entry.original_text.length + entry.translated_text.length,
+      0
+    )
+    if (allEntries.length > 500 || totalTranscriptChars > 120_000) {
+      return NextResponse.json({ error: 'Transcript vượt giới hạn an toàn cho một lần tóm tắt' }, { status: 413 })
     }
 
     // Format transcripts for AI model
@@ -233,9 +256,10 @@ ${formattedTranscript}
             temperature: 0.2,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 8192,
+            maxOutputTokens: 4096,
           },
         }),
+        signal: AbortSignal.timeout(45_000),
       })
 
       if (!response.ok) {
@@ -252,7 +276,8 @@ ${formattedTranscript}
       // Gemini 2.5 Flash estimated pricing: Prompt: $0.075 / 1M, Completion: $0.30 / 1M
       estimatedCost = (promptTokens * 0.000000075) + (completionTokens * 0.00000030)
     } else if (provider === 'openai') {
-      const baseUrl = endpoint.trim().replace(/\/$/, '') || 'https://api.openai.com/v1'
+      const baseUrl = getSafeAiEndpoint(endpoint)
+      if (!baseUrl) return NextResponse.json({ error: 'Endpoint AI không được phép' }, { status: 500 })
       const url = `${baseUrl}/chat/completions`
 
       const response = await fetch(url, {
@@ -267,8 +292,10 @@ ${formattedTranscript}
             { role: 'system', content: 'You are a professional meeting summary assistant.' },
             { role: 'user', content: prompt }
           ],
-          temperature: 0.2
-        })
+          temperature: 0.2,
+          max_tokens: 4096,
+        }),
+        signal: AbortSignal.timeout(45_000),
       })
 
       if (!response.ok) {

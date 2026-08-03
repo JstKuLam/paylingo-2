@@ -1,21 +1,28 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { isAllowedEmail } from '@/lib/auth-utils'
+import { AUTH_COOKIE_OPTIONS } from '@/lib/supabase/auth-config'
 
 export const runtime = 'edge'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://plokbhbcegrpxiczthvc.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'REDACTED_SUPABASE_LEGACY_PUBLISHABLE_ANON_KEY_'
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_SUPABASE_LEGACY_SERVICE_ROLE_KEY'
+
+function safeNextPath(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/session'
+  return value
+}
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+  const requestUrl = new URL(request.url)
+  const { searchParams } = requestUrl
+  const origin = process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.NODE_ENV === 'development' ? requestUrl.origin : 'https://noidi.9phut.org')
   const code = searchParams.get('code')
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type')
-  const next = searchParams.get('next') ?? '/session'
+  const next = safeNextPath(searchParams.get('next'))
 
   const cookieStore = await cookies()
   const response = NextResponse.redirect(`${origin}${next}`)
@@ -24,6 +31,7 @@ export async function GET(request: Request) {
     supabaseUrl,
     supabaseAnonKey,
     {
+      cookieOptions: AUTH_COOKIE_OPTIONS,
       cookies: {
         getAll() {
           return cookieStore.getAll()
@@ -46,7 +54,15 @@ export async function GET(request: Request) {
 
   // 1. Try verifyOtp via token_hash FIRST (direct magic link, works cross-device and on mobile)
   if (token_hash) {
-    const otpType = (type as any) || 'magiclink'
+    const otpType =
+      type === 'signup' ||
+      type === 'invite' ||
+      type === 'magiclink' ||
+      type === 'recovery' ||
+      type === 'email_change' ||
+      type === 'email'
+        ? type
+        : 'magiclink'
     const { data, error } = await supabase.auth.verifyOtp({ token_hash, type: otpType })
     if (!error && data?.session) {
       userSession = data.session
@@ -62,45 +78,6 @@ export async function GET(request: Request) {
       userSession = data.session
     } else if (error) {
       console.warn('SSR exchangeCodeForSession failed:', error.message)
-      // Fallback for Mobile / Cross-Browser clicks:
-      // Supabase /auth/v1/verify updated user.last_sign_in_at right before redirecting to /auth/callback?code=...
-      // If PKCE cookie is missing in mobile browser, verify recent sign-in via Admin client and issue session token.
-      try {
-        const supabaseAdmin = createAdminClient(supabaseUrl, serviceRoleKey)
-        const now = new Date().getTime()
-        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
-
-        if (!listErr && users && users.length > 0) {
-          // Find user whose last_sign_in_at was updated within the last 120 seconds
-          const recentUser = users.find(u => {
-            if (!u.last_sign_in_at || !isAllowedEmail(u.email)) return false
-            const signInTime = new Date(u.last_sign_in_at).getTime()
-            const diffSec = (now - signInTime) / 1000
-            return diffSec >= -5 && diffSec <= 120
-          })
-
-          if (recentUser && recentUser.email) {
-            console.log('Mobile PKCE fallback: found recently verified user:', recentUser.email)
-            const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
-              type: 'magiclink',
-              email: recentUser.email,
-            })
-
-            if (!linkErr && linkData?.properties?.hashed_token) {
-              const { data: verifyData, error: verifyErr } = await supabase.auth.verifyOtp({
-                token_hash: linkData.properties.hashed_token,
-                type: 'magiclink',
-              })
-
-              if (!verifyErr && verifyData?.session) {
-                userSession = verifyData.session
-              }
-            }
-          }
-        }
-      } catch (fallbackFail) {
-        console.error('Mobile fallback session issuance failed:', fallbackFail)
-      }
     }
   }
 

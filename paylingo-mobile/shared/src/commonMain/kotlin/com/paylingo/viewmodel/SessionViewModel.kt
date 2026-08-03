@@ -146,7 +146,6 @@ class SessionViewModel(
             setBody("{\"data\":{\"username\":\"android_client\"}}")
         }
         val jsonText = response.bodyAsText()
-        AppLog.d("SessionViewModel", "Supabase auth response: $jsonText")
         val result = Json { ignoreUnknownKeys = true }.decodeFromString<SupabaseAuthResponse>(jsonText)
         if (!result.access_token.isNullOrBlank()) {
             AppLog.d("SessionViewModel", "Successfully authenticated with Supabase anonymously.")
@@ -182,7 +181,6 @@ class SessionViewModel(
                 header("Cookie", "sb-aympjpedkyzzqoqsgkwl-auth-token=$cookieValue")
             }
             val jsonText = response.bodyAsText()
-            AppLog.d("SessionViewModel", "Soniox API key fetch response: $jsonText")
             val result = Json { ignoreUnknownKeys = true }.decodeFromString<SonioxKeyResponse>(jsonText)
             if (result.success && !result.api_key.isNullOrBlank()) {
                 AppLog.d("SessionViewModel", "Successfully fetched temporary Soniox API key.")
@@ -258,8 +256,7 @@ class SessionViewModel(
                 )
 
                 AppLog.d("SessionViewModel", "Connecting to Soniox WebSocket endpoint api.soniox.com...")
-                sonioxClient.startStreaming(sonioxConfig, audioFlow) { transcriptJson ->
-                    AppLog.d("SessionViewModel", "Received live transcript JSON from Soniox: $transcriptJson")
+                sonioxClient.startStreaming(sonioxConfig, audioFlow) { _ ->
                     scope.launch(Dispatchers.Default) {
                         val mockMsg = TranscriptMessage(
                             id = "msg_${currentTimeMillis()}",

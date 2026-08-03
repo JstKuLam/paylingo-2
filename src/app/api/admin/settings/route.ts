@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { checkAdminSession } from '@/lib/admin-auth'
 import { z } from 'zod'
+import { getSafeAiEndpoint } from '@/lib/ai-security'
 
 export const runtime = 'edge'
 
@@ -13,13 +14,8 @@ const apiSettingsSchema = z.object({
   api_key: z.string().trim().max(1_000),
 }).superRefine((settings, context) => {
   if (settings.provider === 'openai' && settings.endpoint) {
-    try {
-      const endpoint = new URL(settings.endpoint)
-      if (endpoint.protocol !== 'https:') {
-        context.addIssue({ code: 'custom', path: ['endpoint'], message: 'Endpoint phải dùng HTTPS' })
-      }
-    } catch {
-      context.addIssue({ code: 'custom', path: ['endpoint'], message: 'Endpoint không hợp lệ' })
+    if (!getSafeAiEndpoint(settings.endpoint)) {
+      context.addIssue({ code: 'custom', path: ['endpoint'], message: 'Endpoint chưa nằm trong AI_ALLOWED_HOSTS' })
     }
   }
 })
