@@ -1,0 +1,130 @@
+import { NextResponse } from 'next/server'
+import { getAuthenticatedUser } from '@/lib/auth/session'
+import { getD1 } from '@/lib/d1-client'
+
+export const runtime = 'edge'
+
+
+export async function POST(request: Request) {
+  try {
+    const user = await getAuthenticatedUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+    }
+
+    const payload = await request.json()
+    const { folders = [], sessions = [], entries = [] } = payload
+    const db = getD1()
+
+    let syncedFolders = 0
+    let syncedSessions = 0
+    let syncedEntries = 0
+
+    // 1. Sync Folders
+    if (Array.isArray(folders) && folders.length > 0) {
+      for (const folder of folders) {
+        if (!folder.id || !folder.name) continue
+        const nowIso = new Date().toISOString()
+        const createdAt = folder.created_at || nowIso
+        const updatedAt = folder.updated_at || nowIso
+        const username = folder.username || user.email.split('@')[0]
+
+        await db.prepare(`
+          INSERT INTO folders (id, name, owner_id, username, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            username = excluded.username,
+            updated_at = excluded.updated_at
+        `)
+          .bind(folder.id, folder.name, user.id, username, createdAt, updatedAt)
+          .run()
+        syncedFolders++
+      }
+    }
+
+    // 2. Sync Sessions
+    if (Array.isArray(sessions) && sessions.length > 0) {
+      for (const sess of sessions) {
+        if (!sess.id || !sess.name) continue
+        const nowIso = new Date().toISOString()
+        const startedAt = sess.started_at || nowIso
+        const endedAt = sess.ended_at || null
+        const updatedAt = sess.updated_at || nowIso
+        const username = sess.username || user.email.split('@')[0]
+        const durationSeconds = typeof sess.duration_seconds === 'number' ? sess.duration_seconds : 0
+        const partnerLang = sess.partner_language || 'en'
+        const folderId = sess.folder_id || null
+
+        await db.prepare(`
+          INSERT INTO sessions (id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, access_code_id, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            folder_id = excluded.folder_id,
+            partner_language = excluded.partner_language,
+            ended_at = excluded.ended_at,
+            duration_seconds = excluded.duration_seconds,
+            updated_at = excluded.updated_at
+        `)
+          .bind(
+            sess.id,
+            user.id,
+            username,
+            folderId,
+            sess.name,
+            partnerLang,
+            startedAt,
+            endedAt,
+            durationSeconds,
+            sess.access_code_id || null,
+            startedAt,
+            updatedAt
+          )
+          .run()
+        syncedSessions++
+      }
+    }
+
+    // 3. Sync Transcript Entries
+    if (Array.isArray(entries) && entries.length > 0) {
+      for (const entry of entries) {
+        if (!entry.id || !entry.session_id) continue
+        const nowIso = new Date().toISOString()
+        const createdAt = entry.created_at || nowIso
+        const startMs = typeof entry.start_ms === 'number' ? entry.start_ms : 0
+        const endMs = typeof entry.end_ms === 'number' ? entry.end_ms : 0
+        const speaker = entry.speaker === 'partner' ? 'partner' : 'host'
+        const origText = entry.original_text || ''
+        const transText = entry.translated_text || ''
+
+        await db.prepare(`
+          INSERT INTO transcript_entries (id, session_id, speaker, original_text, translated_text, start_ms, end_ms, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            speaker = excluded.speaker,
+            original_text = excluded.original_text,
+            translated_text = excluded.translated_text,
+            start_ms = excluded.start_ms,
+            end_ms = excluded.end_ms
+        `)
+          .bind(entry.id, entry.session_id, speaker, origText, transText, startMs, endMs, createdAt)
+          .run()
+        syncedEntries++
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      syncedFolders,
+      syncedSessions,
+      syncedEntries,
+    })
+  } catch (err: any) {
+    console.error('Error in sync API:', err)
+    return NextResponse.json(
+      { error: err?.message || 'Lỗi hệ thống khi đồng bộ dữ liệu.' },
+      { status: 500 }
+    )
+  }
+}

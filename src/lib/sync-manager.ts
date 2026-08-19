@@ -1,9 +1,9 @@
 import { claimLegacyLocalData, db } from './db'
-import { createClient } from './supabase/client'
+import { authClient } from './auth-client'
 import { stringToUUID } from './soniox-parser'
 
 /**
- * Sweeps the local IndexedDB and pushes all 'pending' sessions and transcript entries to Supabase.
+ * Sweeps the local IndexedDB and pushes all 'pending' folders, sessions and transcript entries to Cloudflare D1 via /api/sync.
  * Handles network connection checking and error states gracefully.
  */
 export async function syncPendingData(): Promise<{ success: boolean; syncedFolders?: number; syncedSessions: number; syncedEntries: number; error?: string }> {
@@ -11,8 +11,7 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
     return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Offline' }
   }
 
-  const supabase = createClient()
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { session } } = await authClient.getSession()
 
   const ownerId = session?.user?.id
   const username = session?.user?.user_metadata?.username ||
@@ -29,7 +28,6 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
 
   try {
     // Claim only ownerless legacy records that already match this trusted account name.
-    // A non-null owner is immutable here so shared browsers cannot transfer another user's data.
     await claimLegacyLocalData(ownerId, legacyUsername)
 
     const allSessions = await db.sessions.where('owner_id').equals(ownerId).toArray()
@@ -46,173 +44,121 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
       }
     }
 
-    // 0. Sync pending/failed folders
+    // 0. Prepare pending/failed folders
     const pendingFolders = await db.folders.where('sync_status').anyOf(['pending', 'failed']).toArray()
     const ownedFolders = pendingFolders.filter((folder) => folder.owner_id === ownerId)
 
-    if (ownedFolders.length > 0) {
-      const { error: folderError } = await supabase
-        .from('folders')
-        .upsert(ownedFolders.map((folder) => ({
-          id: folder.id,
-          owner_id: ownerId,
-          username: folder.username,
-          name: folder.name,
-          created_at: folder.created_at,
-          updated_at: folder.updated_at
-        })))
-
-      if (!folderError) {
-        await db.folders.bulkUpdate(
-          ownedFolders.map((folder) => ({ key: folder.id, changes: { owner_id: ownerId, sync_status: 'synced' as const } }))
-        )
-        syncedFolders = ownedFolders.length
-      } else {
-        console.error('Failed to sync folders:', folderError.message)
-        await db.folders.bulkUpdate(
-          ownedFolders.map((folder) => ({ key: folder.id, changes: { sync_status: 'failed' as const } }))
-        )
-      }
-    }
-
-    // 1. Sync pending/failed sessions
+    // 1. Prepare pending/failed sessions
     const pendingSessions = await db.sessions.where('sync_status').anyOf(['pending', 'failed']).toArray()
     const ownedSessions = pendingSessions.filter((localSession) => localSession.owner_id === ownerId)
 
-    if (ownedSessions.length > 0) {
-      const { error: sessError } = await supabase
-        .from('sessions')
-        .upsert(ownedSessions.map((localSession) => ({
-          id: localSession.id,
-          owner_id: ownerId,
-          username: localSession.username,
-          folder_id: localSession.folder_id || null,
-          name: localSession.name,
-          partner_language: localSession.partner_language,
-          started_at: localSession.started_at,
-          ended_at: localSession.ended_at,
-          duration_seconds: localSession.duration_seconds
-        })))
-
-      if (!sessError) {
-        await db.sessions.bulkUpdate(
-          ownedSessions.map((localSession) => ({
-            key: localSession.id,
-            changes: { owner_id: ownerId, sync_status: 'synced' as const }
-          }))
-        )
-        syncedSessions = ownedSessions.length
-      } else {
-        console.error('Failed to sync sessions:', sessError.message)
-        await db.sessions.bulkUpdate(
-          ownedSessions.map((localSession) => ({ key: localSession.id, changes: { sync_status: 'failed' as const } }))
-        )
+    // 2. Prepare pending/failed transcript entries
+    const pendingEntries = await db.transcriptEntries.where('sync_status').anyOf(['pending', 'failed']).toArray()
+    const sessionIds = Array.from(new Set(pendingEntries.map(e => e.session_id)))
+    const verifiedSessionIds = new Set<string>()
+    for (const sessId of sessionIds) {
+      const localSess = await db.sessions.get(sessId)
+      if (localSess?.owner_id === ownerId) {
+        verifiedSessionIds.add(sessId)
       }
     }
+    const safeEntries = pendingEntries.filter(entry => verifiedSessionIds.has(entry.session_id))
 
-    // 2. Sync pending/failed transcript entries
-    const pendingEntries = await db.transcriptEntries.where('sync_status').anyOf(['pending', 'failed']).toArray()
+    if (ownedFolders.length === 0 && ownedSessions.length === 0 && safeEntries.length === 0) {
+      return { success: true, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0 }
+    }
 
-    if (pendingEntries.length > 0) {
-      // Group entries by session to verify RLS safety
-      const sessionIds = Array.from(new Set(pendingEntries.map(e => e.session_id)))
-      
-      // Load local sessions for verification
-      const verifiedSessionIds = new Set<string>()
-      for (const sessId of sessionIds) {
-        const localSess = await db.sessions.get(sessId)
-        if (localSess?.owner_id === ownerId) {
-          verifiedSessionIds.add(sessId)
-        }
+    // Normalized transcript entries with valid UUID
+    const normalizedEntries = safeEntries.map(entry => {
+      const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
+        ? entry.id
+        : stringToUUID(entry.id)
+      return {
+        id: entryId,
+        session_id: entry.session_id,
+        speaker: entry.speaker,
+        original_text: entry.original_text,
+        translated_text: entry.translated_text,
+        start_ms: entry.start_ms,
+        end_ms: entry.end_ms,
+        created_at: entry.created_at
       }
+    })
 
-      // Filter entries that belong to verified sessions
-      const safeEntries = pendingEntries.filter(entry => verifiedSessionIds.has(entry.session_id))
+    // Dispatch batch sync request to /api/sync
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        folders: ownedFolders.map(f => ({
+          id: f.id,
+          name: f.name,
+          username: f.username,
+          created_at: f.created_at,
+          updated_at: f.updated_at
+        })),
+        sessions: ownedSessions.map(s => ({
+          id: s.id,
+          name: s.name,
+          username: s.username,
+          folder_id: s.folder_id || null,
+          partner_language: s.partner_language,
+          started_at: s.started_at,
+          ended_at: s.ended_at,
+          duration_seconds: s.duration_seconds,
+          updated_at: s.updated_at
+        })),
+        entries: normalizedEntries
+      })
+    })
 
-      if (safeEntries.length > 0) {
-        const supaEntries = safeEntries.map(entry => {
-          const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
-            ? entry.id
-            : stringToUUID(entry.id)
-          return {
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      throw new Error(errData.error || `Sync API error ${res.status}`)
+    }
+
+    const data = await res.json()
+
+    // Mark folders as synced
+    if (ownedFolders.length > 0) {
+      await db.folders.bulkUpdate(
+        ownedFolders.map(folder => ({ key: folder.id, changes: { sync_status: 'synced' as const } }))
+      )
+      syncedFolders = ownedFolders.length
+    }
+
+    // Mark sessions as synced
+    if (ownedSessions.length > 0) {
+      await db.sessions.bulkUpdate(
+        ownedSessions.map(session => ({ key: session.id, changes: { sync_status: 'synced' as const } }))
+      )
+      syncedSessions = ownedSessions.length
+    }
+
+    // Mark entries as synced
+    if (safeEntries.length > 0) {
+      for (const entry of safeEntries) {
+        const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
+          ? entry.id
+          : stringToUUID(entry.id)
+        if (entryId !== entry.id) {
+          await db.transcriptEntries.delete(entry.id)
+          await db.transcriptEntries.put({
+            ...entry,
             id: entryId,
-            session_id: entry.session_id,
-            speaker: entry.speaker,
-            original_text: entry.original_text,
-            translated_text: entry.translated_text,
-            start_ms: entry.start_ms,
-            end_ms: entry.end_ms,
-            created_at: entry.created_at
-          }
-        })
-
-        // Push all in one batch upsert
-        const { error: entriesError } = await supabase
-          .from('transcript_entries')
-          .upsert(supaEntries)
-
-        if (!entriesError) {
-          // Mark all safe entries as synced in local DB
-          for (const entry of safeEntries) {
-            const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
-              ? entry.id
-              : stringToUUID(entry.id)
-            if (entryId !== entry.id) {
-              await db.transcriptEntries.delete(entry.id)
-              await db.transcriptEntries.put({
-                ...entry,
-                id: entryId,
-                sync_status: 'synced',
-                updated_at: new Date().toISOString()
-              })
-            } else {
-              await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
-            }
-          }
-          syncedEntries += safeEntries.length
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          })
         } else {
-          console.error('Failed to sync transcript entries batch:', entriesError.message)
-          // Fallback to updating individually on failures to sync what is possible
-          for (const entry of safeEntries) {
-            const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
-              ? entry.id
-              : stringToUUID(entry.id)
-            const { error: singleError } = await supabase
-              .from('transcript_entries')
-              .upsert({
-                id: entryId,
-                session_id: entry.session_id,
-                speaker: entry.speaker,
-                original_text: entry.original_text,
-                translated_text: entry.translated_text,
-                start_ms: entry.start_ms,
-                end_ms: entry.end_ms,
-                created_at: entry.created_at
-              })
-
-            if (!singleError) {
-              if (entryId !== entry.id) {
-                await db.transcriptEntries.delete(entry.id)
-                await db.transcriptEntries.put({
-                  ...entry,
-                  id: entryId,
-                  sync_status: 'synced',
-                  updated_at: new Date().toISOString()
-                })
-              } else {
-                await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
-              }
-              syncedEntries++
-            } else {
-              await db.transcriptEntries.update(entry.id, { sync_status: 'failed' })
-            }
-          }
+          await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
         }
       }
+      syncedEntries = safeEntries.length
     }
 
     return { success: true, syncedFolders, syncedSessions, syncedEntries }
   } catch (error: unknown) {
+    console.error('Background sync failed:', error)
     return {
       success: false,
       syncedFolders,

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
   Check,
+  KeyRound,
   Languages,
   Loader2,
   LockKeyhole,
@@ -15,17 +16,19 @@ import {
 } from 'lucide-react'
 import PayPayLogo from '@/components/PayPayLogo'
 import { useTheme } from '@/hooks/useTheme'
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth-client'
 import { isAllowedEmail } from '@/lib/auth-utils'
 
 export default function Home() {
   const router = useRouter()
   const { theme, changeTheme } = useTheme()
   const [email, setEmail] = useState('')
+  const [otpCode, setOtpCode] = useState('')
   const [isLinkSent, setIsLinkSent] = useState(false)
   const [resendCountdown, setResendCountdown] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
 
   useEffect(() => {
     let timer: NodeJS.Timeout
@@ -38,85 +41,11 @@ export default function Home() {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        const supabase = createClient()
-
-        // 1. Check if hash fragment contains access_token and refresh_token (Implicit Flow / Magic Link Hash)
-        const hash = window.location.hash
-        if (hash && hash.includes('access_token=')) {
-          setIsLoading(true)
-          const hashParams = new URLSearchParams(hash.replace(/^#/, ''))
-          const accessToken = hashParams.get('access_token')
-          const refreshToken = hashParams.get('refresh_token')
-
-          if (accessToken && refreshToken) {
-            const { data, error: setSessionErr } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            })
-
-            window.history.replaceState({}, document.title, window.location.pathname)
-
-            if (!setSessionErr && data?.session) {
-              const userEmail = data.session.user.email
-              const isAllowed = isAllowedEmail(userEmail)
-              if (!isAllowed) {
-                await supabase.auth.signOut()
-                setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
-                setIsLoading(false)
-                return
-              }
-              setError(null)
-              router.replace('/session')
-              return
-            }
-          }
-        }
-
-        // 2. Check if code search parameter exists (PKCE Flow)
-        const searchParams = new URLSearchParams(window.location.search)
-        const code = searchParams.get('code')
-
-        if (code) {
-          setIsLoading(true)
-          const { data, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
-          window.history.replaceState({}, document.title, window.location.pathname)
-
-          if (!exchangeErr && data?.session) {
-            const userEmail = data.session.user.email
-            const isAllowed = isAllowedEmail(userEmail)
-            if (!isAllowed) {
-              await supabase.auth.signOut()
-              setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
-              setIsLoading(false)
-              return
-            }
-            setError(null)
-            router.replace('/session')
-            return
-          } else if (exchangeErr) {
-            console.error('Exchange code error:', exchangeErr)
-            setError('Liên kết đăng nhập đã hết hạn hoặc đã được sử dụng. Vui lòng nhập email và gửi liên kết mới.')
-            setIsLoading(false)
-            return
-          }
-          setIsLoading(false)
-        }
-
-        if (!navigator.onLine) return
-        try {
-          const originCheck = await fetch('/api/app-version', { cache: 'no-store' })
-          if (!originCheck.ok) return
-        } catch {
-          return
-        }
-
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-        if (!userError && user) {
+        const { data: { user } } = await authClient.getUser()
+        if (user) {
           const userEmail = user.email
-          const isAllowed = isAllowedEmail(userEmail)
-          if (!isAllowed) {
-            await supabase.auth.signOut()
+          if (!isAllowedEmail(userEmail)) {
+            await authClient.signOut()
             setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
             return
           }
@@ -129,21 +58,14 @@ export default function Home() {
     }
     void checkUser()
 
-    // Handle query params errors ONLY if hash doesn't have a valid access_token
-    const hash = window.location.hash
-    if (!hash || !hash.includes('access_token=')) {
-      const errParam = new URLSearchParams(window.location.search).get('error')
-      if (errParam) {
-        const timer = setTimeout(() => {
-          if (errParam === 'domain_restricted') {
-            setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
-          } else if (errParam === 'auth_failed') {
-            setError('Xác thực thất bại. Vui lòng thử lại.')
-          } else if (errParam === 'unauthorized') {
-            setError('Bạn chưa được cấp quyền truy cập. Vui lòng đăng nhập bằng email công ty hoặc email được cấp quyền.')
-          }
-        }, 0)
-        return () => clearTimeout(timer)
+    const errParam = new URLSearchParams(window.location.search).get('error')
+    if (errParam) {
+      if (errParam === 'invalid_or_expired_token' || errParam === 'invalid_token') {
+        setError('Liên kết đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng nhập email để nhận mã mới.')
+      } else if (errParam === 'domain_restricted') {
+        setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+      } else {
+        setError('Xác thực thất bại. Vui lòng thử lại.')
       }
     }
   }, [router])
@@ -163,16 +85,9 @@ export default function Home() {
     setError(null)
 
     try {
-      const res = await fetch('/api/auth/send-magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: sanitizedEmail }),
-      })
-
-      const resData = await res.json()
-
-      if (!res.ok || resData.error) {
-        throw new Error(resData.error || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
+      const { error: sendErr } = await authClient.signInWithOtp({ email: sanitizedEmail })
+      if (sendErr) {
+        throw sendErr
       }
 
       setIsLinkSent(true)
@@ -187,6 +102,27 @@ export default function Home() {
       }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!otpCode.trim()) return
+
+    setIsVerifyingOtp(true)
+    setError(null)
+
+    try {
+      const { data, error: verifyErr } = await authClient.verifyOtp({ token: otpCode.trim() })
+      if (verifyErr || !data.user) {
+        throw verifyErr || new Error('Mã xác thực không hợp lệ')
+      }
+
+      router.replace('/session')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Mã xác thực không chính xác hoặc đã hết hạn.')
+    } finally {
+      setIsVerifyingOtp(false)
     }
   }
 
@@ -292,20 +228,50 @@ export default function Home() {
                 </button>
               </form>
             ) : (
-              <div className="entry-form text-left">
-                <div className="field-group mb-6">
+              <div className="entry-form text-left space-y-4">
+                <div className="field-group">
                   <div className="flex gap-4 items-start bg-primary/10 dark:bg-primary/20 p-5 rounded-xl border border-primary/20 backdrop-blur-sm">
                     <Mail className="text-primary w-6 h-6 flex-shrink-0 mt-1" aria-hidden="true" />
                     <div>
-                      <h4 className="font-semibold text-base text-foreground">Đã gửi link đăng nhập</h4>
+                      <h4 className="font-semibold text-base text-foreground">Đã gửi mã & link đăng nhập</h4>
                       <p className="text-sm text-text-muted mt-2 leading-relaxed">
-                        Chúng tôi đã gửi một liên kết đăng nhập đến email <strong className="text-foreground">{email}</strong>. Vui lòng mở hộp thư Outlook và click vào liên kết để đăng nhập.
+                        Đã gửi đến <strong className="text-foreground">{email}</strong>. Bạn có thể mở email và bấm vào link, hoặc nhập mã OTP 6 số bên dưới:
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center text-sm mt-4">
+                {/* OTP Input Form */}
+                <form onSubmit={handleVerifyOtp} className="space-y-3">
+                  <div className="field-group">
+                    <label htmlFor="otp" className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Nhập mã OTP 6 số</label>
+                    <div className="input-with-icon relative">
+                      <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" aria-hidden="true" />
+                      <input
+                        id="otp"
+                        name="otp"
+                        type="text"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                        placeholder="123456"
+                        autoFocus
+                        className="w-full h-[52px] pl-12 pr-4 rounded-xl border border-border-strong bg-surface/50 backdrop-blur-sm focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none font-mono text-lg tracking-widest text-center"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isVerifyingOtp || otpCode.trim().length !== 6}
+                    className="primary-command glass-button-modern squircle-xl w-full h-[48px] font-bold text-sm tracking-wide bg-primary hover:bg-primary-hover text-white transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isVerifyingOtp ? <Loader2 className="animate-spin w-4 h-4" /> : null}
+                    <span>Xác nhận đăng nhập</span>
+                  </button>
+                </form>
+
+                <div className="flex justify-between items-center text-sm pt-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -332,7 +298,7 @@ export default function Home() {
           </div>
 
           <div className="entry-footnote flex justify-between items-center border-t border-border/40 mt-8 pt-4 text-xs text-text-soft">
-            <span>v3.2.0</span>
+            <span>v3.3.0</span>
             <Link href="/kulam" className="hover:text-primary transition-colors font-medium">Quản trị</Link>
           </div>
         </div>

@@ -30,11 +30,11 @@ test('account deletion is authenticated and removes owned data before auth user'
   assert.match(source, /getAuthenticatedUser\(request\)/)
   assert.match(source, /isAllowedEmail\(email\)/)
   assert.match(source, /email_confirmed_at/)
-  assert.match(source, /\.from\('sessions'\)/)
-  assert.match(source, /\.from\('folders'\)/)
-  assert.match(source, /\.eq\('owner_id', user\.id\)/)
+  assert.match(source, /DELETE FROM sessions/)
+  assert.match(source, /DELETE FROM folders/)
+  assert.match(source, /DELETE FROM auth_users/)
   assert.ok(
-    source.indexOf(".from('sessions')") < source.indexOf('deleteUser(user.id)'),
+    source.indexOf('DELETE FROM sessions') < source.indexOf('DELETE FROM auth_users'),
   )
   assert.match(source, /Cache-Control['"]:\s*['"]no-store/)
   assert.doesNotMatch(source, /PayLingo account:', error\)/)

@@ -31,7 +31,7 @@ import PayPayLogo from '@/components/PayPayLogo'
 import ProfileMenu from '@/components/ProfileMenu'
 import { useSessionLifecycle } from '@/hooks/useSessionLifecycle'
 import { useTheme } from '@/hooks/useTheme'
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage, PARTNER_LANGUAGES } from '@/lib/languages'
 import { parseTokensToMessages, TranscriptMessage } from '@/lib/soniox-parser'
 import { initAutoSync } from '@/lib/sync-manager'
@@ -616,15 +616,14 @@ export default function SessionPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const supabase = createClient()
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        const { data: { user }, error: userError } = await authClient.getUser()
         if (userError || !user) {
           router.replace('/')
           return
         }
 
         if (!user.email) {
-          await supabase.auth.signOut()
+          await authClient.signOut()
           router.replace('/?error=unauthorized')
           return
         }
@@ -633,7 +632,7 @@ export default function SessionPage() {
 
         const isAllowed = isAllowedEmail(email)
         if (!isAllowed) {
-          await supabase.auth.signOut()
+          await authClient.signOut()
           router.replace('/?error=domain_restricted')
           return
         }
@@ -692,7 +691,7 @@ export default function SessionPage() {
         <div className="liquid-blob liquid-blob-warning" />
       </div>
 
-      <header className="session-header glass-panel-modern border-b border-white/10 shadow-lg relative z-20 bg-opacity-70 dark:bg-opacity-50">
+      <header className="session-header glass-panel-modern border-b border-white/10 shadow-lg relative z-50 bg-opacity-70 dark:bg-opacity-50">
         <div className="session-brand">
           <PayPayLogo width={102} height={32} />
           <div>

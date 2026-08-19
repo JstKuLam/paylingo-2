@@ -47,6 +47,10 @@ yarn-error.log*
 .vercel
 .wrangler
 
+# local d1/sqlite
+.data/
+supabase/.temp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

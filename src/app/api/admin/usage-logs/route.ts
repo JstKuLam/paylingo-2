@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
+import { getD1 } from '@/lib/d1-client'
 import { checkAdminSession } from '@/lib/admin-auth'
 
 export const runtime = 'edge'
+
 
 export async function GET() {
   try {
@@ -11,18 +12,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
     }
 
-    const adminSupa = createAdminClient()
-    
-    const { data: logs, error } = await adminSupa
-      .from('ai_usage_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const db = getD1()
+    const logs = await db.prepare('SELECT * FROM usage_logs ORDER BY created_at DESC LIMIT 200').all()
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json(logs || [])
+    return NextResponse.json(logs.results || [])
   } catch (error: unknown) {
     console.error('Unable to load AI usage logs:', error)
     return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })

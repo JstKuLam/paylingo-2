@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth/session'
+import { getD1 } from '@/lib/d1-client'
 import { z } from 'zod'
 import {
   hashSharedPassword,
@@ -9,6 +10,7 @@ import {
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'edge'
+
 
 const shareRequestSchema = z.object({
   action: z.enum(['verify']).optional(),
@@ -22,8 +24,6 @@ const shareRequestSchema = z.object({
 
 /**
  * GET handler: Fetch info about a shared summary.
- * If password is set, it only returns metadata (title, hasPassword: true) and NOT the content.
- * It will only return the content if there is no password.
  */
 export async function GET(req: Request) {
   try {
@@ -34,14 +34,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Thiếu ID chia sẻ' }, { status: 400 })
     }
 
-    const supabase = createAdminClient() // use admin/service client since anonymous readers bypass RLS for reading but need password verification
-    const { data: summary, error } = await supabase
-      .from('shared_summaries')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const db = getD1()
+    const summary = await db.prepare('SELECT * FROM shared_summaries WHERE id = ?')
+      .bind(id)
+      .first<{ id: string; title: string; summary_content: string; password_hash?: string; created_at: string }>()
 
-    if (error || !summary) {
+    if (!summary) {
       return NextResponse.json({ error: 'Không tìm thấy liên kết chia sẻ' }, { status: 404 })
     }
 
@@ -51,7 +49,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ id: summary.id, hasPassword: true, isLocked: true })
     }
 
-    // Return full content if no password or password verified
+    // Return full content if no password
     return NextResponse.json({
       id: summary.id,
       title: summary.title,
@@ -78,6 +76,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Dữ liệu chia sẻ không hợp lệ' }, { status: 400 })
     }
     const { action, id, password, sessionId, folderId, title, summaryContent } = parsedBody.data
+    const db = getD1()
 
     // Case 2: Verify password of existing shared summary
     if (action === 'verify') {
@@ -92,19 +91,16 @@ export async function POST(req: Request) {
       })
       if (!verifyLimit.allowed) return rateLimitResponse(verifyLimit.retryAfterSeconds)
 
-      const supabase = createAdminClient()
-      const { data: summary, error } = await supabase
-        .from('shared_summaries')
-        .select('*')
-        .eq('id', id)
-        .single()
+      const summary = await db.prepare('SELECT * FROM shared_summaries WHERE id = ?')
+        .bind(id)
+        .first<{ id: string; title: string; summary_content: string; password_hash?: string; created_at: string }>()
 
-      if (error || !summary) {
+      if (!summary) {
         return NextResponse.json({ error: 'Không tìm thấy liên kết chia sẻ' }, { status: 404 })
       }
 
       const hasPassword = !!summary.password_hash
-      if (hasPassword) {
+      if (hasPassword && summary.password_hash) {
         const isValid = await verifySharedPassword(password, summary.password_hash)
         if (!isValid) {
           return NextResponse.json({ error: 'Mật khẩu không chính xác', isLocked: true }, { status: 401 })
@@ -112,7 +108,9 @@ export async function POST(req: Request) {
 
         if (isLegacySharedPasswordHash(summary.password_hash)) {
           const upgradedHash = await hashSharedPassword(password)
-          await supabase.from('shared_summaries').update({ password_hash: upgradedHash }).eq('id', summary.id)
+          await db.prepare('UPDATE shared_summaries SET password_hash = ? WHERE id = ?')
+            .bind(upgradedHash, summary.id)
+            .run()
         }
       }
 
@@ -127,10 +125,8 @@ export async function POST(req: Request) {
     }
 
     // Case 1: Create a new shared summary
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    const user = await getAuthenticatedUser(req)
+    if (!user) {
       return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
     }
 
@@ -146,64 +142,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Chỉ được chia sẻ một cuộc hội thoại hoặc một thư mục' }, { status: 400 })
     }
 
-    const parentQuery = sessionId
-      ? supabase.from('sessions').select('id').eq('id', sessionId).single()
-      : supabase.from('folders').select('id').eq('id', folderId!).single()
-    const { data: ownedParent, error: parentError } = await parentQuery
-    if (parentError || !ownedParent) {
-      return NextResponse.json({ error: 'Bạn không có quyền chia sẻ nội dung này' }, { status: 403 })
+    // Verify ownership
+    if (sessionId) {
+      const owned = await db.prepare('SELECT id FROM sessions WHERE id = ? AND owner_id = ?').bind(sessionId, user.id).first()
+      if (!owned) return NextResponse.json({ error: 'Bạn không có quyền chia sẻ nội dung này' }, { status: 403 })
+    } else {
+      const owned = await db.prepare('SELECT id FROM folders WHERE id = ? AND owner_id = ?').bind(folderId, user.id).first()
+      if (!owned) return NextResponse.json({ error: 'Bạn không có quyền chia sẻ nội dung này' }, { status: 403 })
     }
 
     const passHash = await hashSharedPassword(password)
     
     // Check if summary already exists for this session or folder
-    let query = supabase.from('shared_summaries').select('id')
-    if (sessionId) {
-      query = query.eq('session_id', sessionId)
-    } else {
-      query = query.eq('folder_id', folderId)
-    }
-    const { data: existing } = await query
+    const existing = sessionId
+      ? await db.prepare('SELECT id FROM shared_summaries WHERE session_id = ?').bind(sessionId).first<{ id: string }>()
+      : await db.prepare('SELECT id FROM shared_summaries WHERE folder_id = ?').bind(folderId).first<{ id: string }>()
 
     let resultId = ''
-    if (existing && existing.length > 0) {
-      // Update existing
-      const { data: updated, error: updateError } = await supabase
-        .from('shared_summaries')
-        .update({
-          title,
-          summary_content: summaryContent,
-          password_hash: passHash,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existing[0].id)
-        .select('id')
-        .single()
-
-      if (updateError) {
-        console.error('Update shared summary error:', updateError)
-        return NextResponse.json({ error: 'Không thể cập nhật liên kết chia sẻ' }, { status: 500 })
-      }
-      resultId = updated.id
+    if (existing) {
+      await db.prepare(`
+        UPDATE shared_summaries
+        SET title = ?, summary_content = ?, password_hash = ?
+        WHERE id = ?
+      `)
+        .bind(title, summaryContent, passHash, existing.id)
+        .run()
+      resultId = existing.id
     } else {
-      // Insert new
-      const { data: inserted, error: insertError } = await supabase
-        .from('shared_summaries')
-        .insert({
-          session_id: sessionId || null,
-          folder_id: folderId || null,
-          title,
-          summary_content: summaryContent,
-          password_hash: passHash
-        })
-        .select('id')
-        .single()
-
-      if (insertError) {
-        console.error('Insert shared summary error:', insertError)
-        return NextResponse.json({ error: 'Không thể tạo liên kết chia sẻ' }, { status: 500 })
-      }
-      resultId = inserted.id
+      resultId = crypto.randomUUID()
+      await db.prepare(`
+        INSERT INTO shared_summaries (id, session_id, folder_id, title, summary_content, password_hash, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      `)
+        .bind(resultId, sessionId || null, folderId || null, title, summaryContent, passHash)
+        .run()
     }
 
     return NextResponse.json({ success: true, id: resultId })

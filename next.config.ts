@@ -12,7 +12,7 @@ const contentSecurityPolicy = [
   "font-src 'self' data:",
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.soniox.com wss://stt-rt.soniox.com",
+  "connect-src 'self' https://api.soniox.com wss://stt-rt.soniox.com https://generativelanguage.googleapis.com https://api.openai.com",
   'upgrade-insecure-requests',
 ].join('; ')
 

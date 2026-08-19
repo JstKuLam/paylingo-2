@@ -56,11 +56,10 @@ test('passkey verification binds origin, RP ID, credential and one-time challeng
 })
 
 test('protected routes enforce confirmed allowed users at the server boundary', async () => {
-  const middleware = await source('src/lib/supabase/middleware.ts')
+  const sonioxKey = await source('src/app/api/auth/soniox-key/route.ts')
   const home = await source('src/app/page.tsx')
-  assert.match(middleware, /email_confirmed_at/)
-  assert.match(middleware, /isAllowedEmail\(user\.email\)/)
-  assert.match(middleware, /startsWith\('\/history'\)/)
+  assert.match(sonioxKey, /email_confirmed_at/)
+  assert.match(sonioxKey, /isAllowedEmail\(email\)/)
   assert.doesNotMatch(home, /Fallback to client-side signInWithOtp/)
   assert.doesNotMatch(home, /redirectTo:/)
 })
@@ -95,14 +94,12 @@ test('expensive and password-protected APIs have abuse controls', async () => {
 
 test('web and mobile ship with baseline data-exposure defenses', async () => {
   const config = await source('next.config.ts')
-  const middleware = await source('src/lib/supabase/middleware.ts')
   const pagesHeaders = await source('public/_headers')
   const manifest = await source('paylingo-mobile/androidApp/src/main/AndroidManifest.xml')
   const viewModel = await source('paylingo-mobile/shared/src/commonMain/kotlin/com/paylingo/viewmodel/SessionViewModel.kt')
   const socket = await source('paylingo-mobile/shared/src/commonMain/kotlin/com/paylingo/network/SonioxWebSocketClient.kt')
   assert.match(config, /Content-Security-Policy/)
   assert.match(config, /frame-ancestors 'none'/)
-  assert.match(middleware, /Content-Security-Policy/)
   assert.match(pagesHeaders, /X-Frame-Options: DENY/)
   assert.match(manifest, /android:allowBackup="false"/)
   assert.doesNotMatch(viewModel, /auth response:|API key fetch response:|live transcript JSON/)

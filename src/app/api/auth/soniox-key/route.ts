@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient, getAuthenticatedUser } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth/session'
 import { isAllowedEmail } from '@/lib/auth-utils'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
+import { getD1 } from '@/lib/d1-client'
 
 export const runtime = 'edge'
+
 
 function errorKind(error: unknown) {
   return error instanceof Error ? error.name : 'UnknownError'
@@ -11,9 +13,9 @@ function errorKind(error: unknown) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { data: { user }, error: authError } = await getAuthenticatedUser(request)
+    const user = await getAuthenticatedUser(request)
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json(
         { error: 'Phiên đăng nhập không hợp lệ' },
         { status: 401, headers: { 'Cache-Control': 'no-store' } }
@@ -31,22 +33,10 @@ export async function POST(request: NextRequest) {
 
     const keyLimit = checkRateLimit({
       key: `soniox-key:${user.id}:${getRequestIp(request)}`,
-      limit: 20,
+      limit: 30,
       windowMs: 60 * 60_000,
     })
     if (!keyLimit.allowed) return rateLimitResponse(keyLimit.retryAfterSeconds)
-
-    const username = user.user_metadata?.username ||
-                     user.user_metadata?.full_name ||
-                     user.user_metadata?.name ||
-                     email.split('@')[0]
-
-    if (!username) {
-      return NextResponse.json(
-        { error: 'Không thể xác định thông tin người dùng' },
-        { status: 401, headers: { 'Cache-Control': 'no-store' } }
-      )
-    }
 
     // 3. Verify SONIOX_API_KEY env is set
     if (!process.env.SONIOX_API_KEY) {
@@ -115,48 +105,22 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { data: { user }, error: authError } = await getAuthenticatedUser(request)
+    const user = await getAuthenticatedUser(request)
     const email = user?.email?.trim().toLowerCase()
 
-    if (authError || !user || !isAllowedEmail(email) || !user.email_confirmed_at) {
+    if (!user || !email || !isAllowedEmail(email) || !user.email_confirmed_at) {
       return NextResponse.json(
         { error: 'Phiên đăng nhập không hợp lệ' },
         { status: 401, headers: { 'Cache-Control': 'no-store' } },
       )
     }
 
-    const lastSignIn = user.last_sign_in_at ? new Date(user.last_sign_in_at).getTime() : 0
-    if (!lastSignIn || Date.now() - lastSignIn > 15 * 60_000) {
-      return NextResponse.json(
-        { error: 'Vui lòng đăng nhập lại trước khi xóa tài khoản' },
-        { status: 403, headers: { 'Cache-Control': 'no-store' } },
-      )
-    }
-
-    const admin = createAdminClient()
-    const { error: sessionsError } = await admin
-      .from('sessions')
-      .delete()
-      .eq('owner_id', user.id)
-    if (sessionsError) throw sessionsError
-
-    const { error: foldersError } = await admin
-      .from('folders')
-      .delete()
-      .eq('owner_id', user.id)
-    if (foldersError) throw foldersError
-
-    const username = user.user_metadata?.username?.toString().trim()
-    if (username) {
-      const { error: usageError } = await admin
-        .from('ai_usage_logs')
-        .delete()
-        .eq('username', username)
-      if (usageError) throw usageError
-    }
-
-    const { error: deleteUserError } = await admin.auth.admin.deleteUser(user.id)
-    if (deleteUserError) throw deleteUserError
+    const db = getD1()
+    await db.prepare('DELETE FROM transcript_entries WHERE session_id IN (SELECT id FROM sessions WHERE owner_id = ?)').bind(user.id).run()
+    await db.prepare('DELETE FROM sessions WHERE owner_id = ?').bind(user.id).run()
+    await db.prepare('DELETE FROM folders WHERE owner_id = ?').bind(user.id).run()
+    await db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(user.id).run()
+    await db.prepare('DELETE FROM auth_users WHERE id = ?').bind(user.id).run()
 
     return NextResponse.json(
       { success: true },

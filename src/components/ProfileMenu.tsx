@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, LogOut, User } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth-client'
 
 export default function ProfileMenu({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter()
@@ -14,8 +14,7 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
 
   useEffect(() => {
     const fetchUser = async () => {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await authClient.getUser()
       if (user) {
         const email = user.email
         const username =
@@ -56,8 +55,7 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
   }, [isMenuOpen])
 
   const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    await authClient.signOut()
     router.replace('/')
   }
 

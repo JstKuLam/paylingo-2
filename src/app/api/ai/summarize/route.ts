@@ -1,54 +1,48 @@
 import { NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { z } from 'zod'
+import { getAuthenticatedUser } from '@/lib/auth/session'
+import { getD1 } from '@/lib/d1-client'
 import { isAllowedEmail } from '@/lib/auth-utils'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
-import { getSafeAiEndpoint } from '@/lib/ai-security'
+import { z } from 'zod'
 
 export const runtime = 'edge'
 
+
+interface TranscriptEntry {
+  speaker: 'host' | 'partner'
+  original_text: string
+  translated_text: string
+  start_ms: number
+  end_ms: number
+}
+
+interface SummarySession {
+  id: string
+  name?: string
+  started_at: string
+}
+
 const transcriptEntrySchema = z.object({
   speaker: z.enum(['host', 'partner']),
-  original_text: z.string().max(4_000),
-  translated_text: z.string().max(4_000),
-  start_ms: z.number().finite(),
-  sessionName: z.string().max(200).optional(),
-}).passthrough()
+  original_text: z.string(),
+  translated_text: z.string(),
+  start_ms: z.number().nonnegative(),
+  end_ms: z.number().nonnegative(),
+})
 
-const localSessionSchema = z.object({
-  id: z.string().max(100),
-  name: z.string().max(200),
-  partner_language: z.string().max(20),
-  started_at: z.string().max(50),
-}).passthrough()
+const summarySessionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().optional(),
+  started_at: z.string(),
+})
 
 const summarizeRequestSchema = z.object({
   sessionId: z.string().uuid().optional(),
   folderId: z.string().uuid().optional(),
-  sessions: z.array(localSessionSchema).max(50).optional(),
+  sessions: z.array(summarySessionSchema).max(50).optional(),
   entries: z.array(transcriptEntrySchema).max(500).optional(),
-  style: z.enum(['default', 'formal', 'casual', 'very_casual']).default('default'),
-}).refine(
-  (value) => Boolean(value.sessionId || value.folderId || value.entries?.length),
-  { message: 'Thiếu thông tin cuộc hội thoại' }
-).refine(
-  (value) => (value.entries || []).reduce(
-    (total, entry) => total + entry.original_text.length + entry.translated_text.length,
-    0
-  ) <= 120_000,
-  { message: 'Transcript quá dài để tóm tắt trong một lần' }
-)
-
-type TranscriptEntry = z.infer<typeof transcriptEntrySchema>
-type SummarySession = z.infer<typeof localSessionSchema>
-
-function formatOffset(milliseconds: number) {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':')
-}
+  style: z.enum(['standard', 'formal', 'casual', 'very_casual']).optional().default('standard'),
+})
 
 export async function POST(req: Request) {
   try {
@@ -57,26 +51,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Yêu cầu quá lớn' }, { status: 413 })
     }
 
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const user = await getAuthenticatedUser(req)
 
-    if (authError || !user || !isAllowedEmail(user.email) || !user.email_confirmed_at) {
+    if (!user || !isAllowedEmail(user.email) || !user.email_confirmed_at) {
       return NextResponse.json({ error: 'Tài khoản không được phép sử dụng tính năng AI' }, { status: 403 })
     }
 
     const requestLimit = checkRateLimit({
       key: `ai-summary:${user.id}:${getRequestIp(req)}`,
-      limit: 5,
+      limit: 10,
       windowMs: 60 * 60_000,
     })
     if (!requestLimit.allowed) return rateLimitResponse(requestLimit.retryAfterSeconds)
 
-    const username = user.user_metadata?.username || 'unknown'
+    const username = user.email.split('@')[0]
     const parsedBody = summarizeRequestSchema.safeParse(await req.json())
     if (!parsedBody.success) {
       return NextResponse.json({ error: parsedBody.error.issues[0]?.message || 'Dữ liệu không hợp lệ' }, { status: 400 })
     }
     const { sessionId, folderId, sessions, entries, style } = parsedBody.data
+    const db = getD1()
 
     let sessionsToSummarize: SummarySession[] = []
     let allEntries: TranscriptEntry[] = []
@@ -86,130 +80,88 @@ export async function POST(req: Request) {
       sessionsToSummarize = sessions
       allEntries = entries
     } else if (sessionId) {
-      // Fetch single session from Supabase
-      const { data: sessionData, error: sessError } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('id', sessionId)
-        .single()
+      // Fetch single session from D1
+      const sessionData = await db.prepare('SELECT id, name, started_at FROM sessions WHERE id = ?')
+        .bind(sessionId)
+        .first<SummarySession>()
 
-      if (sessError || !sessionData) {
+      if (!sessionData) {
         return NextResponse.json({ error: 'Không tìm thấy cuộc hội thoại' }, { status: 404 })
       }
 
       sessionsToSummarize.push(sessionData)
 
-      const { data: dbEntries, error: entriesError } = await supabase
-        .from('transcript_entries')
-        .select('*')
-        .eq('session_id', sessionId)
-        .order('start_ms', { ascending: true })
+      const dbEntries = await db.prepare('SELECT speaker, original_text, translated_text, start_ms, end_ms FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC')
+        .bind(sessionId)
+        .all<TranscriptEntry>()
 
-      if (entriesError) {
-        return NextResponse.json({ error: 'Không thể tải transcript entries' }, { status: 500 })
-      }
-
-      allEntries = dbEntries || []
+      allEntries = dbEntries.results || []
     } else if (folderId) {
-      // Fetch folder details and all sessions in folder from Supabase
-      const { data: folderData, error: folderError } = await supabase
-        .from('folders')
-        .select('*')
-        .eq('id', folderId)
-        .single()
+      // Fetch folder details and all sessions in folder from D1
+      const folderData = await db.prepare('SELECT id, name FROM folders WHERE id = ?').bind(folderId).first()
 
-      if (folderError || !folderData) {
+      if (!folderData) {
         return NextResponse.json({ error: 'Không tìm thấy thư mục' }, { status: 404 })
       }
 
-      const { data: folderSessions, error: sessError } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('folder_id', folderId)
-        .order('started_at', { ascending: true })
+      const folderSessions = await db.prepare('SELECT id, name, started_at FROM sessions WHERE folder_id = ? ORDER BY started_at ASC')
+        .bind(folderId)
+        .all<SummarySession>()
 
-      if (sessError || !folderSessions) {
-        return NextResponse.json({ error: 'Không thể tải các cuộc hội thoại trong thư mục' }, { status: 500 })
+      sessionsToSummarize = folderSessions.results || []
+
+      for (const sess of sessionsToSummarize) {
+        const dbEntries = await db.prepare('SELECT speaker, original_text, translated_text, start_ms, end_ms FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC')
+          .bind(sess.id)
+          .all<TranscriptEntry>()
+        if (dbEntries.results) {
+          allEntries.push(...dbEntries.results)
+        }
       }
-
-      sessionsToSummarize = folderSessions
-
-      const folderEntryResults = await Promise.all(
-        folderSessions.map(async (sess) => {
-          const { data: dbEntries, error: entriesError } = await supabase
-            .from('transcript_entries')
-            .select('*')
-            .eq('session_id', sess.id)
-            .order('start_ms', { ascending: true })
-
-          if (entriesError) throw entriesError
-          return (dbEntries || []).map((entry) => ({ ...entry, sessionName: sess.name }))
-        })
-      )
-      allEntries = folderEntryResults.flat()
     }
 
     if (allEntries.length === 0) {
-      return NextResponse.json({ error: 'Hội thoại trống, không có dữ liệu để tóm tắt' }, { status: 400 })
+      return NextResponse.json({ error: 'Cuộc hội thoại chưa có nội dung để tóm tắt' }, { status: 400 })
     }
 
-    const totalTranscriptChars = allEntries.reduce(
-      (total, entry) => total + entry.original_text.length + entry.translated_text.length,
-      0
-    )
-    if (allEntries.length > 500 || totalTranscriptChars > 120_000) {
-      return NextResponse.json({ error: 'Transcript vượt giới hạn an toàn cho một lần tóm tắt' }, { status: 413 })
-    }
-
-    // Format transcripts for AI model
     let formattedTranscript = ''
-    if (sessionsToSummarize.length === 1 && !folderId) {
-      const sess = sessionsToSummarize[0]
-      formattedTranscript += `TÊN CUỘC HỘI THOẠI: ${sess.name}\n`
-      formattedTranscript += `Ngôn ngữ đối tác: ${sess.partner_language}\n`
-      formattedTranscript += `Bắt đầu lúc: ${sess.started_at}\n\n`
-      
-      allEntries.forEach((entry) => {
-        const timeStr = formatOffset(entry.start_ms)
-        const speaker = entry.speaker === 'host' ? 'Host (Bạn - Tiếng Việt)' : `Partner (Đối tác - ${sess.partner_language})`
-        formattedTranscript += `[${timeStr}] ${speaker}:\n`
-        formattedTranscript += `- Gốc: ${entry.original_text}\n`
-        formattedTranscript += `- Dịch: ${entry.translated_text}\n\n`
+    if (folderId && sessionsToSummarize.length > 1) {
+      sessionsToSummarize.forEach((sess, idx) => {
+        const dateStr = new Date(sess.started_at).toLocaleString('vi-VN')
+        formattedTranscript += `=== CUỘC HỘI THOẠI ${idx + 1}: ${sess.name || 'Chưa đặt tên'} (${dateStr}) ===\n`
+        const sessEntries = allEntries.filter((e: any) => e.session_id === sess.id || !e.session_id)
+        sessEntries.forEach((entry) => {
+          const timeStr = `${Math.floor(entry.start_ms / 1000)}s`
+          const speaker = entry.speaker === 'host' ? 'Host (Người Việt)' : 'Partner (Đối tác)'
+          formattedTranscript += `[${timeStr}] ${speaker}:\n`
+          formattedTranscript += `- Gốc: ${entry.original_text}\n`
+          formattedTranscript += `- Dịch: ${entry.translated_text}\n\n`
+        })
+        formattedTranscript += '\n'
       })
     } else {
-      formattedTranscript += `THƯ MỤC HỘI THOẠI CHUNG\n\n`
-      let currentSessionName = ''
       allEntries.forEach((entry) => {
-        const entrySessionName = entry.sessionName || 'Cuộc hội thoại'
-        if (entrySessionName !== currentSessionName) {
-          currentSessionName = entrySessionName
-          formattedTranscript += `--- PHÂN ĐOẠN HỘI THOẠI: ${currentSessionName} ---\n\n`
-        }
-        const timeStr = formatOffset(entry.start_ms)
-        const speaker = entry.speaker === 'host' ? 'Host (Bạn - Tiếng Việt)' : `Partner (Đối tác)`
+        const timeStr = `${Math.floor(entry.start_ms / 1000)}s`
+        const speaker = entry.speaker === 'host' ? 'Host (Người Việt)' : 'Partner (Đối tác)'
         formattedTranscript += `[${timeStr}] ${speaker}:\n`
         formattedTranscript += `- Gốc: ${entry.original_text}\n`
         formattedTranscript += `- Dịch: ${entry.translated_text}\n\n`
       })
     }
 
-    // Fetch active API configurations from Supabase securely
-    const adminSupa = createAdminClient()
-    const { data: settings, error: settingsError } = await adminSupa
-      .from('api_settings')
-      .select('provider, endpoint, model, api_key')
-      .eq('key', 'current')
-      .single()
+    // Fetch active API configurations from D1
+    const settings = await db.prepare('SELECT provider, endpoint, model, api_key FROM api_settings WHERE key = ?')
+      .bind('current')
+      .first<{ provider?: string; endpoint?: string; model?: string; api_key?: string }>()
 
-    if (settingsError || !settings?.api_key) {
-      console.error('AI summary configuration is missing:', settingsError)
-      return NextResponse.json({ error: 'Tính năng AI chưa được quản trị viên cấu hình' }, { status: 503 })
+    const provider = settings?.provider || 'gemini'
+    const model = settings?.model || 'gemini-1.5-flash'
+    const endpoint = settings?.endpoint || 'https://api.openai.com/v1'
+    const apiKey = settings?.api_key || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY
+
+    if (!apiKey) {
+      return NextResponse.json({ error: 'Tính năng AI chưa được cấu hình API key' }, { status: 503 })
     }
-
-    const provider = settings.provider
-    const model = settings.model
-    const endpoint = settings.endpoint || 'https://api.openai.com/v1'
-    const apiKey = settings.api_key
 
     // Define tone and formatting instructions based on selected style
     let toneInstruction = "Giữ nguyên ý chính, câu từ tự nhiên, lịch sự và trôi chảy."
@@ -247,19 +199,12 @@ ${formattedTranscript}
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 4096,
-          },
+          generationConfig: { temperature: 0.3 }
         }),
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(60_000),
       })
 
       if (!response.ok) {
@@ -273,13 +218,9 @@ ${formattedTranscript}
       promptTokens = resData?.usageMetadata?.promptTokenCount || 0
       completionTokens = resData?.usageMetadata?.candidatesTokenCount || 0
 
-      // Gemini 2.5 Flash estimated pricing: Prompt: $0.075 / 1M, Completion: $0.30 / 1M
       estimatedCost = (promptTokens * 0.000000075) + (completionTokens * 0.00000030)
-    } else if (provider === 'openai') {
-      const baseUrl = getSafeAiEndpoint(endpoint)
-      if (!baseUrl) return NextResponse.json({ error: 'Endpoint AI không được phép' }, { status: 500 })
-      const url = `${baseUrl}/chat/completions`
-
+    } else if (provider === 'openai' || provider === 'custom') {
+      const url = `${endpoint.replace(/\/+$/, '')}/chat/completions`
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -288,14 +229,10 @@ ${formattedTranscript}
         },
         body: JSON.stringify({
           model: model,
-          messages: [
-            { role: 'system', content: 'You are a professional meeting summary assistant.' },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.2,
-          max_tokens: 4096,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3
         }),
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(60_000),
       })
 
       if (!response.ok) {
@@ -309,7 +246,6 @@ ${formattedTranscript}
       promptTokens = resData?.usage?.prompt_tokens || 0
       completionTokens = resData?.usage?.completion_tokens || 0
 
-      // Standard OpenAI mini compatible pricing estimation: Prompt: $0.150 / 1M, Completion: $0.600 / 1M
       estimatedCost = (promptTokens * 0.00000015) + (completionTokens * 0.00000060)
     } else {
       return NextResponse.json({ error: 'Nhà cung cấp AI không được hỗ trợ' }, { status: 500 })
@@ -319,20 +255,23 @@ ${formattedTranscript}
       return NextResponse.json({ error: 'AI không trả về kết quả tóm tắt' }, { status: 500 })
     }
 
-    // Write token usage to system logs securely inside admin table
-    const { error: logError } = await adminSupa
-      .from('ai_usage_logs')
-      .insert({
-        username,
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        model,
-        cost_usd: estimatedCost
-      })
+    // Save summary to session_summaries table
+    const summaryId = crypto.randomUUID()
+    await db.prepare(`
+      INSERT INTO session_summaries (id, session_id, folder_id, summary_text, style, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `)
+      .bind(summaryId, sessionId || null, folderId || null, summaryText, style)
+      .run()
 
-    if (logError) {
-      console.error('Failed to log token usage:', logError.message)
-    }
+    // Write token usage log to usage_logs
+    const logId = crypto.randomUUID()
+    await db.prepare(`
+      INSERT INTO usage_logs (id, session_id, action, details, created_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+    `)
+      .bind(logId, sessionId || folderId || null, 'ai_summarize', JSON.stringify({ username, promptTokens, completionTokens, model, estimatedCost }))
+      .run()
 
     return NextResponse.json({ summary: summaryText })
   } catch (error: unknown) {

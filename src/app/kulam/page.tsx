@@ -27,7 +27,6 @@ import {
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import type { LocalTranscriptEntry } from '@/lib/db'
 import { getPartnerLanguage } from '@/lib/languages'
-import { createClient } from '@/lib/supabase/client'
 
 type AdminTab = 'dashboard' | 'sessions' | 'usage' | 'api-settings'
 type ApiProvider = 'gemini' | 'openai'
@@ -111,7 +110,6 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 
 export default function AdminPage() {
   const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
   
   // Custom authentication states
   const [isAdmin, setIsAdmin] = useState(false)
@@ -157,15 +155,12 @@ export default function AdminPage() {
     setLoadingData(true)
     setDataError('')
     try {
-      const [sessionsResult, settingsResponse, usageResponse] = await Promise.all([
-        supabase
-          .from('sessions')
-          .select('*, transcript_entries(count)')
-          .order('started_at', { ascending: false }),
+      const [sessionsResponse, settingsResponse, usageResponse] = await Promise.all([
+        fetch('/api/admin/sessions'),
         fetch('/api/admin/settings'),
         fetch('/api/admin/usage-logs'),
       ])
-      if (sessionsResult.error) throw sessionsResult.error
+      const sessions = await sessionsResponse.json()
       const settings: {
         provider?: ApiProvider
         endpoint?: string
@@ -175,12 +170,15 @@ export default function AdminPage() {
       } = await settingsResponse.json()
       const usage: UsageLog[] | { error: string } = await usageResponse.json()
 
+      if (!sessionsResponse.ok || !Array.isArray(sessions)) {
+        throw new Error(sessions?.error || 'Không thể tải danh sách phiên.')
+      }
       if (!settingsResponse.ok) throw new Error(settings.error || 'Không thể tải cấu hình AI.')
       if (!usageResponse.ok || !Array.isArray(usage)) {
         throw new Error(!Array.isArray(usage) ? usage.error : 'Không thể tải thống kê AI.')
       }
 
-      setGlobalSessions((sessionsResult.data || []) as AdminSession[])
+      setGlobalSessions(sessions as AdminSession[])
       setUsageLogs(usage)
       setApiProvider(settings.provider || 'gemini')
       setApiEndpoint(settings.endpoint || '')
@@ -193,7 +191,7 @@ export default function AdminPage() {
     } finally {
       setLoadingData(false)
     }
-  }, [supabase])
+  }, [])
 
   // Check passkey support on client
   useEffect(() => {
@@ -551,25 +549,33 @@ export default function AdminPage() {
     setViewingSession(session)
     setSessionEntries([])
     setLoadingEntries(true)
-    const { data, error } = await supabase
-      .from('transcript_entries')
-      .select('*')
-      .eq('session_id', session.id)
-      .order('start_ms', { ascending: true })
-    if (error) setDataError(error.message)
-    else setSessionEntries((data || []) as AdminTranscriptEntry[])
-    setLoadingEntries(false)
+    try {
+      const res = await fetch(`/api/admin/sessions?id=${encodeURIComponent(session.id)}`).then(r => r.json())
+      setSessionEntries((res.entries || []) as AdminTranscriptEntry[])
+    } catch (err: any) {
+      setDataError(err?.message || 'Không thể tải transcript')
+    } finally {
+      setLoadingEntries(false)
+    }
   }
 
   const handleDeleteSession = async () => {
     if (!viewingSession || !confirm('Xóa vĩnh viễn hội thoại này khỏi hệ thống?')) return
-    const { error } = await supabase.from('sessions').delete().eq('id', viewingSession.id)
-    if (error) {
-      setDataError(error.message)
-      return
+    try {
+      const res = await fetch('/api/admin/sessions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: viewingSession.id }),
+      }).then(r => r.json())
+      if (res.error) {
+        setDataError(res.error)
+        return
+      }
+      setGlobalSessions((current) => current.filter((session) => session.id !== viewingSession.id))
+      setViewingSession(null)
+    } catch (err: any) {
+      setDataError(err?.message || 'Không thể xóa phiên')
     }
-    setGlobalSessions((current) => current.filter((session) => session.id !== viewingSession.id))
-    setViewingSession(null)
   }
 
   const handleExportPDF = async () => {

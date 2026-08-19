@@ -18,6 +18,7 @@ import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limi
 
 export const runtime = 'edge'
 
+
 const SESSION_COOKIE_NAME = 'admin_session'
 const CHALLENGE_COOKIE_NAME = 'admin_passkey_challenge'
 
@@ -84,7 +85,7 @@ export async function POST(req: Request) {
         secure: true,
         path: '/',
         sameSite: 'strict',
-        maxAge: 7 * 86400
+        maxAge: 30 * 86400
       })
 
       return NextResponse.json({ success: true })
@@ -198,7 +199,7 @@ export async function POST(req: Request) {
           secure: true,
           path: '/',
           sameSite: 'strict',
-          maxAge: 7 * 86400
+          maxAge: 30 * 86400
         })
 
         return NextResponse.json({ success: true })
@@ -233,7 +234,7 @@ export async function POST(req: Request) {
         secure: true,
         path: '/',
         sameSite: 'strict',
-        maxAge: 7 * 86400
+        maxAge: 30 * 86400
       })
 
       return NextResponse.json({ success: true })

@@ -24,8 +24,8 @@ import {
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import { claimLegacyLocalData, db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
 import { generatePremiumHTMLReport } from '@/lib/html-generator'
+import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage } from '@/lib/languages'
-import { createClient } from '@/lib/supabase/client'
 import { syncPendingData } from '@/lib/sync-manager'
 import { formatTimeline } from '@/lib/utils'
 
@@ -69,8 +69,7 @@ export default function SessionDetailPage({ params }: PageProps) {
 
   const loadSessionData = useCallback(async () => {
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await authClient.getUser()
       const username = user?.user_metadata?.username ||
                        user?.user_metadata?.full_name ||
                        user?.user_metadata?.name ||
@@ -105,23 +104,14 @@ export default function SessionDetailPage({ params }: PageProps) {
         }
       }
 
-      const { data: cloudSession, error: sessionError } = await supabase
-        .from('sessions')
-        .select('id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at')
-        .eq('id', id)
-        .single()
+      const cloudRes = await fetch(`/api/history?table=sessions&id=${encodeURIComponent(id)}&single=1`).then(r => r.json()).catch(() => ({}))
+      const cloudSession = cloudRes.item
+      const cloudEntries = cloudRes.entries || []
 
-      if (sessionError || !cloudSession) {
+      if (!cloudSession) {
         setPageError('Không tìm thấy hội thoại hoặc bạn không có quyền truy cập.')
         return
       }
-
-      const { data: cloudEntries, error: entriesError } = await supabase
-        .from('transcript_entries')
-        .select('*')
-        .eq('session_id', id)
-        .order('start_ms', { ascending: true })
-      if (entriesError) throw entriesError
 
       const formattedSession: LocalSession = {
         id: cloudSession.id,
@@ -136,7 +126,7 @@ export default function SessionDetailPage({ params }: PageProps) {
         sync_status: 'synced',
         updated_at: cloudSession.updated_at || new Date().toISOString(),
       }
-      const formattedEntries: LocalTranscriptEntry[] = (cloudEntries || []).map((entry) => ({
+      const formattedEntries: LocalTranscriptEntry[] = cloudEntries.map((entry: any) => ({
         id: entry.id,
         session_id: entry.session_id,
         speaker: entry.speaker,
@@ -184,9 +174,11 @@ export default function SessionDetailPage({ params }: PageProps) {
     if (!session || !confirm('Xóa vĩnh viễn hội thoại và toàn bộ transcript?')) return
     setPageError('')
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from('sessions').delete().eq('id', session.id)
-      if (error) throw error
+      await fetch('/api/history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'sessions', field: 'id', value: session.id }),
+      })
 
       await db.transaction('rw', db.sessions, db.transcriptEntries, async () => {
         await db.transcriptEntries.where('session_id').equals(session.id).delete()

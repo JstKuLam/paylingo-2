@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { claimLegacyLocalData, db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
 import { syncPendingData } from '@/lib/sync-manager'
-import { TranscriptMessage, stringToUUID } from '@/lib/soniox-parser'
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth-client'
+import { stringToUUID, type TranscriptMessage } from '@/lib/soniox-parser'
 
 interface UseSessionLifecycleProps {
   partnerLang: string
@@ -58,8 +58,7 @@ export function useSessionLifecycle({
   // Auto-close any abandoned sessions belonging to this user on mount (handling browser hard close)
   useEffect(() => {
     const autoCloseAbandonedSessions = async () => {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session } } = await authClient.getSession()
       const username = session?.user?.user_metadata?.username ||
                        session?.user?.user_metadata?.full_name ||
                        session?.user?.user_metadata?.name ||
@@ -140,8 +139,7 @@ export function useSessionLifecycle({
 
   // 2. Start Session Lifecycle
   const startSession = useCallback(async (langName: string) => {
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { session } } = await authClient.getSession()
     const username = session?.user?.user_metadata?.username ||
                      session?.user?.user_metadata?.full_name ||
                      session?.user?.user_metadata?.name ||

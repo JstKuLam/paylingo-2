@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
+import { getD1 } from '@/lib/d1-client'
 import { checkAdminSession } from '@/lib/admin-auth'
 import { z } from 'zod'
 import { getSafeAiEndpoint } from '@/lib/ai-security'
 
 export const runtime = 'edge'
+
 
 const MASKED_API_KEY = '••••••••••••••••'
 const apiSettingsSchema = z.object({
@@ -27,16 +28,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
     }
 
-    const adminSupa = createAdminClient()
-    const { data: settings, error } = await adminSupa
-      .from('api_settings')
-      .select('*')
-      .eq('key', 'current')
-      .single()
-
-    if (error && error.code !== 'PGRST116') {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    const db = getD1()
+    const settings = await db.prepare('SELECT * FROM api_settings WHERE key = ?')
+      .bind('current')
+      .first<{ key: string; provider?: string; endpoint?: string; model?: string; api_key?: string }>()
 
     const maskedKey = settings?.api_key ? MASKED_API_KEY : ''
 
@@ -69,34 +64,33 @@ export async function POST(req: Request) {
     }
     const { provider, endpoint, model, api_key } = parsedBody.data
 
-    const adminSupa = createAdminClient()
-    
-    const { data: existing } = await adminSupa
-      .from('api_settings')
-      .select('*')
-      .eq('key', 'current')
-      .single()
+    const db = getD1()
+    const existing = await db.prepare('SELECT * FROM api_settings WHERE key = ?')
+      .bind('current')
+      .first<{ api_key?: string }>()
 
     let keyToSave = api_key
     if (api_key === MASKED_API_KEY && existing) {
-      keyToSave = existing.api_key
+      keyToSave = existing.api_key || ''
     } else if (!api_key) {
       return NextResponse.json({ error: 'API Key không được để trống' }, { status: 400 })
     }
 
-    const { error: upsertError } = await adminSupa
-      .from('api_settings')
-      .upsert({
-        key: 'current',
-        provider,
-        endpoint: provider === 'openai' ? endpoint : null,
-        model,
-        api_key: keyToSave,
-        updated_at: new Date().toISOString()
-      })
+    const res = await db.prepare(`
+      INSERT INTO api_settings (key, provider, endpoint, model, api_key, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        provider = excluded.provider,
+        endpoint = excluded.endpoint,
+        model = excluded.model,
+        api_key = excluded.api_key,
+        updated_at = excluded.updated_at
+    `)
+      .bind('current', provider, provider === 'openai' ? endpoint : null, model, keyToSave)
+      .run()
 
-    if (upsertError) {
-      return NextResponse.json({ error: upsertError.message }, { status: 500 })
+    if (!res.success) {
+      return NextResponse.json({ error: 'Không thể lưu cài đặt' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

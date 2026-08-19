@@ -19,8 +19,8 @@ import {
 } from 'lucide-react'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import { claimLegacyLocalData, db, LocalFolder, LocalSession } from '@/lib/db'
+import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage } from '@/lib/languages'
-import { createClient } from '@/lib/supabase/client'
 import { syncPendingData } from '@/lib/sync-manager'
 
 function formatDuration(totalSeconds: number) {
@@ -47,8 +47,7 @@ export default function HistoryPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const supabase = createClient()
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      const { data: { user }, error: userError } = await authClient.getUser()
       const currentOwnerId = user?.id
       const legacyUsername = user?.email?.split('@')[0]
       const name = user?.user_metadata?.username ||
@@ -73,13 +72,13 @@ export default function HistoryPage() {
       setSessions(localSessions)
       setLoadError('')
 
-      // Sync cloud sessions and folders from Supabase
-      const [cloudFoldersRes, cloudSessionsRes] = await Promise.all([
-        supabase.from('folders').select('id, owner_id, username, name, created_at, updated_at').order('created_at', { ascending: false }),
-        supabase.from('sessions').select('id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at').order('started_at', { ascending: false }),
+      // Sync cloud sessions and folders from Cloudflare D1
+      const [foldersRes, sessionsRes] = await Promise.all([
+        fetch('/api/history?table=folders').then(r => r.json()).catch(() => ({ items: [] })),
+        fetch('/api/history?table=sessions').then(r => r.json()).catch(() => ({ items: [] })),
       ])
 
-      const cloudFolders: LocalFolder[] = (cloudFoldersRes.data || []).map((f) => ({
+      const cloudFolders: LocalFolder[] = (foldersRes.items || []).map((f: any) => ({
         id: f.id,
         owner_id: f.owner_id || currentOwnerId,
         username: f.username,
@@ -89,7 +88,7 @@ export default function HistoryPage() {
         sync_status: 'synced',
       }))
 
-      const cloudSessions: LocalSession[] = (cloudSessionsRes.data || []).map((s) => ({
+      const cloudSessions: LocalSession[] = (sessionsRes.items || []).map((s: any) => ({
         id: s.id,
         owner_id: s.owner_id || currentOwnerId,
         username: s.username,

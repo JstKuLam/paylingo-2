@@ -23,8 +23,8 @@ import {
 } from 'lucide-react'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import { claimLegacyLocalData, db, LocalFolder, LocalSession } from '@/lib/db'
+import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage } from '@/lib/languages'
-import { createClient } from '@/lib/supabase/client'
 import { syncPendingData } from '@/lib/sync-manager'
 
 type SummaryStyle = 'default' | 'formal' | 'casual' | 'very_casual'
@@ -70,8 +70,7 @@ export default function FolderDetailPage({ params }: PageProps) {
 
   const loadFolderData = useCallback(async () => {
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await authClient.getUser()
       const username = user?.user_metadata?.username ||
                        user?.user_metadata?.full_name ||
                        user?.user_metadata?.name ||
@@ -94,22 +93,14 @@ export default function FolderDetailPage({ params }: PageProps) {
         return
       }
 
-      const { data: cloudFolder, error: folderError } = await supabase
-        .from('folders')
-        .select('id, owner_id, username, name, created_at, updated_at')
-        .eq('id', id)
-        .single()
-      if (folderError || !cloudFolder) {
+      const cloudRes = await fetch(`/api/history?table=folders&id=${encodeURIComponent(id)}&single=1`).then(r => r.json()).catch(() => ({}))
+      const cloudFolder = cloudRes.item
+      const cloudSessions = cloudRes.sessions || []
+
+      if (!cloudFolder) {
         setPageError('Không tìm thấy thư mục hoặc bạn không có quyền truy cập.')
         return
       }
-
-      const { data: cloudSessions, error: sessionsError } = await supabase
-        .from('sessions')
-        .select('id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at')
-        .eq('folder_id', id)
-        .order('started_at', { ascending: false })
-      if (sessionsError) throw sessionsError
 
       const formattedFolder: LocalFolder = {
         id: cloudFolder.id,
@@ -120,7 +111,7 @@ export default function FolderDetailPage({ params }: PageProps) {
         updated_at: cloudFolder.updated_at || new Date().toISOString(),
         sync_status: 'synced',
       }
-      const formattedSessions: LocalSession[] = (cloudSessions || []).map((session) => ({
+      const formattedSessions: LocalSession[] = cloudSessions.map((session: any) => ({
         id: session.id,
         owner_id: session.owner_id || user.id,
         username: session.username,
@@ -168,11 +159,11 @@ export default function FolderDetailPage({ params }: PageProps) {
     if (!folder || !confirm('Xóa thư mục? Các hội thoại bên trong sẽ được chuyển về danh sách chính.')) return
     setPageError('')
     try {
-      const supabase = createClient()
-      const { error: updateError } = await supabase.from('sessions').update({ folder_id: null }).eq('folder_id', folder.id)
-      if (updateError) throw updateError
-      const { error: deleteError } = await supabase.from('folders').delete().eq('id', folder.id)
-      if (deleteError) throw deleteError
+      await fetch('/api/history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'folders', field: 'id', value: folder.id }),
+      })
 
       const now = new Date().toISOString()
       await db.transaction('rw', db.folders, db.sessions, async () => {
@@ -195,9 +186,11 @@ export default function FolderDetailPage({ params }: PageProps) {
     if (!confirm('Chuyển hội thoại này ra khỏi thư mục?')) return
     setPageError('')
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from('sessions').update({ folder_id: null }).eq('id', sessionId)
-      if (error) throw error
+      await fetch('/api/history', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'sessions', field: 'id', value: sessionId, payload: { folder_id: null } }),
+      })
       const now = new Date().toISOString()
       await db.sessions.update(sessionId, { folder_id: null, sync_status: 'pending', updated_at: now })
       setSessions((current) => current.filter((session) => session.id !== sessionId))

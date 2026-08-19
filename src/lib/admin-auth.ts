@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { createAdminClient } from '@/lib/supabase/server'
+import { getD1 } from '@/lib/d1-client'
 
 const ENCODER = new TextEncoder()
 const SESSION_COOKIE_NAME = 'admin_session'
@@ -98,7 +98,7 @@ export async function verifySignedAdminValue(token: string, passwordHash: string
   return timingSafeEqualStr(expected, signature) ? value : null
 }
 
-export async function createSessionToken(passwordHash: string, maxAgeSeconds = 86400 * 7): Promise<string> {
+export async function createSessionToken(passwordHash: string, maxAgeSeconds = 86400 * 30): Promise<string> {
   const expiresAt = Date.now() + maxAgeSeconds * 1000
   return createSignedAdminValue(`${expiresAt}:${crypto.randomUUID()}`, passwordHash)
 }
@@ -117,14 +117,12 @@ export async function verifySessionToken(token: string, passwordHash: string): P
 }
 
 export async function getAdminCredentials() {
-  const adminSupa = createAdminClient()
-  const { data, error } = await adminSupa
-    .from('api_settings')
-    .select('*')
-    .eq('key', 'admin_auth')
-    .single()
+  const db = getD1()
+  const data = await db.prepare('SELECT * FROM api_settings WHERE key = ?')
+    .bind('admin_auth')
+    .first<{ key: string; api_key: string; provider?: string; endpoint?: string; model?: string }>()
     
-  if (error || !data) {
+  if (!data) {
     const bootstrap = process.env.ADMIN_BOOTSTRAP_PASSWORD
     if (bootstrap && bootstrap.length >= 12) {
       return {
@@ -154,18 +152,26 @@ export async function getAdminCredentials() {
 }
 
 export async function saveAdminCredentials(hash: string, passkeySpki = '', passkeyCredId = '', passkeyEnabled = false) {
-  const adminSupa = createAdminClient()
-  const { error } = await adminSupa
-    .from('api_settings')
-    .upsert({
-      key: 'admin_auth',
-      api_key: hash,
-      endpoint: passkeySpki,
-      model: passkeyCredId,
-      provider: passkeyEnabled ? 'passkey_enabled' : 'passkey_disabled',
-      updated_at: new Date().toISOString()
-    })
-  return !error
+  const db = getD1()
+  const res = await db.prepare(`
+    INSERT INTO api_settings (key, api_key, endpoint, model, provider, updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET
+      api_key = excluded.api_key,
+      endpoint = excluded.endpoint,
+      model = excluded.model,
+      provider = excluded.provider,
+      updated_at = excluded.updated_at
+  `)
+    .bind(
+      'admin_auth',
+      hash,
+      passkeySpki,
+      passkeyCredId,
+      passkeyEnabled ? 'passkey_enabled' : 'passkey_disabled'
+    )
+    .run()
+  return res.success
 }
 
 export async function checkAdminSession(): Promise<boolean> {
