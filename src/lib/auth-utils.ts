@@ -1,5 +1,10 @@
 export const ALLOWED_DOMAINS = ['pay2pay.vn']
-export const WHITELISTED_EMAILS = ['ngaphungg210@gmail.com', 'thu.hoang.a15@gmail.com', 'quynhchipt.work@gmail.com']
+export const WHITELISTED_EMAILS = [
+  'ngaphungg210@gmail.com',
+  'thu.hoang.a15@gmail.com',
+  'quynhchipt.work@gmail.com',
+  'nhunglth2805@gmail.com',
+]
 
 export function isAllowedEmail(email: string | null | undefined): boolean {
   if (!email) return false
