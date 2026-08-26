@@ -4,6 +4,8 @@ export const WHITELISTED_EMAILS = [
   'thu.hoang.a15@gmail.com',
   'quynhchipt.work@gmail.com',
   'nhunglth2805@gmail.com',
+  'truong.giang@amnis.finance',
+  'ttgiang98@gmail.com',
 ]
 
 export function isAllowedEmail(email: string | null | undefined): boolean {
