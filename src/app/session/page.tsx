@@ -326,7 +326,7 @@ function SessionActiveArea({
 
   const { isActive, state, finalTokens, partialTokens, start, stop } = useRecording({
     config: getSonioxConfig,
-    model: 'stt-rt-v4',
+    model: 'stt-rt-v5',
     enable_language_identification: true,
     enable_endpoint_detection: true,
     language_hints: recordingConfig.language_hints,

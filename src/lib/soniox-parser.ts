@@ -85,7 +85,7 @@ function cleanTranscriptText(text: string): string {
 }
 
 /**
- * Parses Soniox v4 two-way and one-way translation tokens into structured conversation messages.
+ * Parses Soniox v5 two-way and one-way translation tokens into structured conversation messages.
  * Groups consecutive words by speaker, sentence boundaries, and silence thresholds.
  * Seamlessly pairs translation tokens (which lack start_ms) with their corresponding original tokens.
  */

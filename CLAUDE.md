@@ -13,8 +13,8 @@ Tradeoff anchor: nếu phải chọn giữa "nhiều tính năng" và "trải ng
 
 ### Constraints
 
-- **Tech stack**: Next.js 16 (App Router) + React 19 + TypeScript 5.6 + Tailwind 4 + shadcn/ui + Supabase (Postgres/Auth/Storage) + `@soniox/react` 2.1 + Dexie 4 (IndexedDB) + `@react-pdf/renderer` + `@serwist/next` PWA + Vercel deploy.
-- **STT/Translation API**: Soniox WebSocket (real-time + translation, model `stt-rt-v4`, mode `two_way`). Browser kết nối trực tiếp tới Soniox qua **temporary API key** (mint từ Next.js Route Handler) — không proxy qua server. Chi phí thực tế: **$0.12/giờ** (rẻ hơn 60× so với ước tính ban đầu; 30ph ≈ $0.06).
+- **Tech stack**: Next.js 16 (App Router) + React 19 + TypeScript 5.6 + Tailwind 4 + shadcn/ui + Supabase (Postgres/Auth/Storage) + `@soniox/react` 2.3 + Dexie 4 (IndexedDB) + `@react-pdf/renderer` + `@serwist/next` PWA + Vercel deploy.
+- **STT/Translation API**: Soniox WebSocket (real-time + translation, model `stt-rt-v5`, mode `two_way`). Browser kết nối trực tiếp tới Soniox qua **temporary API key** (mint từ Next.js Route Handler) — không proxy qua server. Chi phí thực tế: **$0.12/giờ** (rẻ hơn 60× so với ước tính ban đầu; 30ph ≈ $0.06).
 - **Latency target**: end-to-end ≤ 2s từ lúc đối tác nói xong cụm từ đến lúc text hiện lên khung. Streaming partial transcript chấp nhận flicker nhẹ.
 - **Performance**: app phải chạy mượt trên mid-range mobile (Android 2-3 năm tuổi). Tránh heavy compute client-side.
 - **Privacy**: không lưu audio file. Transcript là dữ liệu nhạy cảm — cần Row-Level Security trên Supabase, access code phải khó đoán.
@@ -32,7 +32,7 @@ Tradeoff anchor: nếu phải chọn giữa "nhiều tính năng" và "trải ng
 | Runtime | React **19.2.6** | HIGH |
 | Language | TypeScript **5.6.0** | HIGH |
 | Styling | Tailwind CSS **4.3.0** + shadcn/ui (CLI **4.8.1**) | HIGH |
-| STT + translation | **`@soniox/react` 2.1.0** + **`@soniox/node` 2.1.0** (model `stt-rt-v4`) | HIGH |
+| STT + translation | **`@soniox/react` 2.3.0** + **`@soniox/node` 2.3.0** (model `stt-rt-v5`) | HIGH |
 | Audio capture | `@soniox/react`'s built-in `MicrophoneSource` (wraps `getUserMedia` + `AudioWorkletNode`) | HIGH |
 | Database / Auth / Storage | Supabase: `@supabase/supabase-js` **2.106.2** + `@supabase/ssr` **0.10.3** | HIGH |
 | Access-code auth | `supabase.auth.signInAnonymously()` + custom `access_codes` table + RLS keyed on `access_code_id` in `raw_app_meta_data` (see §4) | MEDIUM |
@@ -69,13 +69,13 @@ Tradeoff anchor: nếu phải chọn giữa "nhiều tính năng" và "trải ng
 | TanStack Start | Younger ecosystem, no Vercel-grade deployment story, fewer Supabase patterns. |
 | Vite + React Router + Hono on a separate Node host | More config, two deploy targets, no SSR cache for the admin panel. PWA tooling weaker (no Serwist plugin). |
 | SvelteKit | Outside user's stated stack. |
-## 2. Soniox v4 Real-Time (validated)
+## 2. Soniox v5 Real-Time (validated)
 ### 2.1 Packages
 | Package | Version | Side | Role |
 |---------|---------|------|------|
-| `@soniox/react` | 2.1.0 | client | `useRecording` hook, mic capture, render-safe state |
-| `@soniox/client` | 2.1.0 | client (transitive of `@soniox/react`) | Core WebSocket + audio worklet |
-| `@soniox/node` | 2.1.0 | server | Mints temporary API keys via `client.auth.createTemporaryKey()` |
+| `@soniox/react` | 2.3.0 | client | `useRecording` hook, mic capture, render-safe state |
+| `@soniox/client` | 2.3.0 | client (transitive of `@soniox/react`) | Core WebSocket + audio worklet |
+| `@soniox/node` | 2.3.0 | server | Mints temporary API keys via `client.auth.createTemporaryKey()` |
 ### 2.2 Architecture (definitive)
 ### 2.3 Concrete config for PayLingo
 ### 2.4 The wire protocol (for reference)
@@ -87,10 +87,10 @@ Tradeoff anchor: nếu phải chọn giữa "nhiều tính năng" và "trải ng
 ### 2.5 Models — pick exactly one
 | Model | Use it? | Why |
 |-------|---------|-----|
-| `stt-rt-v4` | **YES** | Current GA real-time model. Multilingual, low-latency (~1-2s end-to-end), supports `two_way` translation. |
+| `stt-rt-v5` | **YES** | Current GA real-time model (v5). Superior accuracy in noise/accents, low-latency, supports `two_way` translation. |
+| `stt-rt-v4` | Retired | Retired June 30, 2026. Aliased to v5 by server. |
 | `stt-rt-v3` | No | Previous gen. Inferior accuracy and latency. |
-| `stt-rt-preview-v1/v2` | No | Preview channels. Will be deprecated. |
-| `stt-async-v4` | No | For uploaded files only. PayLingo is real-time. |
+| `stt-async-v5` | No | For uploaded files only. PayLingo is real-time. |
 ### 2.6 Reconnect handling (your downstream consumer asked)
 - **Auto-reconnect on retriable errors** (network drop, idle disconnect) — set `auto_reconnect: true`, transcript persists by default.
 - **Manual reconnect on stale connections** — call the returned `reconnect()` from `visibilitychange` listener. The hook's docs literally cite this use case.
@@ -252,7 +252,7 @@ Tradeoff anchor: nếu phải chọn giữa "nhiều tính năng" và "trải ng
 | Decision | Confidence | Why |
 |----------|-----------|-----|
 | Next.js 16 + React 19 | HIGH | Verified latest npm, peer deps, Soniox's own example aligned |
-| Soniox SDK + `stt-rt-v4` + two-way translation | HIGH | Read source of `@soniox/react@2.1.0` directly, verified config shape, verified Next.js example uses identical pattern to PayLingo |
+| Soniox SDK + `stt-rt-v5` + two-way translation | HIGH | Read source of `@soniox/react@2.3.0` directly, verified config shape, verified Next.js example uses identical pattern to PayLingo |
 | Soniox pricing $0.12/hr (not $0.10/min) | HIGH | Direct fetch of soniox.com/pricing |
 | Supabase + `@supabase/ssr` 0.10.3 | HIGH | Stable, current, official Next.js docs are recent |
 | Access-code = anon sign-in + `app_metadata` claim + RLS | MEDIUM | This is the cleanest synthesis but no off-the-shelf pattern. Two unknowns: (a) whether `app_metadata` claim is in JWT immediately after `updateUserById` or only after `refreshSession()` — code samples assume the latter; (b) admin role assignment via Studio is manual. Recommend prototyping this end-to-end in phase 1. |

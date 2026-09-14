@@ -281,7 +281,7 @@ export default function AdminPage() {
     for (const row of result) {
       const ai = aiUsageMap.get(row.username) || { tokens: 0, cost: 0 }
       row.tokensUsed = ai.tokens
-      const sonioxCost = (row.totalDurationSeconds / 60) * 0.012
+      const sonioxCost = (row.totalDurationSeconds / 60) * 0.002
       row.estimatedCostUSD = sonioxCost + ai.cost
     }
 
@@ -318,7 +318,7 @@ export default function AdminPage() {
     }
     
     const totalCFEgressMB = globalSessions.length * 2.8
-    const totalSonioxCost = (totalDuration / 60) * 0.012
+    const totalSonioxCost = (totalDuration / 60) * 0.002
     const totalOpsCostUSD = totalSonioxCost + totalAIcost
 
     return {

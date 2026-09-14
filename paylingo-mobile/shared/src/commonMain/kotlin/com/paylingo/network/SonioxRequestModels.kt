@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SonioxInitialRequest(
     val api_key: String,
-    val model: String = "stt-rt-v4",
+    val model: String = "stt-rt-v5",
     val audio_format: String = "pcm_s16le",
     val sample_rate: Int = 16000,
     val num_channels: Int = 1,
