@@ -193,3 +193,44 @@ export function detectMachineLanguage(): Language {
 
   return 'en'
 }
+
+export interface EmailTemplateStrings {
+  subject: (otp: string) => string
+  tagline: string
+  greeting: (email: string) => string
+  otpTitle: string
+  directLinkText: string
+  signInBtn: string
+  expiryNotice: string
+}
+
+export const emailTranslations: Record<Language, EmailTemplateStrings> = {
+  vi: {
+    subject: (otp) => `Mã OTP PayLingo: ${otp}`,
+    tagline: 'Phiên dịch thời gian thực & Quản lý hội thoại',
+    greeting: (email) => `Chào bạn, chúng tôi đã nhận được yêu cầu đăng nhập vào tài khoản <strong>${email}</strong>.`,
+    otpTitle: 'Mã xác thực OTP',
+    directLinkText: 'Hoặc bấm vào nút bên dưới để đăng nhập trực tiếp:',
+    signInBtn: 'Đăng nhập vào PayLingo',
+    expiryNotice: 'Mã OTP và liên kết có hiệu lực trong 15 phút. Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email.',
+  },
+  en: {
+    subject: (otp) => `PayLingo OTP Code: ${otp}`,
+    tagline: 'Real-time Interpretation & Session Management',
+    greeting: (email) => `Hello, we received a login request for your account <strong>${email}</strong>.`,
+    otpTitle: 'OTP Verification Code',
+    directLinkText: 'Or click the button below to sign in directly:',
+    signInBtn: 'Sign In to PayLingo',
+    expiryNotice: 'The OTP code and link are valid for 15 minutes. If you did not request this, please ignore this email.',
+  },
+  zh: {
+    subject: (otp) => `PayLingo 登录验证码: ${otp}`,
+    tagline: '实时同声传译与会话管理',
+    greeting: (email) => `您好，我们收到了您账号 <strong>${email}</strong> 的登录请求。`,
+    otpTitle: '登录验证码 (OTP)',
+    directLinkText: '或点击下方按钮直接登录：',
+    signInBtn: '登录 PayLingo',
+    expiryNotice: '验证码和登录链接有效时间为 15 分钟。如果您未请求此操作，请忽略此邮件。',
+  },
+}
+

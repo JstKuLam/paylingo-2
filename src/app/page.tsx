@@ -88,7 +88,10 @@ export default function Home() {
     setError(null)
 
     try {
-      const { error: sendErr } = await authClient.signInWithOtp({ email: sanitizedEmail })
+      const { error: sendErr } = await authClient.signInWithOtp({
+        email: sanitizedEmail,
+        lang: language,
+      })
       if (sendErr) {
         throw sendErr
       }

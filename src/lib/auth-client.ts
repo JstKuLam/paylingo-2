@@ -63,12 +63,12 @@ export const authClient = {
     return { data: { session }, error: null }
   },
 
-  async signInWithOtp({ email }: { email: string }): Promise<{ error: Error | null }> {
+  async signInWithOtp({ email, lang }: { email: string; lang?: string }): Promise<{ error: Error | null }> {
     try {
       const res = await fetch('/api/auth/send-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, lang }),
       })
       const data = await res.json()
       if (!res.ok || data.error) {

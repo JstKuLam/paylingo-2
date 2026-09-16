@@ -3,13 +3,14 @@ import { isAllowedEmail } from '@/lib/auth-utils'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 import { createMagicToken } from '@/lib/auth/session'
 import { sendEmail } from '@/lib/auth/smtp'
+import { emailTranslations, Language } from '@/lib/i18n'
 
 export const runtime = 'edge'
 
 
 export async function POST(request: Request) {
   try {
-    const { email } = await request.json()
+    const { email, lang } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json({ error: 'Email không hợp lệ.' }, { status: 400 })
@@ -41,39 +42,43 @@ export async function POST(request: Request) {
       (process.env.NODE_ENV === 'development' ? requestOrigin : 'https://noidi.9phut.org')
     const magicLinkUrl = `${configuredOrigin}/auth/callback?token=${token}`
 
-    // Render Clean Email HTML
+    // Language selection for email content
+    const selectedLang: Language = (lang === 'en' || lang === 'zh' || lang === 'vi') ? lang : 'vi'
+    const emailT = emailTranslations[selectedLang] || emailTranslations.vi
+
+    // Render Clean Email HTML in user's selected language
     const emailHtml = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 20px; background-color: #ffffff; color: #1e293b; border-radius: 12px; border: 1px solid #e2e8f0;">
         <div style="text-align: center; margin-bottom: 24px;">
-          <h2 style="margin: 0; color: #0284c7; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">PayLingo</h2>
-          <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">Phiên dịch thời gian thực & Quản lý hội thoại</p>
+          <h2 style="margin: 0; color: #5427D4; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">PayLingo</h2>
+          <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">${emailT.tagline}</p>
         </div>
         
         <p style="font-size: 15px; line-height: 1.6; color: #334155; margin-bottom: 20px;">
-          Chào bạn, chúng tôi đã nhận được yêu cầu đăng nhập vào tài khoản <strong>${sanitizedEmail}</strong>.
+          ${emailT.greeting(sanitizedEmail)}
         </p>
 
         <div style="margin: 24px 0; padding: 20px; background-color: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1; text-align: center;">
-          <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Mã xác thực OTP</p>
+          <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">${emailT.otpTitle}</p>
           <div style="font-size: 36px; font-weight: 800; color: #0f172a; letter-spacing: 8px; font-family: monospace;">${otp}</div>
         </div>
 
         <div style="text-align: center; margin: 20px 0 10px 0;">
-          <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b;">Hoặc bấm vào nút bên dưới để đăng nhập trực tiếp:</p>
-          <a href="${magicLinkUrl}" style="background-color: #0284c7; color: #ffffff; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">
-            Đăng nhập vào PayLingo
+          <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b;">${emailT.directLinkText}</p>
+          <a href="${magicLinkUrl}" style="background-color: #5427D4; color: #ffffff; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">
+            ${emailT.signInBtn}
           </a>
         </div>
 
         <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
-          Mã OTP và liên kết có hiệu lực trong 15 phút. Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email.
+          ${emailT.expiryNotice}
         </p>
       </div>
     `
 
     const sendRes = await sendEmail({
       to: sanitizedEmail,
-      subject: `Mã OTP PayLingo: ${otp}`,
+      subject: emailT.subject(otp),
       html: emailHtml,
     })
 
