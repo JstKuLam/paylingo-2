@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, LogOut, User } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
+import { useLanguage } from '@/hooks/useLanguage'
 
 export default function ProfileMenu({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter()
+  const { t } = useLanguage()
   const [userLabel, setUserLabel] = useState('Khách')
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -80,8 +82,8 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
       {isMenuOpen && (
         <div className="profile-dropdown" role="menu">
           <div className="dropdown-user-info">
-            <div className="dropdown-username">{userLabel}</div>
-            <div className="dropdown-email">{userEmail || 'Tài khoản khách'}</div>
+            <div className="dropdown-username">{userLabel === 'Khách' ? t.profileGuest : userLabel}</div>
+            <div className="dropdown-email">{userEmail || t.profileGuest}</div>
           </div>
           <div className="dropdown-divider" />
           <button
@@ -94,7 +96,7 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
             role="menuitem"
           >
             <LogOut aria-hidden="true" />
-            <span>Đăng xuất</span>
+            <span>{t.profileLogout}</span>
           </button>
         </div>
       )}

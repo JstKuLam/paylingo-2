@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     if (!email || !isAllowedEmail(email) || !user.email_confirmed_at) {
       return NextResponse.json(
-        { error: 'Chỉ chấp nhận tài khoản công ty hoặc tài khoản được cấp quyền.' },
+        { error: 'Tài khoản không hợp lệ hoặc chưa được xác thực.' },
         { status: 403, headers: { 'Cache-Control': 'no-store' } }
       )
     }

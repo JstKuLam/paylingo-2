@@ -16,12 +16,15 @@ import {
 } from 'lucide-react'
 import PayPayLogo from '@/components/PayPayLogo'
 import { useTheme } from '@/hooks/useTheme'
+import { useLanguage } from '@/hooks/useLanguage'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { authClient } from '@/lib/auth-client'
 import { isAllowedEmail } from '@/lib/auth-utils'
 
 export default function Home() {
   const router = useRouter()
   const { theme, changeTheme } = useTheme()
+  const { language, changeLanguage, t } = useLanguage()
   const [email, setEmail] = useState('')
   const [otpCode, setOtpCode] = useState('')
   const [isLinkSent, setIsLinkSent] = useState(false)
@@ -46,7 +49,7 @@ export default function Home() {
           const userEmail = user.email
           if (!isAllowedEmail(userEmail)) {
             await authClient.signOut()
-            setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn) hoặc email được cấp quyền.')
+            setError(t.errorInvalidEmail)
             return
           }
           setError(null)
@@ -61,14 +64,14 @@ export default function Home() {
     const errParam = new URLSearchParams(window.location.search).get('error')
     if (errParam) {
       if (errParam === 'invalid_or_expired_token' || errParam === 'invalid_token') {
-        setError('Liên kết đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng nhập email để nhận mã mới.')
-      } else if (errParam === 'domain_restricted') {
-        setError('Đăng nhập thất bại. Chỉ chấp nhận tài khoản email công ty (@pay2pay.vn).')
+        setError(t.errorExpiredToken)
+      } else if (errParam === 'domain_restricted' || errParam === 'unauthorized') {
+        setError(t.errorAccessDenied)
       } else {
-        setError('Xác thực thất bại. Vui lòng thử lại.')
+        setError(t.errorGeneric)
       }
     }
-  }, [router])
+  }, [router, t])
 
   const handleSendLink = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -77,7 +80,7 @@ export default function Home() {
     const sanitizedEmail = email.trim().toLowerCase()
     const isAllowed = isAllowedEmail(sanitizedEmail)
     if (!isAllowed) {
-      setError('Chỉ chấp nhận email thuộc domain công ty (@pay2pay.vn) hoặc email được cấp quyền.')
+      setError(t.errorInvalidEmail)
       return
     }
 
@@ -93,12 +96,12 @@ export default function Home() {
       setIsLinkSent(true)
       setResendCountdown(60)
     } catch (err) {
-      console.error('Failed to send magic link:', err)
+      console.error('Failed to send OTP code:', err)
       const rawMsg = err instanceof Error ? err.message : ''
       if (rawMsg.toLowerCase().includes('rate limit') || rawMsg.toLowerCase().includes('seconds')) {
-        setError('Hệ thống email đang trong thời gian chờ an toàn. Vui lòng đợi khoảng 60 giây rồi bấm gửi lại.')
+        setError(t.errorRateLimit)
       } else {
-        setError(rawMsg || 'Không thể gửi liên kết đăng nhập. Vui lòng thử lại.')
+        setError(rawMsg || t.errorSendOtp)
       }
     } finally {
       setIsLoading(false)
@@ -115,12 +118,12 @@ export default function Home() {
     try {
       const { data, error: verifyErr } = await authClient.verifyOtp({ token: otpCode.trim() })
       if (verifyErr || !data.user) {
-        throw verifyErr || new Error('Mã xác thực không hợp lệ')
+        throw verifyErr || new Error(t.errorInvalidOtp)
       }
 
       router.replace('/session')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Mã xác thực không chính xác hoặc đã hết hạn.')
+      setError(err instanceof Error ? err.message : t.errorInvalidOtp)
     } finally {
       setIsVerifyingOtp(false)
     }
@@ -138,50 +141,57 @@ export default function Home() {
       <section className="entry-context z-10 bg-[#121417]/80 backdrop-blur-2xl border-r border-[#3a444e]/30 shadow-2xl" aria-label="Giới thiệu ứng dụng">
         <div className="entry-brand-row">
           <PayPayLogo className="h-14 w-auto" width={178} height={56} />
-          <span className="entry-product-name tracking-wider uppercase text-xs opacity-80">Live Interpreter</span>
+          <span className="entry-product-name tracking-wider uppercase text-xs opacity-80">{t.appTagline}</span>
         </div>
 
         <div className="entry-intro">
-          <p className="eyebrow text-primary font-bold tracking-widest text-xs">Phiên dịch hội thoại trực tiếp</p>
-          <h1 className="text-white font-semibold leading-tight tracking-tight">Phiên dịch hội thoại song ngữ tức thì.</h1>
+          <p className="eyebrow text-primary font-bold tracking-widest text-xs">{t.heroEyebrow}</p>
+          <h1 className="text-white font-semibold leading-tight tracking-tight">{t.heroTitle}</h1>
         </div>
 
         <div className="entry-proof opacity-90" aria-label="Khả năng chính">
-          <div className="flex items-center gap-3 text-sm text-gray-300"><Languages className="text-primary w-5 h-5" aria-hidden="true" /><span>Dịch hai chiều theo thời gian thực</span></div>
-          <div className="flex items-center gap-3 text-sm text-gray-300"><LockKeyhole className="text-primary w-5 h-5" aria-hidden="true" /><span>Không lưu âm thanh gốc</span></div>
-          <div className="flex items-center gap-3 text-sm text-gray-300"><Check className="text-primary w-5 h-5" aria-hidden="true" /><span>Lưu transcript cục bộ khi mất mạng</span></div>
+          <div className="flex items-center gap-3 text-sm text-gray-300"><Languages className="text-primary w-5 h-5" aria-hidden="true" /><span>{t.featureRealtime}</span></div>
+          <div className="flex items-center gap-3 text-sm text-gray-300"><LockKeyhole className="text-primary w-5 h-5" aria-hidden="true" /><span>{t.featureNoAudio}</span></div>
+          <div className="flex items-center gap-3 text-sm text-gray-300"><Check className="text-primary w-5 h-5" aria-hidden="true" /><span>{t.featureLocalBackup}</span></div>
         </div>
       </section>
 
       <section className="entry-action relative z-10 flex flex-col justify-between min-h-dvh">
-        <div className="entry-action-top flex items-center justify-between sm:justify-end gap-4 w-full">
-          <span className="entry-mobile-brand font-bold text-lg text-primary tracking-tight block sm:hidden">Pay2Pay Interpreter</span>
-          <div className="theme-switch glass-button-modern rounded-lg p-1" aria-label="Giao diện">
-            <button
-              type="button"
-              className={`p-2 rounded-md transition-all ${theme === 'dark' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-foreground'}`}
-              onClick={() => changeTheme('dark')}
-              aria-label="Dùng giao diện tối"
-              title="Giao diện tối"
-            >
-              <Moon className="w-4 h-4" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className={`p-2 rounded-md transition-all ${theme === 'light' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-foreground'}`}
-              onClick={() => changeTheme('light')}
-              aria-label="Dùng giao diện sáng"
-              title="Giao diện sáng"
-            >
-              <Sun className="w-4 h-4" aria-hidden="true" />
-            </button>
+        <div className="entry-action-top flex items-center justify-between sm:justify-end gap-3 w-full">
+          <span className="entry-mobile-brand font-bold text-lg text-primary tracking-tight block sm:hidden">{t.appName}</span>
+          
+          <div className="flex items-center gap-2">
+            {/* Language Switcher */}
+            <LanguageSwitcher />
+
+            {/* Theme switcher */}
+            <div className="theme-switch glass-button-modern rounded-lg p-1" aria-label="Giao diện">
+              <button
+                type="button"
+                className={`p-2 rounded-md transition-all ${theme === 'dark' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-foreground'}`}
+                onClick={() => changeTheme('dark')}
+                aria-label={t.themeDark}
+                title={t.themeDark}
+              >
+                <Moon className="w-4 h-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={`p-2 rounded-md transition-all ${theme === 'light' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-foreground'}`}
+                onClick={() => changeTheme('light')}
+                aria-label={t.themeLight}
+                title={t.themeLight}
+              >
+                <Sun className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="entry-form-wrap glass-panel-modern squircle-3xl p-8 sm:p-10 shadow-2xl border border-white/10 dark:border-white/5 relative z-10 max-w-[480px] w-full mx-auto my-auto transition-all">
           <div className="entry-heading">
-            <h2 className="text-2xl font-bold tracking-tight">Bắt đầu phiên dịch</h2>
-            <p className="text-text-muted text-sm mt-2">Vui lòng xác thực bằng tài khoản email công ty để truy cập ứng dụng.</p>
+            <h2 className="text-2xl font-bold tracking-tight">{t.formTitle}</h2>
+            <p className="text-text-muted text-sm mt-2">{t.formSubtitle}</p>
           </div>
 
           <div style={{ marginTop: '30px' }}>
@@ -194,7 +204,7 @@ export default function Home() {
             {!isLinkSent ? (
               <form onSubmit={handleSendLink} className="entry-form space-y-4" noValidate>
                 <div className="field-group">
-                  <label htmlFor="email" className="block text-sm font-semibold mb-2">Email công ty</label>
+                  <label htmlFor="email" className="block text-sm font-semibold mb-2">{t.emailLabel}</label>
                   <div className="input-with-icon relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" aria-hidden="true" />
                     <input
@@ -206,7 +216,7 @@ export default function Home() {
                         setEmail(event.target.value)
                         setError(null)
                       }}
-                      placeholder="Ví dụ: nguyenvan-a@pay2pay.vn"
+                      placeholder={t.emailPlaceholder}
                       autoComplete="email"
                       disabled={isLoading}
                       aria-invalid={Boolean(error)}
@@ -218,13 +228,13 @@ export default function Home() {
 
                 <button 
                   type="submit" 
-                  className="primary-command glass-button-modern squircle-xl w-full h-[52px] font-bold text-sm tracking-wide bg-primary hover:bg-primary-hover text-white transition-all shadow-lg shadow-primary/20 hover:shadow-primary/30 flex items-center justify-center gap-2 active:scale-[0.98]"
+                  className="primary-command glass-button-modern squircle-xl w-full h-[52px] font-bold text-sm tracking-wide bg-primary hover:bg-primary-hover text-white transition-all shadow-lg shadow-primary/20 hover:shadow-primary/30 flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   disabled={isLoading || !email.trim()}
                 >
                   {isLoading ? (
                     <Loader2 className="animate-spin w-4 h-4" aria-hidden="true" />
                   ) : null}
-                  <span>{isLoading ? 'Đang gửi liên kết...' : 'Gửi liên kết đăng nhập'}</span>
+                  <span>{isLoading ? t.gettingOtpBtn : t.getOtpBtn}</span>
                 </button>
               </form>
             ) : (
@@ -233,9 +243,9 @@ export default function Home() {
                   <div className="flex gap-4 items-start bg-primary/10 dark:bg-primary/20 p-5 rounded-xl border border-primary/20 backdrop-blur-sm">
                     <Mail className="text-primary w-6 h-6 flex-shrink-0 mt-1" aria-hidden="true" />
                     <div>
-                      <h4 className="font-semibold text-base text-foreground">Đã gửi mã & link đăng nhập</h4>
+                      <h4 className="font-semibold text-base text-foreground">{t.otpSentTitle}</h4>
                       <p className="text-sm text-text-muted mt-2 leading-relaxed">
-                        Đã gửi đến <strong className="text-foreground">{email}</strong>. Bạn có thể mở email và bấm vào link, hoặc nhập mã OTP 6 số bên dưới:
+                        {t.otpSentDesc.replace('{email}', email)}
                       </p>
                     </div>
                   </div>
@@ -244,7 +254,7 @@ export default function Home() {
                 {/* OTP Input Form */}
                 <form onSubmit={handleVerifyOtp} className="space-y-3">
                   <div className="field-group">
-                    <label htmlFor="otp" className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Nhập mã OTP 6 số</label>
+                    <label htmlFor="otp" className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{t.otpInputLabel}</label>
                     <div className="input-with-icon relative">
                       <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" aria-hidden="true" />
                       <input
@@ -254,7 +264,7 @@ export default function Home() {
                         maxLength={6}
                         value={otpCode}
                         onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                        placeholder="123456"
+                        placeholder={t.otpPlaceholder}
                         autoFocus
                         className="w-full h-[52px] pl-12 pr-4 rounded-xl border border-border-strong bg-surface/50 backdrop-blur-sm focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none font-mono text-lg tracking-widest text-center"
                       />
@@ -264,10 +274,10 @@ export default function Home() {
                   <button
                     type="submit"
                     disabled={isVerifyingOtp || otpCode.trim().length !== 6}
-                    className="primary-command glass-button-modern squircle-xl w-full h-[48px] font-bold text-sm tracking-wide bg-primary hover:bg-primary-hover text-white transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="primary-command glass-button-modern squircle-xl w-full h-[48px] font-bold text-sm tracking-wide bg-primary hover:bg-primary-hover text-white transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {isVerifyingOtp ? <Loader2 className="animate-spin w-4 h-4" /> : null}
-                    <span>Xác nhận đăng nhập</span>
+                    <span>{isVerifyingOtp ? t.verifyingBtn : t.verifyBtn}</span>
                   </button>
                 </form>
 
@@ -279,18 +289,18 @@ export default function Home() {
                       setError(null)
                     }}
                     disabled={isLoading}
-                    className="text-primary hover:text-primary-hover font-semibold transition-all hover:underline"
+                    className="text-primary hover:text-primary-hover font-semibold transition-all hover:underline cursor-pointer"
                   >
-                    Thay đổi email
+                    {t.changeEmailBtn}
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleSendLink()}
                     disabled={isLoading || resendCountdown > 0}
-                    className={`font-semibold transition-all ${resendCountdown > 0 ? 'text-text-soft cursor-not-allowed' : 'text-primary hover:text-primary-hover hover:underline'}`}
+                    className={`font-semibold transition-all ${resendCountdown > 0 ? 'text-text-soft cursor-not-allowed' : 'text-primary hover:text-primary-hover hover:underline cursor-pointer'}`}
                   >
-                    {resendCountdown > 0 ? `Gửi lại sau (${resendCountdown}s)` : 'Gửi lại email'}
+                    {resendCountdown > 0 ? t.resendCountdown.replace('{seconds}', String(resendCountdown)) : t.resendOtpBtn}
                   </button>
                 </div>
               </div>
@@ -299,7 +309,7 @@ export default function Home() {
 
           <div className="entry-footnote flex justify-between items-center border-t border-border/40 mt-8 pt-4 text-xs text-text-soft">
             <span>v3.3.0</span>
-            <Link href="/kulam" className="hover:text-primary transition-colors font-medium">Quản trị</Link>
+            <Link href="/kulam" className="hover:text-primary transition-colors font-medium">{t.adminLink}</Link>
           </div>
         </div>
       </section>

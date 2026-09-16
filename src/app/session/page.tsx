@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import PayPayLogo from '@/components/PayPayLogo'
 import ProfileMenu from '@/components/ProfileMenu'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useSessionLifecycle } from '@/hooks/useSessionLifecycle'
 import { useTheme } from '@/hooks/useTheme'
 import { authClient } from '@/lib/auth-client'
@@ -726,6 +727,7 @@ export default function SessionPage() {
           >
             <History aria-hidden="true" />
           </button>
+          <LanguageSwitcher />
           <button
             type="button"
             onClick={() => changeTheme(theme === 'dark' ? 'light' : 'dark')}

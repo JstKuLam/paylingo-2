@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     if (!isAllowed) {
       return NextResponse.json(
-        { error: 'Chỉ chấp nhận email thuộc domain công ty (@pay2pay.vn) hoặc email được cấp quyền.' },
+        { error: 'Email không hợp lệ. Vui lòng nhập đúng định dạng email.' },
         { status: 400 }
       )
     }
@@ -53,26 +53,27 @@ export async function POST(request: Request) {
           Chào bạn, chúng tôi đã nhận được yêu cầu đăng nhập vào tài khoản <strong>${sanitizedEmail}</strong>.
         </p>
 
-        <div style="text-align: center; margin: 28px 0;">
-          <a href="${magicLinkUrl}" style="background-color: #0284c7; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 2px 4px rgba(2,132,199,0.2);">
+        <div style="margin: 24px 0; padding: 20px; background-color: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1; text-align: center;">
+          <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Mã xác thực OTP</p>
+          <div style="font-size: 36px; font-weight: 800; color: #0f172a; letter-spacing: 8px; font-family: monospace;">${otp}</div>
+        </div>
+
+        <div style="text-align: center; margin: 20px 0 10px 0;">
+          <p style="margin: 0 0 12px 0; font-size: 13px; color: #64748b;">Hoặc bấm vào nút bên dưới để đăng nhập trực tiếp:</p>
+          <a href="${magicLinkUrl}" style="background-color: #0284c7; color: #ffffff; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">
             Đăng nhập vào PayLingo
           </a>
         </div>
 
-        <div style="margin: 24px 0; padding: 16px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; text-align: center;">
-          <p style="margin: 0 0 6px 0; font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Hoặc nhập mã xác thực OTP 6 số</p>
-          <div style="font-size: 28px; font-weight: 800; color: #0f172a; letter-spacing: 6px; font-family: monospace;">${otp}</div>
-        </div>
-
         <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
-          Liên kết và mã OTP có hiệu lực trong 15 phút. Nếu bạn không yêu cầu đăng nhập, vui lòng bỏ qua email này.
+          Mã OTP và liên kết có hiệu lực trong 15 phút. Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email.
         </p>
       </div>
     `
 
     const sendRes = await sendEmail({
       to: sanitizedEmail,
-      subject: `Mã đăng nhập PayLingo: ${otp}`,
+      subject: `Mã OTP PayLingo: ${otp}`,
       html: emailHtml,
     })
 
