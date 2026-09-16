@@ -32,6 +32,7 @@ import ProfileMenu from '@/components/ProfileMenu'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { useSessionLifecycle } from '@/hooks/useSessionLifecycle'
 import { useTheme } from '@/hooks/useTheme'
+import { useLanguage } from '@/hooks/useLanguage'
 import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage, PARTNER_LANGUAGES } from '@/lib/languages'
 import { parseTokensToMessages, TranscriptMessage } from '@/lib/soniox-parser'
@@ -45,28 +46,6 @@ type ConversationSide = 'partner' | 'host'
 
 const FONT_SIZES: FontSize[] = [75, 100, 120, 150, 200]
 const PREFERENCE_EVENT = 'paylingo:preference-change'
-
-const MODE_OPTIONS: Array<{
-  value: RecordingMode
-  label: string
-  description: string
-}> = [
-  {
-    value: 'scribe',
-    label: 'Ghi chú cuộc họp',
-    description: 'Ghi lời nói, không tạo bản dịch',
-  },
-  {
-    value: 'one_way',
-    label: 'Dịch 1 chiều',
-    description: 'Tự nhận diện ngôn ngữ và dịch sang tiếng Việt',
-  },
-  {
-    value: 'two_way',
-    label: 'Dịch 2 chiều',
-    description: 'Dịch qua lại giữa tiếng Việt và ngôn ngữ đã chọn',
-  },
-]
 
 function subscribeToPreferences(callback: () => void) {
   if (typeof window === 'undefined') return () => undefined
@@ -160,6 +139,7 @@ function TranscriptPanel({
   silenceWarning?: boolean
   scrollRef: RefObject<HTMLDivElement | null>
 }) {
+  const { t } = useLanguage()
   const [showJumpButton, setShowJumpButton] = useState(false)
   const visibleMessages = useMemo(
     () =>
@@ -204,7 +184,7 @@ function TranscriptPanel({
         </div>
         <span className={`listening-state ${isActive ? 'is-active' : ''}`}>
           <span aria-hidden="true" />
-          {isActive ? 'Đang nghe' : 'Sẵn sàng'}
+          {isActive ? t.listeningStateActive : t.listeningStateReady}
         </span>
       </header>
 
@@ -212,13 +192,13 @@ function TranscriptPanel({
         {visibleMessages.length === 0 ? (
           <div className="transcript-empty">
             <Languages aria-hidden="true" />
-            <strong>{isActive ? 'Đang chờ giọng nói' : 'Chưa bắt đầu phiên dịch'}</strong>
+            <strong>{isActive ? t.emptyActiveTitle : t.emptyIdleTitle}</strong>
             <p>
               {isActive
-                ? 'Bản ghi sẽ xuất hiện ở đây ngay khi hệ thống nhận diện được lời nói.'
+                ? t.emptyActiveDesc
                 : side === 'partner'
-                  ? 'Đặt màn hình hướng về phía người đối thoại.'
-                  : 'Kiểm tra chế độ và ngôn ngữ trước khi bật micro.'}
+                  ? t.emptyPartnerIdleDesc
+                  : t.emptyHostIdleDesc}
             </p>
           </div>
         ) : (
@@ -226,7 +206,7 @@ function TranscriptPanel({
             {visibleMessages.map(({ message, text }) => (
               <li key={message.id} className={message.is_final ? '' : 'is-partial'}>
                 <div className="transcript-meta">
-                  <span>{message.speaker === 'host' ? 'Bạn' : languageLabel}</span>
+                  <span>{message.speaker === 'host' ? t.speakerYou : languageLabel}</span>
                   <time>{formatTimeline(message.start_ms - firstMessageStart)}</time>
                 </div>
                 <p style={{ fontSize: `${fontSize}%` }}>{text}</p>
@@ -239,8 +219,8 @@ function TranscriptPanel({
           <div className="session-alert session-alert--danger" role="alert">
             <AlertTriangle aria-hidden="true" />
             <div>
-              <strong>Sắp tự động dừng</strong>
-              <p>Không có âm thanh trong 4 phút. Phiên sẽ dừng sau 1 phút nữa để tránh phát sinh chi phí.</p>
+              <strong>{t.silenceWarningTitle}</strong>
+              <p>{t.silenceWarningDesc}</p>
             </div>
           </div>
         )}
@@ -249,7 +229,7 @@ function TranscriptPanel({
       {showJumpButton && (
         <button type="button" className="jump-to-latest" onClick={scrollToLatest}>
           <ArrowDown aria-hidden="true" />
-          Mới nhất
+          {t.jumpLatest}
         </button>
       )}
     </section>
@@ -275,6 +255,7 @@ function SessionActiveArea({
   setLayoutMode: (layout: LayoutMode) => void
   setIsRecordingActive: (active: boolean) => void
 }) {
+  const { language, t } = useLanguage()
   const [operationError, setOperationError] = useState('')
   const [splitRatio, setSplitRatio] = useState(42)
   const [isDragging, setIsDragging] = useState(false)
@@ -286,10 +267,10 @@ function SessionActiveArea({
     const response = await fetch('/api/auth/soniox-key', { method: 'POST' })
     const data: { api_key?: string; error?: string } = await response.json()
     if (!response.ok || !data.api_key) {
-      throw new Error(data.error || 'Không thể khởi tạo dịch vụ phiên dịch.')
+      throw new Error(data.error || t.errorInitService)
     }
     return { api_key: data.api_key }
-  }, [])
+  }, [t.errorInitService])
 
   const recordingConfig = useMemo(() => {
     if (recordingMode === 'scribe') {
@@ -362,7 +343,7 @@ function SessionActiveArea({
     stopRecording: stop,
   })
 
-  const selectedPartner = getPartnerLanguage(partnerLang) ?? PARTNER_LANGUAGES[0]
+  const selectedPartner = getPartnerLanguage(partnerLang, language) ?? PARTNER_LANGUAGES[0]
   const isStarting = state === 'starting' || state === 'connecting'
   const canStart = state === 'idle' || state === 'stopped' || state === 'error'
 
@@ -375,7 +356,7 @@ function SessionActiveArea({
       console.error('Failed to start session:', error)
       await stopSession()
       setOperationError(
-        error instanceof Error ? error.message : 'Không thể bắt đầu phiên. Vui lòng kiểm tra micro và thử lại.'
+        error instanceof Error ? error.message : t.errorStartSession
       )
     }
   }
@@ -386,7 +367,7 @@ function SessionActiveArea({
       await stop()
     } catch (error) {
       console.error('Failed to stop recording:', error)
-      setOperationError('Kết nối âm thanh đã ngắt, nhưng dữ liệu trên máy vẫn được lưu.')
+      setOperationError(t.errorStopSession)
     } finally {
       await stopSession()
     }
@@ -425,16 +406,16 @@ function SessionActiveArea({
   } as CSSProperties
 
   const stateLabel =
-    state === 'recording' ? 'Đang phiên dịch' :
-    isStarting ? 'Đang kết nối micro' :
-    state === 'stopping' ? 'Đang lưu phiên' :
-    state === 'error' ? 'Lỗi kết nối' : 'Sẵn sàng'
+    state === 'recording' ? t.statusRecording :
+    isStarting ? t.statusConnectingMic :
+    state === 'stopping' ? t.statusSaving :
+    state === 'error' ? t.statusError : t.statusReady
 
   return (
     <div className="session-workspace">
       <div className="session-setup-bar glass-panel-modern squircle-xl shadow-md border border-white/10 dark:border-white/5 relative z-10">
         <div className="language-route">
-          <label htmlFor="partner-language">Ngôn ngữ đối tác</label>
+          <label htmlFor="partner-language">{t.partnerLangLabel}</label>
           <div>
             <Languages aria-hidden="true" />
             <select
@@ -443,30 +424,33 @@ function SessionActiveArea({
               disabled={isActive || recordingMode === 'one_way'}
               onChange={(event) => setPartnerLang(event.target.value)}
             >
-              {PARTNER_LANGUAGES.filter((language) => recordingMode !== 'two_way' || language.code !== 'any')
-                .map((language) => (
-                  <option key={language.code} value={language.code}>{language.name}</option>
-                ))}
+              {PARTNER_LANGUAGES.filter((langItem) => recordingMode !== 'two_way' || langItem.code !== 'any')
+                .map((langItem) => {
+                  const localizedName = langItem.code === 'any' ? t.autoDetect : langItem.name
+                  return (
+                    <option key={langItem.code} value={langItem.code}>{localizedName}</option>
+                  )
+                })}
             </select>
             <span aria-hidden="true">→</span>
-            <strong>Tiếng Việt</strong>
+            <strong>{t.vietnameseLabel}</strong>
           </div>
         </div>
 
-        <div className="display-controls" aria-label="Thiết lập hiển thị">
+        <div className="display-controls" aria-label={t.displayControlsAria}>
           <label>
-            <span>Cỡ chữ</span>
+            <span>{t.fontSizeLabel}</span>
             <select value={fontSize} onChange={(event) => setFontSize(Number(event.target.value) as FontSize)}>
               {FONT_SIZES.map((size) => <option key={size} value={size}>{size}%</option>)}
             </select>
           </label>
-          <div className="icon-segment" role="group" aria-label="Bố cục hội thoại">
+          <div className="icon-segment" role="group" aria-label={t.layoutGroupAria}>
             <button
               type="button"
               className={layoutMode === 'stacked' ? 'is-active' : ''}
               onClick={() => setLayoutMode('stacked')}
-              aria-label="Xếp hai khung theo chiều dọc"
-              title="Xếp dọc"
+              aria-label={t.layoutStackedAria}
+              title={t.layoutStackedTitle}
             >
               <PanelTop aria-hidden="true" />
             </button>
@@ -474,8 +458,8 @@ function SessionActiveArea({
               type="button"
               className={layoutMode === 'split' ? 'is-active' : ''}
               onClick={() => setLayoutMode('split')}
-              aria-label="Chia hai khung song song"
-              title="Song song"
+              aria-label={t.layoutSplitAria}
+              title={t.layoutSplitTitle}
             >
               <Columns2 aria-hidden="true" />
             </button>
@@ -483,8 +467,8 @@ function SessionActiveArea({
               type="button"
               className={layoutMode === 'flipped' ? 'is-active' : ''}
               onClick={() => setLayoutMode('flipped')}
-              aria-label="Xoay khung đối tác 180 độ"
-              title="Đối diện qua bàn"
+              aria-label={t.layoutFlippedAria}
+              title={t.layoutFlippedTitle}
             >
               <RotateCcw aria-hidden="true" />
             </button>
@@ -497,13 +481,13 @@ function SessionActiveArea({
           {offlineIndicator && (
             <div className="session-alert session-alert--warning" role="status">
               <WifiOff aria-hidden="true" />
-              <p>Mất kết nối mạng. Bản ghi vẫn được lưu trên thiết bị và sẽ đồng bộ khi có mạng.</p>
+              <p>{t.offlineNotice}</p>
             </div>
           )}
           {wakeLockError && isActive && (
             <div className="session-alert session-alert--warning" role="status">
               <AlertTriangle aria-hidden="true" />
-              <p>Thiết bị có thể tự tắt màn hình. Hãy tăng thời gian chờ trong cài đặt hệ thống.</p>
+              <p>{t.wakeLockNotice}</p>
             </div>
           )}
           {operationError && (
@@ -523,7 +507,7 @@ function SessionActiveArea({
         <div className="conversation-grid__partner">
           <TranscriptPanel
             side="partner"
-            title="Màn hình đối tác"
+            title={t.partnerPanelTitle}
             languageLabel={selectedPartner.name}
             languageCode={selectedPartner.shortName}
             messages={messages}
@@ -541,16 +525,16 @@ function SessionActiveArea({
             type="button"
             className="conversation-divider"
             onPointerDown={handleDividerPointerDown}
-            aria-label="Kéo để thay đổi độ rộng hai khung"
-            title="Kéo để thay đổi độ rộng"
+            aria-label={t.dividerAria}
+            title={t.dividerTitle}
           ><span /></button>
         )}
 
         <div className="conversation-grid__host">
           <TranscriptPanel
             side="host"
-            title="Màn hình của bạn"
-            languageLabel="Tiếng Việt"
+            title={t.hostPanelTitle}
+            languageLabel={t.vietnameseLabel}
             languageCode="VI"
             messages={messages}
             firstMessageStart={firstMessageStart}
@@ -569,24 +553,24 @@ function SessionActiveArea({
           <span aria-hidden="true" className={state === 'recording' ? 'animate-pulse' : ''} />
           <div>
             <strong>{stateLabel}</strong>
-            <small>{state === 'recording' ? 'Âm thanh đang được xử lý trực tiếp' : 'Micro chỉ bật khi bạn bắt đầu'}</small>
+            <small>{state === 'recording' ? t.statusSubRecording : t.statusSubReady}</small>
           </div>
         </div>
 
         {canStart ? (
           <button type="button" className="record-command record-command--start active:scale-[0.98]" onClick={handleStart}>
             <Mic aria-hidden="true" />
-            Bắt đầu phiên dịch
+            {t.startBtn}
           </button>
         ) : isStarting ? (
           <button type="button" className="record-command glass-button-modern" disabled>
             <Loader2 className="animate-spin" aria-hidden="true" />
-            Đang kết nối
+            {t.connectingBtn}
           </button>
         ) : (
           <button type="button" className={`record-command record-command--stop active:scale-[0.98] ${state === 'recording' ? 'is-recording' : ''}`} onClick={handleStop} disabled={state === 'stopping'}>
             {state === 'stopping' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Square aria-hidden="true" />}
-            {state === 'stopping' ? 'Đang lưu' : 'Dừng và lưu phiên'}
+            {state === 'stopping' ? t.savingBtn : t.stopBtn}
           </button>
         )}
       </footer>
@@ -597,14 +581,36 @@ function SessionActiveArea({
 export default function SessionPage() {
   const router = useRouter()
   const { theme, changeTheme } = useTheme()
+  const { t } = useLanguage()
   const { layoutMode, fontSize, setLayoutMode, setFontSize } = useDisplayPreferences()
   const [recordingMode, setRecordingMode] = useState<RecordingMode>('scribe')
   const [partnerLang, setPartnerLang] = useState('any')
-  const [userLabel, setUserLabel] = useState('Khách')
+  const [userLabel, setUserLabel] = useState('')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
   const [isRecordingActive, setIsRecordingActive] = useState(false)
+
+  const modeOptions = useMemo(
+    () => [
+      {
+        value: 'scribe' as RecordingMode,
+        label: t.modeScribeLabel,
+        description: t.modeScribeDesc,
+      },
+      {
+        value: 'one_way' as RecordingMode,
+        label: t.modeOneWayLabel,
+        description: t.modeOneWayDesc,
+      },
+      {
+        value: 'two_way' as RecordingMode,
+        label: t.modeTwoWayLabel,
+        description: t.modeTwoWayDesc,
+      },
+    ],
+    [t]
+  )
 
   useEffect(() => {
     try {
@@ -678,10 +684,12 @@ export default function SessionPage() {
     return (
       <div className="app-loading" role="status">
         <Loader2 className="animate-spin" aria-hidden="true" />
-        <span>Đang mở bàn phiên dịch</span>
+        <span>{t.openingWorkspace}</span>
       </div>
     )
   }
+
+  const effectiveUserLabel = userLabel || t.profileGuest
 
   return (
     <div className="session-shell relative overflow-hidden">
@@ -697,12 +705,12 @@ export default function SessionPage() {
           <PayPayLogo width={102} height={32} />
           <div>
             <strong>Live Interpreter</strong>
-            <span>Phòng của {userLabel}</span>
+            <span>{t.roomOf.replace('{user}', effectiveUserLabel)}</span>
           </div>
         </div>
 
-        <nav className="session-mode-tabs" aria-label="Chế độ phiên dịch">
-          {MODE_OPTIONS.map((mode) => (
+        <nav className="session-mode-tabs" aria-label={t.heroEyebrow}>
+          {modeOptions.map((mode) => (
             <button
               type="button"
               key={mode.value}
@@ -722,8 +730,8 @@ export default function SessionPage() {
             type="button"
             onClick={() => router.push('/history')}
             disabled={isRecordingActive}
-            aria-label="Mở lịch sử"
-            title="Lịch sử"
+            aria-label={t.navHistory}
+            title={t.navHistory}
           >
             <History aria-hidden="true" />
           </button>
@@ -731,8 +739,8 @@ export default function SessionPage() {
           <button
             type="button"
             onClick={() => changeTheme(theme === 'dark' ? 'light' : 'dark')}
-            aria-label={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
-            title={theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}
+            aria-label={theme === 'dark' ? t.themeLight : t.themeDark}
+            title={theme === 'dark' ? t.themeLight : t.themeDark}
           >
             {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
           </button>

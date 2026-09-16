@@ -1,3 +1,5 @@
+import type { Language } from './i18n'
+
 export interface PartnerLanguage {
   code: string
   name: string
@@ -16,6 +18,13 @@ export const PARTNER_LANGUAGES: PartnerLanguage[] = [
   { code: 'th', name: 'ภาษาไทย', shortName: 'TH' },
 ]
 
-export function getPartnerLanguage(code: string) {
-  return PARTNER_LANGUAGES.find((language) => language.code === code)
+export function getLocalizedPartnerLanguages(lang?: Language): PartnerLanguage[] {
+  if (!lang || lang === 'vi') return PARTNER_LANGUAGES
+  const autoName = lang === 'zh' ? '自动识别' : 'Auto Detect'
+  return PARTNER_LANGUAGES.map((p) => (p.code === 'any' ? { ...p, name: autoName } : p))
+}
+
+export function getPartnerLanguage(code: string, lang?: Language) {
+  const list = getLocalizedPartnerLanguages(lang)
+  return list.find((language) => language.code === code)
 }

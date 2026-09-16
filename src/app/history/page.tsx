@@ -22,16 +22,21 @@ import { claimLegacyLocalData, db, LocalFolder, LocalSession } from '@/lib/db'
 import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage } from '@/lib/languages'
 import { syncPendingData } from '@/lib/sync-manager'
+import { useLanguage } from '@/hooks/useLanguage'
+import type { I18nTranslations } from '@/lib/i18n'
 
-function formatDuration(totalSeconds: number) {
+function formatDuration(totalSeconds: number, t: I18nTranslations) {
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
-  if (hours > 0) return `${hours} giờ ${minutes} phút`
-  return `${minutes} phút`
+  if (hours > 0) {
+    return t.durationHoursMinutes.replace('{hours}', String(hours)).replace('{minutes}', String(minutes))
+  }
+  return t.durationMinutes.replace('{minutes}', String(minutes))
 }
 
 export default function HistoryPage() {
   const router = useRouter()
+  const { language, t } = useLanguage()
   const [username, setUsername] = useState('')
   const [ownerId, setOwnerId] = useState('')
   const [sessions, setSessions] = useState<LocalSession[]>([])
@@ -121,7 +126,7 @@ export default function HistoryPage() {
       }
     } catch (error) {
       console.error('Failed to load history:', error)
-      setLoadError('Không thể đọc lịch sử. Hãy kiểm tra kết nối và thử lại.')
+      setLoadError(error instanceof Error ? error.message : 'Error loading history.')
     } finally {
       setLoading(false)
     }
@@ -132,13 +137,13 @@ export default function HistoryPage() {
     return () => window.clearTimeout(loadTimer)
   }, [loadData])
 
-  const normalizedSearch = searchQuery.trim().toLocaleLowerCase('vi')
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase()
   const filteredSessions = useMemo(
-    () => sessions.filter((session) => session.name.toLocaleLowerCase('vi').includes(normalizedSearch)),
+    () => sessions.filter((session) => session.name.toLocaleLowerCase().includes(normalizedSearch)),
     [normalizedSearch, sessions]
   )
   const filteredFolders = useMemo(
-    () => folders.filter((folder) => folder.name.toLocaleLowerCase('vi').includes(normalizedSearch)),
+    () => folders.filter((folder) => folder.name.toLocaleLowerCase().includes(normalizedSearch)),
     [folders, normalizedSearch]
   )
   const independentSessions = filteredSessions.filter((session) => !session.folder_id)
@@ -200,7 +205,7 @@ export default function HistoryPage() {
       void syncPendingData()
     } catch (error) {
       console.error('Failed to create folder:', error)
-      setLoadError('Không thể tạo thư mục. Dữ liệu hiện tại vẫn được giữ nguyên.')
+      setLoadError('Error creating folder.')
     } finally {
       setIsCreatingFolder(false)
     }
@@ -210,23 +215,25 @@ export default function HistoryPage() {
     return (
       <div className="app-loading" role="status">
         <Loader2 className="animate-spin" aria-hidden="true" />
-        <span>Đang đọc lịch sử trên thiết bị</span>
+        <span>{t.historyLoading}</span>
       </div>
     )
   }
 
+  const dateLocale = language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN'
+
   return (
     <div className="workspace-shell">
       <WorkspaceHeader
-        title="Lịch sử hội thoại"
-        subtitle={username ? `Dữ liệu của ${username}` : undefined}
+        title={t.historyTitle}
+        subtitle={username ? t.historySubtitle.replace('{user}', username) : undefined}
         actions={
           <button
             type="button"
             className={isSelectMode ? 'is-active' : ''}
             onClick={toggleSelectMode}
-            aria-label={isSelectMode ? 'Thoát chế độ chọn' : 'Chọn nhiều hội thoại'}
-            title={isSelectMode ? 'Hủy chọn' : 'Chọn nhiều'}
+            aria-label={isSelectMode ? t.selectModeToggleAriaExit : t.selectModeToggleAriaSelect}
+            title={isSelectMode ? t.selectModeCancel : t.selectModeMulti}
           >
             {isSelectMode ? <X aria-hidden="true" /> : <ListChecks aria-hidden="true" />}
           </button>
@@ -236,29 +243,29 @@ export default function HistoryPage() {
       <main className="history-main">
         <section className="history-heading">
           <div>
-            <p className="eyebrow">Kho lưu trữ cục bộ</p>
-            <h2>Cuộc hội thoại của bạn</h2>
-            <p>Mở lại transcript, chỉnh sửa nội dung, xuất tài liệu hoặc tạo tóm tắt AI.</p>
+            <p className="eyebrow">{t.historyEyebrow}</p>
+            <h2>{t.historyHeading}</h2>
+            <p>{t.historyDesc}</p>
           </div>
           <div className="history-search">
             <Search aria-hidden="true" />
-            <label htmlFor="history-search" className="sr-only">Tìm hội thoại hoặc thư mục</label>
+            <label htmlFor="history-search" className="sr-only">{t.historySearchPlaceholder}</label>
             <input
               id="history-search"
               type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Tìm hội thoại hoặc thư mục"
+              placeholder={t.historySearchPlaceholder}
             />
           </div>
         </section>
 
-        <section className="history-stats" aria-label="Tổng quan lịch sử">
-          <div><strong>{sessions.length}</strong><span>Hội thoại</span></div>
-          <div><strong>{folders.length}</strong><span>Thư mục</span></div>
-          <div><strong>{formatDuration(totalDuration)}</strong><span>Tổng thời lượng</span></div>
+        <section className="history-stats" aria-label="Overview">
+          <div><strong>{sessions.length}</strong><span>{t.statConversations}</span></div>
+          <div><strong>{folders.length}</strong><span>{t.statFolders}</span></div>
+          <div><strong>{formatDuration(totalDuration, t)}</strong><span>{t.statDuration}</span></div>
           <div className={pendingCount > 0 ? 'has-pending' : ''}>
-            <strong>{pendingCount}</strong><span>Chờ đồng bộ</span>
+            <strong>{pendingCount}</strong><span>{t.statPendingSync}</span>
           </div>
         </section>
 
@@ -271,14 +278,14 @@ export default function HistoryPage() {
 
         {isSelectMode && (
           <div className="selection-toolbar" role="status">
-            <span>Đã chọn <strong>{selectedIds.length}</strong> hội thoại</span>
+            <span>{t.selectToolbarSelected.replace('{count}', String(selectedIds.length))}</span>
             <button
               type="button"
               onClick={() => setShowFolderModal(true)}
               disabled={selectedIds.length < 2}
             >
               <FolderPlus aria-hidden="true" />
-              Gom vào thư mục
+              {t.btnGroupFolder}
             </button>
           </div>
         )}
@@ -288,9 +295,9 @@ export default function HistoryPage() {
             <div className="section-heading">
               <div>
                 <Folder aria-hidden="true" />
-                <h3>Thư mục</h3>
+                <h3>{t.foldersSection}</h3>
               </div>
-              <span>{filteredFolders.length} thư mục</span>
+              <span>{t.foldersCount.replace('{count}', String(filteredFolders.length))}</span>
             </div>
             <div className="folder-grid">
               {filteredFolders.map((folder) => {
@@ -305,7 +312,7 @@ export default function HistoryPage() {
                     <span className="folder-item__icon"><Folder aria-hidden="true" /></span>
                     <span className="folder-item__text">
                       <strong>{folder.name}</strong>
-                      <small>{sessionCount} hội thoại</small>
+                      <small>{sessionCount} {t.statConversations.toLowerCase()}</small>
                     </span>
                     <ChevronRight aria-hidden="true" />
                   </button>
@@ -319,24 +326,24 @@ export default function HistoryPage() {
           <div className="section-heading">
             <div>
               <CalendarDays aria-hidden="true" />
-              <h3>{normalizedSearch ? 'Kết quả hội thoại' : isSelectMode ? 'Chọn hội thoại' : 'Hội thoại gần đây'}</h3>
+              <h3>{normalizedSearch ? t.searchResultsHeading : isSelectMode ? t.selectConversationsHeading : t.recentConversationsHeading}</h3>
             </div>
-            <span>{visibleSessions.length} mục</span>
+            <span>{t.itemsCount.replace('{count}', String(visibleSessions.length))}</span>
           </div>
 
           {visibleSessions.length === 0 ? (
             <div className="history-empty">
               <FolderOpen aria-hidden="true" />
-              <strong>{normalizedSearch ? 'Không tìm thấy kết quả' : 'Chưa có hội thoại độc lập'}</strong>
-              <p>{normalizedSearch ? 'Thử một tên hoặc từ khóa khác.' : 'Các phiên mới sẽ xuất hiện tại đây sau khi bạn dừng và lưu.'}</p>
+              <strong>{normalizedSearch ? t.searchNoResults : t.independentConversationsEmpty}</strong>
+              <p>{normalizedSearch ? t.searchNoResultsDesc : t.independentConversationsEmptyDesc}</p>
               {!normalizedSearch && sessions.length === 0 && (
-                <button type="button" onClick={() => router.push('/session')}>Bắt đầu phiên dịch</button>
+                <button type="button" onClick={() => router.push('/session')}>{t.startBtn}</button>
               )}
             </div>
           ) : (
             <div className="history-list">
               {visibleSessions.map((session) => {
-                const language = getPartnerLanguage(session.partner_language)
+                const partner = getPartnerLanguage(session.partner_language, language)
                 const selected = selectedIds.includes(session.id)
                 const date = new Date(session.started_at)
                 return (
@@ -352,19 +359,19 @@ export default function HistoryPage() {
                       </span>
                     )}
                     <span className="history-row__date">
-                      <strong>{date.toLocaleDateString('vi-VN', { day: '2-digit' })}</strong>
-                      <small>{date.toLocaleDateString('vi-VN', { month: 'short' })}</small>
+                      <strong>{date.toLocaleDateString(dateLocale, { day: '2-digit' })}</strong>
+                      <small>{date.toLocaleDateString(dateLocale, { month: 'short' })}</small>
                     </span>
                     <span className="history-row__main">
                       <strong>{session.name}</strong>
                       <small>
-                        <span className="language-inline"><b>{language?.shortName ?? session.partner_language.toUpperCase()}</b>{language?.name ?? session.partner_language}</span>
-                        <span><Clock3 aria-hidden="true" />{formatDuration(session.duration_seconds)}</span>
+                        <span className="language-inline"><b>{partner?.shortName ?? session.partner_language.toUpperCase()}</b>{partner?.name ?? session.partner_language}</span>
+                        <span><Clock3 aria-hidden="true" />{formatDuration(session.duration_seconds, t)}</span>
                       </small>
                     </span>
                     <span className={`sync-label sync-label--${session.sync_status}`}>
                       {session.sync_status === 'synced' ? <CircleCheck aria-hidden="true" /> : <CloudLightning aria-hidden="true" />}
-                      {session.sync_status === 'synced' ? 'Đã đồng bộ' : session.sync_status === 'failed' ? 'Lỗi đồng bộ' : 'Đang chờ'}
+                      {session.sync_status === 'synced' ? t.syncStatusSynced : session.sync_status === 'failed' ? t.syncStatusFailed : t.syncStatusPending}
                     </span>
                     {!isSelectMode && <ChevronRight className="history-row__arrow" aria-hidden="true" />}
                   </button>
@@ -388,23 +395,23 @@ export default function HistoryPage() {
               <div>
                 <span className="dialog-icon"><FolderPlus aria-hidden="true" /></span>
                 <div>
-                  <h2 id="folder-dialog-title">Tạo thư mục</h2>
-                  <p>Nhóm {selectedIds.length} hội thoại đã chọn.</p>
+                  <h2 id="folder-dialog-title">{t.createFolderModalTitle}</h2>
+                  <p>{t.createFolderGroupDesc.replace('{count}', String(selectedIds.length))}</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setShowFolderModal(false)} aria-label="Đóng"><X aria-hidden="true" /></button>
+              <button type="button" onClick={() => setShowFolderModal(false)} aria-label={t.closeAria}><X aria-hidden="true" /></button>
             </header>
-            <label htmlFor="folder-name">Tên thư mục</label>
+            <label htmlFor="folder-name">{t.folderNameLabel}</label>
             <input
               id="folder-name"
               value={folderName}
               onChange={(event) => setFolderName(event.target.value)}
-              placeholder="Ví dụ: Gặp khách hàng tháng 7"
+              placeholder={t.createFolderPlaceholder}
               maxLength={100}
               autoFocus
             />
             <footer>
-              <button type="button" className="secondary-command" onClick={() => setShowFolderModal(false)}>Hủy</button>
+              <button type="button" className="secondary-command" onClick={() => setShowFolderModal(false)}>{t.cancelBtn}</button>
               <button
                 type="button"
                 className="primary-command"
@@ -412,7 +419,7 @@ export default function HistoryPage() {
                 disabled={!folderName.trim() || isCreatingFolder}
               >
                 {isCreatingFolder ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
-                Tạo thư mục
+                {isCreatingFolder ? t.creatingBtn : t.createBtn}
               </button>
             </footer>
           </section>
