@@ -851,6 +851,19 @@ test('PDF and HTML export utilities guard against SSR and bound iframe metadata'
   assert.match(htmlGen, /export function downloadSummaryHTML[\s\S]*?if \(typeof window === 'undefined' \|\| typeof document === 'undefined'\) return/)
 })
 
+test('ProfileMenu guards against unmounted updates and ensures logout redirection', async () => {
+  const profileMenu = await source('src/components/ProfileMenu.tsx')
+
+  // isMounted lifecycle guard
+  assert.match(profileMenu, /let isMounted = true/)
+  assert.match(profileMenu, /if \(user && isMounted\)/)
+  assert.match(profileMenu, /return \(\) => \{\s*isMounted = false\s*\}/)
+
+  // Robust signout with finally redirect
+  assert.match(profileMenu, /try\s*\{[\s\S]*?await authClient\.signOut\(\)[\s\S]*?\}\s*catch[\s\S]*?finally\s*\{[\s\S]*?router\.replace\('\/'\)[\s\S]*?\}/)
+})
+
+
 
 
 

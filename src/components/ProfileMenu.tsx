@@ -15,21 +15,30 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    let isMounted = true
     const fetchUser = async () => {
-      const { data: { user } } = await authClient.getUser()
-      if (user) {
-        const email = user.email
-        const username =
-          user.user_metadata?.username ||
-          user.user_metadata?.full_name ||
-          user.user_metadata?.name ||
-          email?.split('@')[0] ||
-          'Khách'
-        setUserLabel(username)
-        setUserEmail(email || null)
+      try {
+        const res = await authClient.getUser()
+        const user = res?.data?.user
+        if (user && isMounted) {
+          const email = user.email
+          const username =
+            user.user_metadata?.username ||
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            email?.split('@')[0] ||
+            'Khách'
+          setUserLabel(username)
+          setUserEmail(email || null)
+        }
+      } catch (err) {
+        console.warn('Failed to fetch user in ProfileMenu:', err)
       }
     }
     void fetchUser()
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   useEffect(() => {
@@ -57,8 +66,13 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
   }, [isMenuOpen])
 
   const handleLogout = async () => {
-    await authClient.signOut()
-    router.replace('/')
+    try {
+      await authClient.signOut()
+    } catch (err) {
+      console.warn('Failed to sign out:', err)
+    } finally {
+      router.replace('/')
+    }
   }
 
   return (
