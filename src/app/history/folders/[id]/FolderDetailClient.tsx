@@ -134,9 +134,17 @@ export default function FolderDetailPage({ params }: PageProps) {
         updated_at: session.updated_at || new Date().toISOString(),
       }))
 
+      const existingSessions = await db.sessions.where('folder_id').equals(id).toArray()
+      const localPendingSessionIds = new Set(existingSessions.filter(s => s.sync_status === 'pending').map(s => s.id))
+      const safeSessions = formattedSessions.filter(s => !localPendingSessionIds.has(s.id))
+
       await db.transaction('rw', db.folders, db.sessions, async () => {
-        await db.folders.put(formattedFolder)
-        await db.sessions.bulkPut(formattedSessions)
+        if (!localFolder || localFolder.sync_status !== 'pending') {
+          await db.folders.put(formattedFolder)
+        }
+        if (safeSessions.length > 0) {
+          await db.sessions.bulkPut(safeSessions)
+        }
       })
       setFolder(formattedFolder)
       setNewName(formattedFolder.name)

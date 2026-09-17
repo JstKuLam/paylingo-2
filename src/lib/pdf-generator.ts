@@ -75,7 +75,7 @@ export function generateSessionPrintHTML(
       <body>
         <header>
           <h1>${escapeHtml(sessionName)}</h1>
-          <p>Bắt đầu: ${escapeHtml(new Date(startedAt).toLocaleString('vi-VN'))} · Ngôn ngữ đối tác: ${escapeHtml(partnerLangName)}</p>
+          <p>Bắt đầu: ${escapeHtml(Number.isFinite(new Date(startedAt).getTime()) ? new Date(startedAt).toLocaleString('vi-VN') : 'Không rõ')} · Ngôn ngữ đối tác: ${escapeHtml(partnerLangName)}</p>
         </header>
         <table>
           <thead><tr><th>Bạn · Tiếng Việt</th><th lang="${safeLanguage}">Đối tác · ${escapeHtml(partnerLangName)}</th></tr></thead>
@@ -144,7 +144,9 @@ export async function downloadSessionTXT(
   startedAt: string,
   entries: LocalTranscriptEntry[]
 ) {
-  const formattedDate = new Date(startedAt).toLocaleString('vi-VN')
+  const formattedDate = Number.isFinite(new Date(startedAt).getTime())
+    ? new Date(startedAt).toLocaleString('vi-VN')
+    : 'Không rõ'
   let txtContent = '==================================================\n'
   txtContent += `HỘI THOẠI: ${sessionName}\n`
   txtContent += `Thời gian bắt đầu: ${formattedDate}\n`

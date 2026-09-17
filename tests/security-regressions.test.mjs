@@ -67,10 +67,13 @@ test('protected routes enforce confirmed allowed users at the server boundary', 
 test('local synchronization never reassigns records with an existing owner', async () => {
   const sync = await source('src/lib/sync-manager.ts')
   const db = await source('src/lib/db.ts')
+  const history = await source('src/app/history/page.tsx')
   assert.doesNotMatch(sync, /!s\.owner_id \|\| s\.owner_id !== ownerId/)
   assert.match(sync, /where\('owner_id'\)\.equals\(ownerId\)/)
   assert.match(db, /!session\.owner_id && session\.username/)
   assert.match(db, /!folder\.owner_id && folder\.username/)
+  assert.match(history, /safeCloudSessions/)
+  assert.match(history, /safeCloudFolders/)
 })
 
 test('latest RLS migration authorizes by immutable owner id only', async () => {
@@ -84,12 +87,19 @@ test('latest RLS migration authorizes by immutable owner id only', async () => {
 test('expensive and password-protected APIs have abuse controls', async () => {
   const summarize = await source('src/app/api/ai/summarize/route.ts')
   const shared = await source('src/app/api/shared/summary/route.ts')
+  const magicLink = await source('src/app/api/auth/send-magic-link/route.ts')
+  const rateLimit = await source('src/lib/rate-limit.ts')
   assert.match(summarize, /email_confirmed_at/)
   assert.match(summarize, /ai-summary:/)
   assert.match(summarize, /AbortSignal\.timeout/)
   assert.match(summarize, /max\(500\)/)
+  assert.match(summarize, /owner_id !== user\.id/)
+  assert.match(summarize, /getSafeAiEndpoint/)
   assert.doesNotMatch(shared, /searchParams\.get\('password'\)/)
   assert.match(shared, /shared-summary:/)
+  assert.match(shared, /shared-summary-get:/)
+  assert.match(magicLink, /magic-link-ip:/)
+  assert.match(rateLimit, /buckets\.size > 500/)
 })
 
 test('web and mobile ship with baseline data-exposure defenses', async () => {

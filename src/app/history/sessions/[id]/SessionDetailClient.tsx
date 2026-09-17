@@ -156,7 +156,9 @@ export default function SessionDetailPage({ params }: PageProps) {
       }))
 
       await db.transaction('rw', db.sessions, db.transcriptEntries, async () => {
-        await db.sessions.put(formattedSession)
+        if (!localSession || localSession.sync_status !== 'pending') {
+          await db.sessions.put(formattedSession)
+        }
         await db.transcriptEntries.bulkPut(formattedEntries)
       })
 

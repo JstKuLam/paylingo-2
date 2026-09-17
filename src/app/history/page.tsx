@@ -110,13 +110,23 @@ export default function HistoryPage() {
         updated_at: s.updated_at || new Date().toISOString(),
       }))
 
-      if (cloudFolders.length > 0 || cloudSessions.length > 0) {
+      const localPendingSessionIds = new Set(
+        localSessions.filter((s) => s.sync_status === 'pending').map((s) => s.id)
+      )
+      const localPendingFolderIds = new Set(
+        localFolders.filter((f) => f.sync_status === 'pending').map((f) => f.id)
+      )
+
+      const safeCloudFolders = cloudFolders.filter((f) => !localPendingFolderIds.has(f.id))
+      const safeCloudSessions = cloudSessions.filter((s) => !localPendingSessionIds.has(s.id))
+
+      if (safeCloudFolders.length > 0 || safeCloudSessions.length > 0) {
         await db.transaction('rw', db.folders, db.sessions, async () => {
-          if (cloudFolders.length > 0) {
-            await db.folders.bulkPut(cloudFolders)
+          if (safeCloudFolders.length > 0) {
+            await db.folders.bulkPut(safeCloudFolders)
           }
-          if (cloudSessions.length > 0) {
-            await db.sessions.bulkPut(cloudSessions)
+          if (safeCloudSessions.length > 0) {
+            await db.sessions.bulkPut(safeCloudSessions)
           }
         })
 

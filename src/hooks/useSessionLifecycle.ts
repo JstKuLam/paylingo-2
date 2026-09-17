@@ -83,9 +83,12 @@ export function useSessionLifecycle({
         const now = new Date().toISOString()
         for (const sess of abandonedSessions) {
           if (sess.ended_at === null) {
+            if (activeSessionRef.current && sess.id === activeSessionRef.current) continue
+            const startTime = new Date(sess.started_at).getTime()
+            const validStart = Number.isFinite(startTime) ? startTime : Date.now()
             const durationSeconds = Math.max(
-              sess.duration_seconds,
-              Math.floor((Date.now() - new Date(sess.started_at).getTime()) / 1000)
+              sess.duration_seconds || 0,
+              Math.max(0, Math.floor((Date.now() - validStart) / 1000))
             )
             await db.sessions.update(sess.id, {
               ended_at: now,
@@ -206,16 +209,21 @@ export function useSessionLifecycle({
       silenceTimerRef.current = null
     }
 
-    if (activeSessionRef.current) {
+    const currentSessionId = activeSessionRef.current
+    activeSessionRef.current = null
+    setSessionId(null)
+    setSilenceWarning(false)
+
+    if (currentSessionId) {
       const now = new Date().toISOString()
-      const activeSession = await db.sessions.get(activeSessionRef.current)
+      const activeSession = await db.sessions.get(currentSessionId)
       const durationSeconds = activeSession
         ? Math.max(
             activeSession.duration_seconds,
             Math.floor((Date.now() - new Date(activeSession.started_at).getTime()) / 1000)
           )
         : 0
-      await db.sessions.update(activeSessionRef.current, {
+      await db.sessions.update(currentSessionId, {
         ended_at: now,
         duration_seconds: durationSeconds,
         sync_status: 'pending',
@@ -225,10 +233,6 @@ export function useSessionLifecycle({
 
     // Release Wake Lock
     await releaseWakeLock()
-
-    setSessionId(null)
-    activeSessionRef.current = null
-    setSilenceWarning(false)
 
     // Sync everything
     void syncPendingData()
@@ -241,20 +245,27 @@ export function useSessionLifecycle({
     const saveMessages = async () => {
       const activeSession = await db.sessions.get(sessionId)
       if (!activeSession) return
-      const sessionStartedAt = new Date(activeSession.started_at).getTime()
+      const rawStartTime = new Date(activeSession.started_at).getTime()
+      const sessionStartedAt = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
 
-      const localEntries: LocalTranscriptEntry[] = messages.filter((message) => message.is_final).map(msg => ({
-        id: stringToUUID(`${sessionId}:${msg.id}`),
-        session_id: sessionId,
-        speaker: msg.speaker,
-        original_text: msg.original_text,
-        translated_text: msg.translated_text,
-        start_ms: msg.start_ms,
-        end_ms: msg.end_ms,
-        created_at: new Date(sessionStartedAt + Math.max(0, msg.start_ms)).toISOString(),
-        sync_status: 'pending',
-        updated_at: new Date().toISOString()
-      }))
+      const localEntries: LocalTranscriptEntry[] = messages.filter((message) => message.is_final).map(msg => {
+        const startMs = Number.isFinite(msg.start_ms) ? Math.max(0, msg.start_ms) : 0
+        const endMs = Number.isFinite(msg.end_ms) ? Math.max(startMs, msg.end_ms) : startMs
+        const createdAtTime = sessionStartedAt + startMs
+        const validCreatedAt = Number.isFinite(createdAtTime) ? new Date(createdAtTime).toISOString() : new Date().toISOString()
+        return {
+          id: stringToUUID(`${sessionId}:${msg.id}`),
+          session_id: sessionId,
+          speaker: msg.speaker,
+          original_text: msg.original_text,
+          translated_text: msg.translated_text,
+          start_ms: startMs,
+          end_ms: endMs,
+          created_at: validCreatedAt,
+          sync_status: 'pending',
+          updated_at: new Date().toISOString()
+        }
+      })
 
       if (localEntries.length === 0) return
 

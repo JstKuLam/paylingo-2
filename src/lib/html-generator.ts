@@ -461,10 +461,10 @@ export function generatePremiumHTMLReport({
           <span class="meta-label">Ngày khởi tạo tóm tắt</span>
           <span class="meta-value">${displayGeneratedAt}</span>
         </div>
-        ${startedAt ? `
+        ${startedAt && Number.isFinite(new Date(startedAt).getTime()) ? `
         <div class="meta-item">
           <span class="meta-label">Thời điểm ghi âm</span>
-          <span class="meta-value">${new Date(startedAt).toLocaleString('vi-VN')}</span>
+          <span class="meta-value">${escapeHtml(new Date(startedAt).toLocaleString('vi-VN'))}</span>
         </div>
         ` : ''}
         <div class="meta-item">
