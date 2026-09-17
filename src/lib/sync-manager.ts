@@ -128,24 +128,26 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
       syncedSessions = ownedSessions.length
     }
 
-    // Mark entries as synced
+    // Mark entries as synced atomically
     if (safeEntries.length > 0) {
-      for (const entry of safeEntries) {
-        const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
-          ? entry.id
-          : stringToUUID(entry.id)
-        if (entryId !== entry.id) {
-          await db.transcriptEntries.delete(entry.id)
-          await db.transcriptEntries.put({
-            ...entry,
-            id: entryId,
-            sync_status: 'synced',
-            updated_at: new Date().toISOString()
-          })
-        } else {
-          await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
+      await db.transaction('rw', db.transcriptEntries, async () => {
+        for (const entry of safeEntries) {
+          const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
+            ? entry.id
+            : stringToUUID(entry.id)
+          if (entryId !== entry.id) {
+            await db.transcriptEntries.delete(entry.id)
+            await db.transcriptEntries.put({
+              ...entry,
+              id: entryId,
+              sync_status: 'synced',
+              updated_at: new Date().toISOString()
+            })
+          } else {
+            await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
+          }
         }
-      }
+      })
       syncedEntries = safeEntries.length
     }
 

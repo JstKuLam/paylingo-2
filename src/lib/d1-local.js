@@ -16,6 +16,7 @@ function getLocalD1() {
   const dbFilePath = path.join(dataDir, 'paylingo_d1.sqlite')
   const isNew = !fs.existsSync(dbFilePath)
   const sqlite = new DatabaseSync(dbFilePath)
+  sqlite.exec('PRAGMA foreign_keys = ON;')
 
   // Initialize schema and seed if new
   if (isNew) {
@@ -64,7 +65,6 @@ function getLocalD1() {
             const rows = stmt.all(...boundParams)
             return { results: rows || [], success: true }
           } catch (err) {
-            console.error(`D1 all error on "${query}":`, err)
             return { results: [], success: false, error: err.message }
           }
         },
@@ -80,7 +80,6 @@ function getLocalD1() {
               }
             }
           } catch (err) {
-            console.error(`D1 run error on "${query}":`, err)
             return { success: false, error: err.message }
           }
         }
@@ -93,6 +92,9 @@ function getLocalD1() {
       try {
         for (const st of statements) {
           const res = await st.all()
+          if (!res.success) {
+            throw new Error(res.error || 'D1 batch statement failed')
+          }
           results.push(res)
         }
         sqlite.exec('COMMIT;')

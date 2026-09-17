@@ -96,6 +96,9 @@ CREATE TABLE IF NOT EXISTS session_summaries (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE INDEX IF NOT EXISTS idx_session_summaries_session ON session_summaries(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_summaries_folder ON session_summaries(folder_id);
+
 CREATE TABLE IF NOT EXISTS shared_summaries (
     id TEXT PRIMARY KEY,
     session_id TEXT,

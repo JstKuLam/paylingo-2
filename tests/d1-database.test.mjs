@@ -84,3 +84,53 @@ test('D1 ISO 8601 timestamp comparison with datetime(expires_at) prevents same-d
   // Clean up
   await db.prepare('DELETE FROM auth_tokens WHERE token IN (?, ?)').bind(expiredToken, validToken).run()
 })
+
+test('D1 batch rolls back entire transaction if any statement fails', async () => {
+  const db = getD1()
+  const validId = 'rollback-test-valid-' + Date.now()
+  const invalidId = 'rollback-test-invalid-' + Date.now()
+
+  const st1 = db.prepare('INSERT INTO folders (id, name, owner_id, username) VALUES (?, ?, ?, ?)')
+    .bind(validId, 'Valid Folder', 'owner1', 'user1')
+  // st2 will fail due to column mismatch or constraint error
+  const st2 = db.prepare('INSERT INTO non_existent_table (col) VALUES (?)')
+    .bind(invalidId)
+
+  await assert.rejects(
+    async () => {
+      await db.batch([st1, st2])
+    },
+    /no such table/i
+  )
+
+  // Verify that validId was rolled back and does not exist in folders
+  const found = await db.prepare('SELECT id FROM folders WHERE id = ?').bind(validId).first()
+  assert.strictEqual(found, null, 'First statement must be rolled back when batch fails')
+})
+
+test('D1 local SQLite enforces foreign key cascade deletion for transcript_entries', async () => {
+  const db = getD1()
+  const sessId = 'fk-cascade-sess-' + Date.now()
+  const entryId = 'fk-cascade-entry-' + Date.now()
+
+  // Insert session
+  await db.prepare('INSERT INTO sessions (id, owner_id, username, name) VALUES (?, ?, ?, ?)')
+    .bind(sessId, 'owner-fk', 'user-fk', 'FK Session')
+    .run()
+
+  // Insert transcript entry referencing session
+  await db.prepare('INSERT INTO transcript_entries (id, session_id, speaker, original_text, translated_text) VALUES (?, ?, ?, ?, ?)')
+    .bind(entryId, sessId, 'host', 'Xin chào', 'Hello')
+    .run()
+
+  // Verify entry exists
+  const beforeDelete = await db.prepare('SELECT id FROM transcript_entries WHERE id = ?').bind(entryId).first()
+  assert.ok(beforeDelete, 'Transcript entry must exist initially')
+
+  // Delete session directly
+  await db.prepare('DELETE FROM sessions WHERE id = ?').bind(sessId).run()
+
+  // Verify cascade deletion removed entry automatically
+  const afterDelete = await db.prepare('SELECT id FROM transcript_entries WHERE id = ?').bind(entryId).first()
+  assert.strictEqual(afterDelete, null, 'Foreign key ON DELETE CASCADE must remove transcript entry')
+})
