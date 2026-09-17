@@ -45,6 +45,13 @@ export async function POST(request: Request) {
     })
     if (!rateLimit.allowed) return rateLimitResponse(rateLimit.retryAfterSeconds)
 
+    const tokenLimit = checkRateLimit({
+      key: `verify-token:${cleanToken.slice(0, 32)}`,
+      limit: 10,
+      windowMs: 15 * 60_000,
+    })
+    if (!tokenLimit.allowed) return rateLimitResponse(tokenLimit.retryAfterSeconds)
+
     const sessionRes = await verifyMagicToken(cleanToken)
     if (!sessionRes) {
       return NextResponse.json(
@@ -74,7 +81,7 @@ export async function POST(request: Request) {
   } catch (err: unknown) {
     console.error('Error in verify route:', err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Lỗi hệ thống khi xác thực.' },
+      { error: 'Lỗi hệ thống khi xác thực.' },
       { status: 500, headers: noStoreHeader }
     )
   }

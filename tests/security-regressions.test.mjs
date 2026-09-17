@@ -771,6 +771,26 @@ test('middleware checks token bounds and headers, auth session safely decodes co
   assert.doesNotMatch(authMe, /err\.message/)
 })
 
+test('auth endpoints enforce dual rate limiting, masked errors, and secure redirect headers', async () => {
+  const sendRoute = await source('src/app/api/auth/send-magic-link/route.ts')
+  const verifyRoute = await source('src/app/api/auth/verify/route.ts')
+  const callbackRoute = await source('src/app/auth/callback/route.ts')
+
+  // Masked errors in send route
+  assert.doesNotMatch(sendRoute, /sendRes\.error/)
+  assert.doesNotMatch(sendRoute, /err instanceof Error \? err\.message/)
+
+  // Dual rate limiting in verify route (by IP and by token)
+  assert.match(verifyRoute, /verify-token:\$\{cleanToken\.slice\(0,\s*32\)\}/)
+  assert.doesNotMatch(verifyRoute, /err instanceof Error \? err\.message/)
+
+  // Security headers on callback redirects
+  assert.match(callbackRoute, /redirectSecurityHeaders/)
+  assert.match(callbackRoute, /['"]X-Frame-Options['"]:\s*['"]DENY['"]/)
+  assert.match(callbackRoute, /['"]X-Content-Type-Options['"]:\s*['"]nosniff['"]/)
+})
+
+
 
 
 

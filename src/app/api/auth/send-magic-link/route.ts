@@ -115,7 +115,7 @@ export async function POST(request: Request) {
 
     if (!sendRes.success) {
       return NextResponse.json(
-        { error: sendRes.error || 'Không thể gửi email xác thực. Vui lòng kiểm tra lại cấu hình SMTP.' },
+        { error: 'Không thể gửi email xác thực. Vui lòng thử lại sau.' },
         { status: 500, headers: noStoreHeader }
       )
     }
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error('Error in send-magic-link route:', err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Lỗi hệ thống khi gửi email.' },
+      { error: 'Lỗi hệ thống khi gửi email. Vui lòng thử lại sau.' },
       { status: 500, headers: noStoreHeader }
     )
   }

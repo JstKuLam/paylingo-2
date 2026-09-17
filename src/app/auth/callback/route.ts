@@ -39,20 +39,23 @@ export async function GET(request: Request) {
   const nextParam = requestUrl.searchParams.get('next')
   const targetPath = safeNextPath(nextParam, origin)
 
+  const redirectSecurityHeaders = {
+    'Cache-Control': 'no-store, max-age=0',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'DENY',
+  }
+
   const cleanToken = token ? token.trim() : ''
   if (!cleanToken) {
     return NextResponse.redirect(`${origin}/?error=missing_token`, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: redirectSecurityHeaders,
     })
   }
 
   if (cleanToken.length < 6 || cleanToken.length > 128) {
     return NextResponse.redirect(`${origin}/?error=invalid_or_expired_token`, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: redirectSecurityHeaders,
     })
   }
 
@@ -60,17 +63,13 @@ export async function GET(request: Request) {
   const sessionRes = await verifyMagicToken(cleanToken)
   if (!sessionRes) {
     return NextResponse.redirect(`${origin}/?error=invalid_or_expired_token`, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: redirectSecurityHeaders,
     })
   }
 
   const targetUrl = new URL(targetPath, origin)
   const response = NextResponse.redirect(targetUrl.toString(), {
-    headers: {
-      'Cache-Control': 'no-store, max-age=0',
-    },
+    headers: redirectSecurityHeaders,
   })
 
   response.cookies.set({
