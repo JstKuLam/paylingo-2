@@ -6,10 +6,12 @@ const STORAGE_KEY = 'paylingo_ui_lang'
 
 function getLanguageSnapshot(): Language {
   if (typeof window === 'undefined') return 'vi'
-  const saved = localStorage.getItem(STORAGE_KEY) as Language | null
-  if (saved && (saved === 'vi' || saved === 'en' || saved === 'zh')) {
-    return saved
-  }
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY) as Language | null
+    if (saved && (saved === 'vi' || saved === 'en' || saved === 'zh')) {
+      return saved
+    }
+  } catch {}
   return detectMachineLanguage()
 }
 
@@ -32,9 +34,11 @@ export function useLanguage(): {
 
   const changeLanguage = (newLang: Language) => {
     const validLang: Language = newLang === 'vi' || newLang === 'en' || newLang === 'zh' ? newLang : 'vi'
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, validLang)
-    }
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, validLang)
+      }
+    } catch {}
     if (typeof document !== 'undefined') {
       document.documentElement.lang = validLang
     }

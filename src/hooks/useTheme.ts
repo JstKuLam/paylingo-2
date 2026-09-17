@@ -10,7 +10,11 @@ function normalizeTheme(value: string | null): ThemeType {
 
 function getThemeSnapshot(): ThemeType {
   if (typeof window === 'undefined') return 'dark'
-  return normalizeTheme(localStorage.getItem('theme'))
+  try {
+    return normalizeTheme(localStorage.getItem('theme'))
+  } catch {
+    return 'dark'
+  }
 }
 
 function subscribeToTheme(callback: () => void) {
@@ -32,9 +36,11 @@ export function useTheme() {
       document.documentElement.setAttribute('data-theme', validTheme)
       document.documentElement.classList.toggle('dark', validTheme === 'dark')
     }
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('theme', validTheme)
-    }
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('theme', validTheme)
+      }
+    } catch {}
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event(THEME_EVENT))
     }

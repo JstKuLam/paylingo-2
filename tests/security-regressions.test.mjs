@@ -571,3 +571,23 @@ test('PDF and HTML report generators sanitize empty session titles and provide c
   assert.match(htmlGen, /safeSessionName = typeof sessionName === 'string' && sessionName\.trim\(\) \? sessionName\.trim\(\) : 'Tóm tắt Hội thoại PayLingo'/)
 })
 
+test('useLanguage, useTheme, and session preferences protect storage operations against security restrictions', async () => {
+  const langHook = await source('src/hooks/useLanguage.ts')
+  const themeHook = await source('src/hooks/useTheme.ts')
+  const sessionPage = await source('src/app/session/page.tsx')
+
+  // useLanguage protects localStorage.getItem and setItem
+  assert.match(langHook, /try\s*\{[\s\S]*?localStorage\.getItem\(STORAGE_KEY\)[\s\S]*?\}\s*catch/)
+  assert.match(langHook, /try\s*\{[\s\S]*?localStorage\.setItem\(STORAGE_KEY,\s*validLang\)[\s\S]*?\}\s*catch/)
+
+  // useTheme protects localStorage.getItem and setItem
+  assert.match(themeHook, /try\s*\{[\s\S]*?localStorage\.getItem\('theme'\)[\s\S]*?\}\s*catch/)
+  assert.match(themeHook, /try\s*\{[\s\S]*?localStorage\.setItem\('theme',\s*validTheme\)[\s\S]*?\}\s*catch/)
+
+  // session page protects layout, font and savePreference
+  assert.match(sessionPage, /try\s*\{[\s\S]*?localStorage\.getItem\('paylingo_layout_mode'\)[\s\S]*?\}\s*catch/)
+  assert.match(sessionPage, /try\s*\{[\s\S]*?localStorage\.getItem\('paylingo_font_size'\)[\s\S]*?\}\s*catch/)
+  assert.match(sessionPage, /try\s*\{[\s\S]*?localStorage\.setItem\(key,\s*value\)[\s\S]*?\}\s*catch/)
+})
+
+

@@ -59,18 +59,28 @@ function subscribeToPreferences(callback: () => void) {
 
 function readLayoutPreference(): LayoutMode {
   if (typeof window === 'undefined') return 'split'
-  const value = localStorage.getItem('paylingo_layout_mode')
-  return value === 'stacked' || value === 'flipped' ? value : 'split'
+  try {
+    const value = localStorage.getItem('paylingo_layout_mode')
+    return value === 'stacked' || value === 'flipped' ? value : 'split'
+  } catch {
+    return 'split'
+  }
 }
 
 function readFontPreference(): FontSize {
   if (typeof window === 'undefined') return 100
-  const value = Number(localStorage.getItem('paylingo_font_size'))
-  return FONT_SIZES.includes(value as FontSize) ? (value as FontSize) : 100
+  try {
+    const value = Number(localStorage.getItem('paylingo_font_size'))
+    return FONT_SIZES.includes(value as FontSize) ? (value as FontSize) : 100
+  } catch {
+    return 100
+  }
 }
 
 function savePreference(key: string, value: string) {
-  localStorage.setItem(key, value)
+  try {
+    localStorage.setItem(key, value)
+  } catch {}
   window.dispatchEvent(new Event(PREFERENCE_EVENT))
 }
 
