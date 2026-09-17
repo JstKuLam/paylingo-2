@@ -2,6 +2,7 @@ type RateLimitBucket = { count: number; resetAt: number }
 
 const rateLimitGlobal = globalThis as typeof globalThis & {
   __payLingoRateLimits?: Map<string, RateLimitBucket>
+  __payLingoLastSweep?: number
 }
 
 const buckets = rateLimitGlobal.__payLingoRateLimits ?? new Map<string, RateLimitBucket>()
@@ -18,10 +19,14 @@ export function getRequestIp(request: Request): string {
 }
 
 export function checkRateLimit(options: { key: string; limit: number; windowMs: number }) {
+  const safeLimit = Number.isSafeInteger(options.limit) && options.limit > 0 ? options.limit : 10
+  const safeWindowMs = Number.isSafeInteger(options.windowMs) && options.windowMs > 0 ? options.windowMs : 60_000
   const now = Date.now()
   const current = buckets.get(options.key)
 
-  if (buckets.size > 500) {
+  const lastSweep = rateLimitGlobal.__payLingoLastSweep || 0
+  if (buckets.size > 500 && (now - lastSweep > 5_000 || buckets.size > 1000)) {
+    rateLimitGlobal.__payLingoLastSweep = now
     for (const [k, v] of buckets.entries()) {
       if (v.resetAt <= now) {
         buckets.delete(k)
@@ -39,15 +44,16 @@ export function checkRateLimit(options: { key: string; limit: number; windowMs: 
   }
 
   if (!current || current.resetAt <= now) {
-    buckets.set(options.key, { count: 1, resetAt: now + options.windowMs })
-    return { allowed: true, remaining: Math.max(0, options.limit - 1), retryAfterSeconds: 0 }
+    buckets.set(options.key, { count: 1, resetAt: now + safeWindowMs })
+    return { allowed: true, remaining: Math.max(0, safeLimit - 1), retryAfterSeconds: 0 }
   }
 
-  if (current.count >= options.limit) {
+  if (current.count >= safeLimit) {
+    const diff = Math.ceil((current.resetAt - now) / 1000)
     return {
       allowed: false,
       remaining: 0,
-      retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
+      retryAfterSeconds: Number.isFinite(diff) && diff > 0 ? diff : 1,
     }
   }
 
@@ -56,16 +62,17 @@ export function checkRateLimit(options: { key: string; limit: number; windowMs: 
   buckets.delete(options.key)
   buckets.set(options.key, current)
 
-  return { allowed: true, remaining: options.limit - current.count, retryAfterSeconds: 0 }
+  return { allowed: true, remaining: safeLimit - current.count, retryAfterSeconds: 0 }
 }
 
 export function rateLimitResponse(retryAfterSeconds: number): Response {
+  const safeRetryAfter = Number.isSafeInteger(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds : 1
   return Response.json(
     { error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau.' },
     {
       status: 429,
       headers: {
-        'Retry-After': String(retryAfterSeconds),
+        'Retry-After': String(safeRetryAfter),
         'Cache-Control': 'no-store, max-age=0',
       },
     }

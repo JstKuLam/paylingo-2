@@ -820,6 +820,22 @@ test('admin dashboard hardens Base64 conversions and guards session language for
   assert.match(kulamPage, /session\.partner_language \? session\.partner_language\.toUpperCase\(\) : 'AUTO'/)
 })
 
+test('rate limiter validates safe integer options, throttles map sweeps, and sanitizes retry-after', async () => {
+  const rateLimit = await source('src/lib/rate-limit.ts')
+
+  // Safe integer options
+  assert.match(rateLimit, /Number\.isSafeInteger\(options\.limit\)/)
+  assert.match(rateLimit, /Number\.isSafeInteger\(options\.windowMs\)/)
+
+  // Throttled sweep
+  assert.match(rateLimit, /__payLingoLastSweep/)
+  assert.match(rateLimit, /now - lastSweep > 5_000/)
+
+  // Sanitized retry-after header
+  assert.match(rateLimit, /Number\.isSafeInteger\(retryAfterSeconds\)/)
+})
+
+
 
 
 
