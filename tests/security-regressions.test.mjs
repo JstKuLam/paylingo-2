@@ -805,6 +805,22 @@ test('session lifecycle ensures entry duration on unexpected stops and releases 
   assert.match(sessionPage, /catch \(error\) \{[\s\S]*?await stop\(\)[\s\S]*?await abortSession\(\)/)
 })
 
+test('admin dashboard hardens Base64 conversions and guards session language formatting', async () => {
+  const kulamPage = await source('src/app/kulam/page.tsx')
+
+  // Base64URL and padding normalization
+  assert.match(kulamPage, /base64\.replace\(\/-\/g,\s*'\+'\)\.replace\(\/_\/g,\s*'\/'\)/)
+  assert.match(kulamPage, /padEnd\(normalized\.length \+ \(\(4 - \(normalized\.length % 4\)\) % 4\),\s*'='\)/)
+
+  // Safe JSON parsing on admin fetches
+  assert.match(kulamPage, /sessionsResponse\.json\(\)\.catch\(\(\) => null\)/)
+  assert.match(kulamPage, /settingsResponse\.json\(\)\.catch\(\(\) => \(\{\}\)\)/)
+
+  // Partner language formatting guards
+  assert.match(kulamPage, /session\.partner_language \? session\.partner_language\.toUpperCase\(\) : 'AUTO'/)
+})
+
+
 
 
 

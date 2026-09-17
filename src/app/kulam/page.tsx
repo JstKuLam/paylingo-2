@@ -91,6 +91,7 @@ function formatDurationShort(totalSeconds: number) {
 
 // Utility to convert ArrayBuffer <-> Base64 in client side
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  if (typeof window === 'undefined') return ''
   const bytes = new Uint8Array(buffer)
   let binary = ''
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -100,12 +101,19 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = window.atob(base64)
-  const bytes = new Uint8Array(binaryString.length)
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i)
+  if (typeof window === 'undefined') return new ArrayBuffer(0)
+  try {
+    const normalized = base64.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
+    const binaryString = window.atob(padded)
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+    return bytes.buffer
+  } catch {
+    return new ArrayBuffer(0)
   }
-  return bytes.buffer
 }
 
 export default function AdminPage() {
@@ -160,15 +168,15 @@ export default function AdminPage() {
         fetch('/api/admin/settings'),
         fetch('/api/admin/usage-logs'),
       ])
-      const sessions = await sessionsResponse.json()
+      const sessions = await sessionsResponse.json().catch(() => null)
       const settings: {
         provider?: ApiProvider
         endpoint?: string
         model?: string
         hasApiKey?: boolean
         error?: string
-      } = await settingsResponse.json()
-      const usage: UsageLog[] | { error: string } = await usageResponse.json()
+      } = (await settingsResponse.json().catch(() => ({}))) || {}
+      const usage: UsageLog[] | { error: string } = (await usageResponse.json().catch(() => null)) || []
 
       if (!sessionsResponse.ok || !Array.isArray(sessions)) {
         throw new Error(sessions?.error || 'Không thể tải danh sách phiên.')
@@ -554,8 +562,10 @@ export default function AdminPage() {
     setSessionEntries([])
     setLoadingEntries(true)
     try {
-      const res = await fetch(`/api/admin/sessions?id=${encodeURIComponent(session.id)}`).then(r => r.json())
-      setSessionEntries((res.entries || []) as AdminTranscriptEntry[])
+      const res = await fetch(`/api/admin/sessions?id=${encodeURIComponent(session.id)}`)
+        .then(r => r.json())
+        .catch(() => ({ entries: [] }))
+      setSessionEntries((res?.entries || []) as AdminTranscriptEntry[])
     } catch (err: unknown) {
       setDataError(err instanceof Error ? err.message : 'Không thể tải transcript')
     } finally {
@@ -570,8 +580,10 @@ export default function AdminPage() {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: viewingSession.id }),
-      }).then(r => r.json())
-      if (res.error) {
+      })
+        .then(r => r.json())
+        .catch(() => ({ error: 'Không thể xóa phiên' }))
+      if (res?.error) {
         setDataError(res.error)
         return
       }
@@ -584,11 +596,11 @@ export default function AdminPage() {
 
   const handleExportPDF = async () => {
     if (!viewingSession) return
-    const languageName = getPartnerLanguage(viewingSession.partner_language)?.name || viewingSession.partner_language
+    const languageName = getPartnerLanguage(viewingSession.partner_language)?.name || viewingSession.partner_language || 'Tự động'
     const { downloadSessionPDF } = await import('@/lib/pdf-generator')
     await downloadSessionPDF(
       viewingSession.name,
-      viewingSession.partner_language,
+      viewingSession.partner_language || 'any',
       languageName,
       viewingSession.started_at,
       sessionEntries
@@ -859,7 +871,7 @@ export default function AdminPage() {
             <div className="table-wrap"><table className="data-table"><thead><tr><th>Người dùng</th><th>Hội thoại</th><th>Ngôn ngữ</th><th>Thời lượng</th><th>Thời gian</th><th><span className="sr-only">Hành động</span></th></tr></thead><tbody>
               {filteredSessions.length === 0 ? <tr><td colSpan={6} className="table-empty">Không tìm thấy hội thoại</td></tr> : filteredSessions.map((session) => {
                 const language = getPartnerLanguage(session.partner_language)
-                return <tr key={session.id}><td>{session.username || 'Khách'}</td><td><strong>{session.name}</strong></td><td><span className="language-inline"><b>{language?.shortName || session.partner_language.toUpperCase()}</b>{language?.name || session.partner_language}</span></td><td>{formatDuration(session.duration_seconds)}</td><td>{new Date(session.started_at).toLocaleString('vi-VN')}</td><td><button type="button" onClick={() => void handleOpenSession(session)}>Mở</button></td></tr>
+                return <tr key={session.id}><td>{session.username || 'Khách'}</td><td><strong>{session.name}</strong></td><td><span className="language-inline"><b>{language?.shortName || (session.partner_language ? session.partner_language.toUpperCase() : 'AUTO')}</b>{language?.name || session.partner_language || 'Tự động'}</span></td><td>{formatDuration(session.duration_seconds)}</td><td>{new Date(session.started_at).toLocaleString('vi-VN')}</td><td><button type="button" onClick={() => void handleOpenSession(session)}>Mở</button></td></tr>
               })}
             </tbody></table></div>
           </section>
