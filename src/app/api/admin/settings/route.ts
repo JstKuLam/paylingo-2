@@ -11,7 +11,7 @@ const MASKED_API_KEY = '••••••••••••••••'
 const apiSettingsSchema = z.object({
   provider: z.enum(['gemini', 'openai']),
   endpoint: z.string().trim().max(500).optional().default(''),
-  model: z.string().trim().min(1).max(200),
+  model: z.string().trim().min(1).max(100).regex(/^[a-zA-Z0-9._-]+$/, 'Tên model chỉ được chứa chữ cái, số, dấu chấm, gạch ngang và gạch dưới'),
   api_key: z.string().trim().max(1_000),
 }).superRefine((settings, context) => {
   if (settings.provider === 'openai' && settings.endpoint) {

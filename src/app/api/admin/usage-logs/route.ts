@@ -5,7 +5,7 @@ import { checkAdminSession } from '@/lib/admin-auth'
 export const runtime = 'edge'
 
 
-export async function GET() {
+export async function GET(request: Request) {
   const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const isAuthorized = await checkAdminSession()
@@ -13,13 +13,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403, headers: noStoreHeader })
     }
 
+    const { searchParams } = new URL(request.url)
+    const limitParam = parseInt(searchParams.get('limit') || '200', 10)
+    const safeLimit = Math.min(Math.max(1, isNaN(limitParam) ? 200 : limitParam), 500)
+
     const db = getD1()
-    const logs = await db.prepare('SELECT * FROM usage_logs ORDER BY created_at DESC LIMIT 200').all()
+    const logs = await db.prepare('SELECT * FROM usage_logs ORDER BY created_at DESC LIMIT ?')
+      .bind(safeLimit)
+      .all()
 
     return NextResponse.json(logs.results || [], {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: noStoreHeader,
     })
   } catch (error: unknown) {
     console.error('Unable to load AI usage logs:', error)
@@ -27,9 +31,7 @@ export async function GET() {
       { error: 'Lỗi hệ thống' },
       {
         status: 500,
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       }
     )
   }

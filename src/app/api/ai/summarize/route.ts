@@ -215,7 +215,8 @@ export async function POST(req: Request) {
       .first<{ provider?: string; endpoint?: string; model?: string; api_key?: string }>()
 
     const provider = settings?.provider || 'gemini'
-    const model = settings?.model || 'gemini-1.5-flash'
+    const rawModel = settings?.model?.trim() || 'gemini-2.5-flash'
+    const model = /^[a-zA-Z0-9._-]+$/.test(rawModel) ? rawModel : 'gemini-2.5-flash'
     const endpoint = getSafeAiEndpoint(settings?.endpoint) || 'https://api.openai.com/v1'
     const apiKey = settings?.api_key || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY
 

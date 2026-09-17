@@ -322,14 +322,21 @@ test('admin routes enforce no-store headers, validate session IDs, and prevent m
   // Masked key fallback bug fix: must check if existing key exists before reusing
   assert.match(adminSettings, /if \(api_key === MASKED_API_KEY\)\s*\{\s*if \(!existing \|\| !existing\.api_key\)/)
 
+  // Model identifier regex validation and bounds
+  assert.match(adminSettings, /regex\(\/\^\[a-zA-Z0-9\._-\]\+\$\//)
+
   // noStoreHeader coverage on all admin endpoints
   assert.match(adminSettings, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
   assert.match(adminSessions, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
   assert.match(adminUsage, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
   assert.match(adminAuth, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
 
-  // Admin sessions DELETE validates ID parameter
+  // Admin sessions validates ID parameter and handles malformed JSON
   assert.match(adminSessions, /!id \|\| typeof id !== 'string' \|\| id\.length > 64/)
+  assert.match(adminSessions, /sessionId\.length > 64/)
+
+  // Admin usage logs bounds limit
+  assert.match(adminUsage, /safeLimit = Math\.min\(Math\.max\(1,/)
 })
 
 test('auth endpoints enforce CSPRNG OTP, input length bounds, and universal no-store headers', async () => {

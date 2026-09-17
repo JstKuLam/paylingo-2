@@ -18,6 +18,9 @@ export async function GET(request: Request) {
     const db = getD1()
 
     if (sessionId) {
+      if (typeof sessionId !== 'string' || sessionId.length > 64) {
+        return NextResponse.json({ error: 'ID phiên không hợp lệ' }, { status: 400, headers: noStoreHeader })
+      }
       const entries = await db.prepare('SELECT * FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC')
         .bind(sessionId)
         .all()
@@ -62,7 +65,14 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403, headers: noStoreHeader })
     }
 
-    const { id } = await request.json()
+    let id: unknown
+    try {
+      const body = await request.json()
+      id = body?.id
+    } catch {
+      return NextResponse.json({ error: 'Payload không hợp lệ' }, { status: 400, headers: noStoreHeader })
+    }
+
     if (!id || typeof id !== 'string' || id.length > 64) {
       return NextResponse.json({ error: 'Thiếu hoặc ID phiên không hợp lệ' }, { status: 400, headers: noStoreHeader })
     }
