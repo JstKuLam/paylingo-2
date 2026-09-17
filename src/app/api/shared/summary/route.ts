@@ -53,7 +53,11 @@ export async function GET(req: Request) {
     const hasPassword = !!summary.password_hash
 
     if (hasPassword) {
-      return NextResponse.json({ id: summary.id, hasPassword: true, isLocked: true })
+      return NextResponse.json({ id: summary.id, hasPassword: true, isLocked: true }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      })
     }
 
     // Return full content if no password
@@ -64,10 +68,22 @@ export async function GET(req: Request) {
       hasPassword,
       isLocked: false,
       created_at: summary.created_at
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
     })
   } catch (error: unknown) {
     console.error('Error fetching shared summary:', error)
-    return NextResponse.json({ error: 'Lỗi hệ thống khi tải chia sẻ' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Lỗi hệ thống khi tải chia sẻ' },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   }
 }
 

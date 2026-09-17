@@ -204,7 +204,7 @@ export default function HistoryPage() {
 
       await db.transaction('rw', db.folders, db.sessions, async () => {
         await db.folders.put(newFolder)
-        await db.sessions.where('id').anyOf(selectedIds).modify({
+        await db.sessions.where('id').anyOf(selectedIds).filter((s) => s.owner_id === ownerId).modify({
           folder_id: folderId,
           sync_status: 'pending',
           updated_at: now,

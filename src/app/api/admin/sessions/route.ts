@@ -36,10 +36,22 @@ export async function GET(request: Request) {
       transcript_entries: [{ count: Number(s.transcript_count || 0) }]
     }))
 
-    return NextResponse.json(formatted)
+    return NextResponse.json(formatted, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   } catch (error: unknown) {
     console.error('Unable to load admin sessions:', error)
-    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Lỗi hệ thống' },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   }
 }
 
@@ -57,6 +69,8 @@ export async function DELETE(request: Request) {
 
     const db = getD1()
     await db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(id).run()
+    await db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(id).run()
+    await db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(id).run()
     await db.prepare('DELETE FROM sessions WHERE id = ?').bind(id).run()
 
     return NextResponse.json({ success: true })

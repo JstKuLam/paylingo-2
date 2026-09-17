@@ -15,9 +15,21 @@ export async function GET() {
     const db = getD1()
     const logs = await db.prepare('SELECT * FROM usage_logs ORDER BY created_at DESC LIMIT 200').all()
 
-    return NextResponse.json(logs.results || [])
+    return NextResponse.json(logs.results || [], {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   } catch (error: unknown) {
     console.error('Unable to load AI usage logs:', error)
-    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Lỗi hệ thống' },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   }
 }

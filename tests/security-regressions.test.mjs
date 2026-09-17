@@ -125,3 +125,21 @@ test('web and mobile ship with baseline data-exposure defenses', async () => {
   assert.doesNotMatch(viewModel, /auth response:|API key fetch response:|live transcript JSON/)
   assert.doesNotMatch(socket, /Setup payload:|Raw transcript frame:/)
 })
+
+test('deleting sessions and folders cascades to session_summaries and shared_summaries', async () => {
+  const historyRoute = await source('src/app/api/history/route.ts')
+  const adminSessionsRoute = await source('src/app/api/admin/sessions/route.ts')
+  const sharedSummaryRoute = await source('src/app/api/shared/summary/route.ts')
+  const adminSettingsRoute = await source('src/app/api/admin/settings/route.ts')
+
+  assert.match(historyRoute, /DELETE FROM session_summaries WHERE session_id = \?/)
+  assert.match(historyRoute, /DELETE FROM shared_summaries WHERE session_id = \?/)
+  assert.match(historyRoute, /DELETE FROM session_summaries WHERE folder_id = \?/)
+  assert.match(historyRoute, /DELETE FROM shared_summaries WHERE folder_id = \?/)
+
+  assert.match(adminSessionsRoute, /DELETE FROM session_summaries WHERE session_id = \?/)
+  assert.match(adminSessionsRoute, /DELETE FROM shared_summaries WHERE session_id = \?/)
+
+  assert.match(sharedSummaryRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(adminSettingsRoute, /'Cache-Control': 'no-store, max-age=0'/)
+})

@@ -115,12 +115,16 @@ export async function DELETE(request: Request) {
 
     if (table === 'sessions' && field === 'id' && value) {
       await db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(value).run()
+      await db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(value).run()
+      await db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(value).run()
       await db.prepare('DELETE FROM sessions WHERE id = ? AND owner_id = ?').bind(value, user.id).run()
       return NextResponse.json({ success: true })
     }
 
     if (table === 'folders' && field === 'id' && value) {
       await db.prepare('UPDATE sessions SET folder_id = NULL WHERE folder_id = ? AND owner_id = ?').bind(value, user.id).run()
+      await db.prepare('DELETE FROM session_summaries WHERE folder_id = ?').bind(value).run()
+      await db.prepare('DELETE FROM shared_summaries WHERE folder_id = ?').bind(value).run()
       await db.prepare('DELETE FROM folders WHERE id = ? AND owner_id = ?').bind(value, user.id).run()
       return NextResponse.json({ success: true })
     }

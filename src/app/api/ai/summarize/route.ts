@@ -283,7 +283,9 @@ ${sanitizedTranscript}
       return NextResponse.json({ error: 'Nhà cung cấp AI không được hỗ trợ' }, { status: 500 })
     }
 
-    if (!summaryText) {
+    const cleanSummaryText = summaryText.trim().replace(/^```(?:markdown)?\s*\n([\s\S]*?)\n```$/i, '$1').trim()
+
+    if (!cleanSummaryText) {
       return NextResponse.json({ error: 'AI không trả về kết quả tóm tắt' }, { status: 500 })
     }
 
@@ -293,7 +295,7 @@ ${sanitizedTranscript}
       INSERT INTO session_summaries (id, session_id, folder_id, summary_text, style, created_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'))
     `)
-      .bind(summaryId, sessionId || null, folderId || null, summaryText, style)
+      .bind(summaryId, sessionId || null, folderId || null, cleanSummaryText, style)
       .run()
 
     // Write token usage log to usage_logs
@@ -305,7 +307,7 @@ ${sanitizedTranscript}
       .bind(logId, sessionId || folderId || null, 'ai_summarize', JSON.stringify({ username, promptTokens, completionTokens, model, estimatedCost }))
       .run()
 
-    return NextResponse.json({ summary: summaryText })
+    return NextResponse.json({ summary: cleanSummaryText })
   } catch (error: unknown) {
     console.error('Error in summarize API:', error)
     if (error instanceof Error && (error.name === 'TimeoutError' || error.message.toLowerCase().includes('timeout') || error.message.toLowerCase().includes('aborted'))) {

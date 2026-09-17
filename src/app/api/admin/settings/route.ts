@@ -41,10 +41,22 @@ export async function GET() {
       model: settings?.model || 'gemini-2.5-flash',
       hasApiKey: !!settings?.api_key,
       api_key: maskedKey
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
     })
   } catch (error: unknown) {
     console.error('Unable to load API settings:', error)
-    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Lỗi hệ thống' },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   }
 }
 
