@@ -545,4 +545,15 @@ test('Soniox key route enforces dual per-user and per-IP rate limits and throttl
   assert.match(sonioxRoute, /account-delete:\$\{user\.id\}:\$\{getRequestIp\(request\)\}/)
 })
 
+test('useSessionLifecycle ensures monotonic session duration and rejects zombie entries on abort', async () => {
+  const lifecycle = await source('src/hooks/useSessionLifecycle.ts')
+
+  // Monotonic duration preservation across unmount and unexpected stop
+  assert.match(lifecycle, /duration = Math\.max\(\s*Number\.isFinite\(session\.duration_seconds\)/)
+  assert.match(lifecycle, /latestEntryMs = messagesRef\.current\.reduce/)
+  assert.match(lifecycle, /durationFromEntries = Math\.ceil\(latestEntryMs \/ 1000\)/)
+
+  // Prevents zombie entry write if session was aborted or switched
+  assert.match(lifecycle, /if \(activeSessionRef\.current !== sessionId\) return[\s\S]*?db\.transcriptEntries\.bulkPut/)
+})
 

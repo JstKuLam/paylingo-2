@@ -34,6 +34,7 @@ export function useSessionLifecycle({
   const activeSessionRef = useRef<string | null>(null)
   const stopRecordingRef = useRef(stopRecording)
   const silenceAlertMessageRef = useRef(silenceAlertMessage)
+  const messagesRef = useRef(messages)
 
   const clearSilenceTimers = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -53,6 +54,10 @@ export function useSessionLifecycle({
   useEffect(() => {
     silenceAlertMessageRef.current = silenceAlertMessage
   }, [silenceAlertMessage])
+
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
 
   // Track network online status
   useEffect(() => {
@@ -136,7 +141,10 @@ export function useSessionLifecycle({
           if (session && session.ended_at === null) {
             const startTime = new Date(session.started_at).getTime()
             const validStart = Number.isFinite(startTime) ? startTime : Date.now()
-            const duration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+            const duration = Math.max(
+              Number.isFinite(session.duration_seconds) ? session.duration_seconds : 0,
+              Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+            )
             return db.sessions.update(sid, {
               ended_at: now,
               duration_seconds: duration,
@@ -194,7 +202,10 @@ export function useSessionLifecycle({
         if (session && session.ended_at === null) {
           const startTime = new Date(session.started_at).getTime()
           const validStart = Number.isFinite(startTime) ? startTime : Date.now()
-          const duration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+          const duration = Math.max(
+            Number.isFinite(session.duration_seconds) ? session.duration_seconds : 0,
+            Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+          )
           return db.sessions.update(sid, {
             ended_at: now,
             duration_seconds: duration,
@@ -253,7 +264,10 @@ export function useSessionLifecycle({
         if (prevSession && prevSession.ended_at === null) {
           const startTime = new Date(prevSession.started_at).getTime()
           const validStart = Number.isFinite(startTime) ? startTime : Date.now()
-          const duration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+          const duration = Math.max(
+            Number.isFinite(prevSession.duration_seconds) ? prevSession.duration_seconds : 0,
+            Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+          )
           await db.sessions.update(prevSid, {
             ended_at: now,
             duration_seconds: duration,
@@ -321,12 +335,15 @@ export function useSessionLifecycle({
         const rawStartTime = activeSession ? new Date(activeSession.started_at).getTime() : NaN
         const validStart = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
         const computedDuration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+        const latestEntryMs = messagesRef.current.reduce((max, m) => Math.max(max, m.end_ms || 0), 0)
+        const durationFromEntries = Math.ceil(latestEntryMs / 1000)
         const durationSeconds = activeSession
           ? Math.max(
               Number.isFinite(activeSession.duration_seconds) ? activeSession.duration_seconds : 0,
-              computedDuration
+              computedDuration,
+              durationFromEntries
             )
-          : computedDuration
+          : Math.max(computedDuration, durationFromEntries)
         await db.sessions.update(currentSessionId, {
           ended_at: now,
           duration_seconds: durationSeconds,
@@ -407,6 +424,8 @@ export function useSessionLifecycle({
             || existing.end_ms !== entry.end_ms
           return hasChanged ? [{ ...entry, created_at: existing?.created_at || entry.created_at }] : []
         })
+
+        if (activeSessionRef.current !== sessionId) return
 
         if (changedEntries.length > 0) {
           await db.transcriptEntries.bulkPut(changedEntries)
