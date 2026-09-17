@@ -62,9 +62,10 @@ export default function SharedSummaryPage({ params }: PageProps) {
   const [copied, setCopied] = useState(false)
 
   const fetchSummary = useCallback(async () => {
+    if (!id || id === 'fallback') return
     try {
       const response = await fetch(`/api/shared/summary?id=${encodeURIComponent(id)}`)
-      const data: SharedSummary & { error?: string; isLocked?: boolean } = await response.json()
+      const data: SharedSummary & { error?: string; isLocked?: boolean } = await response.json().catch(() => ({}))
       if (!response.ok || data.error) throw new Error(data.error || 'Không thể tải bản tóm tắt.')
       if (data.isLocked) {
         setLocked(true)
@@ -96,7 +97,7 @@ export default function SharedSummaryPage({ params }: PageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'verify', id, password }),
       })
-      const data: SharedSummary & { error?: string } = await response.json()
+      const data: SharedSummary & { error?: string } = await response.json().catch(() => ({}))
       if (!response.ok || data.error) throw new Error(data.error || 'Mật khẩu không đúng.')
       setLocked(false)
       setSummary(data)

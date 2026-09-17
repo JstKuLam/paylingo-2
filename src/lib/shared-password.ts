@@ -7,10 +7,14 @@ function toBase64Url(bytes: Uint8Array) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 
-function fromBase64Url(value: string) {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=')
-  const binary = atob(padded)
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+function fromBase64Url(value: string): Uint8Array | null {
+  try {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=')
+    const binary = atob(padded)
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  } catch {
+    return null
+  }
 }
 
 function timingSafeEqual(left: Uint8Array, right: Uint8Array) {
@@ -48,14 +52,19 @@ export async function hashSharedPassword(password: string) {
 }
 
 export async function verifySharedPassword(password: string, storedHash: string) {
+  if (!storedHash || typeof storedHash !== 'string') return false
   const [format, iterationsValue, saltValue, hashValue] = storedHash.split('$')
 
   if (format === PASSWORD_FORMAT && iterationsValue && saltValue && hashValue) {
     const iterations = Number(iterationsValue)
     if (!Number.isSafeInteger(iterations) || iterations < 10_000 || iterations > 1_000_000) return false
 
-    const derived = await derivePassword(password, fromBase64Url(saltValue), iterations)
-    return timingSafeEqual(derived, fromBase64Url(hashValue))
+    const salt = fromBase64Url(saltValue)
+    const expected = fromBase64Url(hashValue)
+    if (!salt || !expected) return false
+
+    const derived = await derivePassword(password, salt, iterations)
+    return timingSafeEqual(derived, expected)
   }
 
   // Backward compatibility for links created before salted PBKDF2 hashes were introduced.
@@ -63,7 +72,8 @@ export async function verifySharedPassword(password: string, storedHash: string)
     await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password))
   )
   const legacyHex = Array.from(legacyHash, (byte) => byte.toString(16).padStart(2, '0')).join('')
-  return legacyHex === storedHash
+  const enc = new TextEncoder()
+  return timingSafeEqual(enc.encode(legacyHex), enc.encode(storedHash))
 }
 
 export function isLegacySharedPasswordHash(storedHash: string) {

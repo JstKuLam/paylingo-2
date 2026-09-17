@@ -24,4 +24,14 @@ test('legacy SHA-256 links remain verifiable during migration', async () => {
 
   assert.equal(isLegacySharedPasswordHash(legacyHash), true)
   assert.equal(await verifySharedPassword('legacy', legacyHash), true)
+  assert.equal(await verifySharedPassword('wrong-legacy', legacyHash), false)
 })
+
+test('verifySharedPassword gracefully handles malformed, corrupted, and non-string hashes without throwing', async () => {
+  assert.equal(await verifySharedPassword('test', null), false)
+  assert.equal(await verifySharedPassword('test', ''), false)
+  assert.equal(await verifySharedPassword('test', 'pbkdf2-sha256$invalid-iterations$salt$hash'), false)
+  assert.equal(await verifySharedPassword('test', 'pbkdf2-sha256$120000$???invalid-base64???$???invalid-base64???'), false)
+  assert.equal(await verifySharedPassword('test', 'pbkdf2-sha256$5000$salt$hash'), false) // iterations < 10000 rejected
+})
+
