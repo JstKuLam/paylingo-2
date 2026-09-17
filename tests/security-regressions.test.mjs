@@ -627,4 +627,24 @@ test('AI summarize bounds transcript character length, neutralizes delimiter inj
   assert.match(folderDetail, /data = await response\.json\(\)[\s\S]*?catch\s*\{[\s\S]*?response\.status === 413/)
 })
 
+test('admin routes enforce query result limits, sanitize IDs, and safely catch malformed JSON payloads', async () => {
+  const adminSessions = await source('src/app/api/admin/sessions/route.ts')
+  const adminSettings = await source('src/app/api/admin/settings/route.ts')
+  const adminAuth = await source('src/app/api/auth/admin/route.ts')
+
+  // Admin sessions route bounds entries query and trims session ID
+  assert.match(adminSessions, /WHERE session_id = \? ORDER BY start_ms ASC LIMIT 2000/)
+  assert.match(adminSessions, /cleanSessionId = sessionId\.trim\(\)/)
+  assert.match(adminSessions, /cleanId = id\.trim\(\)/)
+
+  // Admin sessions DELETE catches invalid JSON
+  assert.match(adminSessions, /body = await request\.json\(\)[\s\S]*?Payload JSON không hợp lệ/)
+
+  // Admin settings POST catches invalid JSON
+  assert.match(adminSettings, /rawJson = await req\.json\(\)[\s\S]*?Payload JSON không hợp lệ/)
+
+  // Admin auth POST catches invalid JSON
+  assert.match(adminAuth, /body = await req\.json\(\)[\s\S]*?Payload JSON không hợp lệ/)
+})
+
 

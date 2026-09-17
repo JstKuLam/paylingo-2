@@ -65,7 +65,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403, headers: noStoreHeader })
     }
 
-    const parsedBody = apiSettingsSchema.safeParse(await req.json())
+    let rawJson: unknown
+    try {
+      rawJson = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Payload JSON không hợp lệ' }, { status: 400, headers: noStoreHeader })
+    }
+
+    const parsedBody = apiSettingsSchema.safeParse(rawJson)
     if (!parsedBody.success) {
       return NextResponse.json(
         { error: parsedBody.error.issues[0]?.message || 'Cấu hình API không hợp lệ' },

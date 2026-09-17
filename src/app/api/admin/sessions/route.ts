@@ -18,11 +18,12 @@ export async function GET(request: Request) {
     const db = getD1()
 
     if (sessionId) {
-      if (typeof sessionId !== 'string' || sessionId.length > 64) {
+      if (typeof sessionId !== 'string' || sessionId.length > 64 || !sessionId.trim()) {
         return NextResponse.json({ error: 'ID phiên không hợp lệ' }, { status: 400, headers: noStoreHeader })
       }
-      const entries = await db.prepare('SELECT * FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC')
-        .bind(sessionId)
+      const cleanSessionId = sessionId.trim()
+      const entries = await db.prepare('SELECT * FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC LIMIT 2000')
+        .bind(cleanSessionId)
         .all()
       return NextResponse.json({ entries: entries.results || [] }, {
         headers: noStoreHeader,
@@ -70,19 +71,20 @@ export async function DELETE(request: Request) {
       const body = await request.json()
       id = body?.id
     } catch {
-      return NextResponse.json({ error: 'Payload không hợp lệ' }, { status: 400, headers: noStoreHeader })
+      return NextResponse.json({ error: 'Payload JSON không hợp lệ' }, { status: 400, headers: noStoreHeader })
     }
 
-    if (!id || typeof id !== 'string' || id.length > 64) {
+    if (!id || typeof id !== 'string' || id.length > 64 || !id.trim()) {
       return NextResponse.json({ error: 'Thiếu hoặc ID phiên không hợp lệ' }, { status: 400, headers: noStoreHeader })
     }
+    const cleanId = id.trim()
 
     const db = getD1()
     await db.batch([
-      db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(id),
-      db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(id),
-      db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(id),
-      db.prepare('DELETE FROM sessions WHERE id = ?').bind(id),
+      db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(cleanId),
+      db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(cleanId),
+      db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(cleanId),
+      db.prepare('DELETE FROM sessions WHERE id = ?').bind(cleanId),
     ])
 
     return NextResponse.json({ success: true }, {

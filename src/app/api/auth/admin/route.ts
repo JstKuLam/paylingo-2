@@ -53,7 +53,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
-    const body = await req.json()
+    let body: Record<string, unknown>
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Payload JSON không hợp lệ' }, { status: 400, headers: noStoreHeader })
+    }
     const { action } = body
 
     const creds = await getAdminCredentials()
