@@ -131,9 +131,15 @@ export default function SharedSummaryPage({ params }: PageProps) {
   }
 
   const handleCopyLink = async () => {
-    await navigator.clipboard.writeText(window.location.href)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(window.location.href)
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1800)
+      }
+    } catch {
+      // Ignore clipboard write restrictions
+    }
   }
 
   if (loading && !summary) {

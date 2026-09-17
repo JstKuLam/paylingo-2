@@ -90,7 +90,14 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   try {
-    const parsedBody = shareRequestSchema.safeParse(await req.json())
+    let rawJson: unknown
+    try {
+      rawJson = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Dữ liệu JSON không hợp lệ' }, { status: 400, headers: noStoreHeader })
+    }
+
+    const parsedBody = shareRequestSchema.safeParse(rawJson)
     if (!parsedBody.success) {
       return NextResponse.json({ error: 'Dữ liệu chia sẻ không hợp lệ' }, { status: 400, headers: noStoreHeader })
     }
@@ -219,29 +226,33 @@ export async function DELETE(req: Request) {
     }
 
     const { searchParams } = new URL(req.url)
-    const id = searchParams.get('id')
-    const sessionId = searchParams.get('sessionId')
-    const folderId = searchParams.get('folderId')
+    const rawId = searchParams.get('id')
+    const rawSessionId = searchParams.get('sessionId')
+    const rawFolderId = searchParams.get('folderId')
 
-    if (!id && !sessionId && !folderId) {
-      return NextResponse.json({ error: 'Thiếu ID chia sẻ hoặc ID cuộc hội thoại/thư mục' }, { status: 400, headers: noStoreHeader })
+    const cleanId = typeof rawId === 'string' && rawId.trim().length <= 64 ? rawId.trim() : null
+    const cleanSessionId = typeof rawSessionId === 'string' && rawSessionId.trim().length <= 64 ? rawSessionId.trim() : null
+    const cleanFolderId = typeof rawFolderId === 'string' && rawFolderId.trim().length <= 64 ? rawFolderId.trim() : null
+
+    if (!cleanId && !cleanSessionId && !cleanFolderId) {
+      return NextResponse.json({ error: 'Thiếu ID chia sẻ hoặc ID cuộc hội thoại/thư mục hợp lệ' }, { status: 400, headers: noStoreHeader })
     }
 
     const db = getD1()
 
     let targetSummary: { id: string; session_id?: string | null; folder_id?: string | null } | null = null
 
-    if (id) {
+    if (cleanId) {
       targetSummary = await db.prepare('SELECT id, session_id, folder_id FROM shared_summaries WHERE id = ?')
-        .bind(id)
+        .bind(cleanId)
         .first<{ id: string; session_id?: string | null; folder_id?: string | null }>()
-    } else if (sessionId) {
+    } else if (cleanSessionId) {
       targetSummary = await db.prepare('SELECT id, session_id, folder_id FROM shared_summaries WHERE session_id = ?')
-        .bind(sessionId)
+        .bind(cleanSessionId)
         .first<{ id: string; session_id?: string | null; folder_id?: string | null }>()
-    } else if (folderId) {
+    } else if (cleanFolderId) {
       targetSummary = await db.prepare('SELECT id, session_id, folder_id FROM shared_summaries WHERE folder_id = ?')
-        .bind(folderId)
+        .bind(cleanFolderId)
         .first<{ id: string; session_id?: string | null; folder_id?: string | null }>()
     }
 

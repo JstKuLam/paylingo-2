@@ -44,15 +44,17 @@ async function derivePassword(password: string, salt: Uint8Array, iterations: nu
 }
 
 export async function hashSharedPassword(password: string) {
-  if (!password) return null
+  if (!password || typeof password !== 'string' || !password.trim()) return null
 
+  const cleanPassword = password.trim()
   const salt = crypto.getRandomValues(new Uint8Array(16))
-  const derived = await derivePassword(password, salt, PASSWORD_ITERATIONS)
+  const derived = await derivePassword(cleanPassword, salt, PASSWORD_ITERATIONS)
   return `${PASSWORD_FORMAT}$${PASSWORD_ITERATIONS}$${toBase64Url(salt)}$${toBase64Url(derived)}`
 }
 
 export async function verifySharedPassword(password: string, storedHash: string) {
-  if (!storedHash || typeof storedHash !== 'string') return false
+  if (typeof password !== 'string' || !password.trim() || !storedHash || typeof storedHash !== 'string') return false
+  const cleanPassword = password.trim()
   const [format, iterationsValue, saltValue, hashValue] = storedHash.split('$')
 
   if (format === PASSWORD_FORMAT && iterationsValue && saltValue && hashValue) {
@@ -63,13 +65,13 @@ export async function verifySharedPassword(password: string, storedHash: string)
     const expected = fromBase64Url(hashValue)
     if (!salt || !expected) return false
 
-    const derived = await derivePassword(password, salt, iterations)
+    const derived = await derivePassword(cleanPassword, salt, iterations)
     return timingSafeEqual(derived, expected)
   }
 
   // Backward compatibility for links created before salted PBKDF2 hashes were introduced.
   const legacyHash = new Uint8Array(
-    await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password))
+    await crypto.subtle.digest('SHA-256', new TextEncoder().encode(cleanPassword))
   )
   const legacyHex = Array.from(legacyHash, (byte) => byte.toString(16).padStart(2, '0')).join('')
   const enc = new TextEncoder()

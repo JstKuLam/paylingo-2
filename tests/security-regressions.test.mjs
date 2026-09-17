@@ -647,4 +647,26 @@ test('admin routes enforce query result limits, sanitize IDs, and safely catch m
   assert.match(adminAuth, /body = await req\.json\(\)[\s\S]*?Payload JSON không hợp lệ/)
 })
 
+test('shared summary route safely catches invalid JSON, bounds DELETE parameters, and trims passwords', async () => {
+  const sharedRoute = await source('src/app/api/shared/summary/route.ts')
+  const sharedClient = await source('src/app/shared/summary/[id]/SharedSummaryClient.tsx')
+  const sharedPassword = await source('src/lib/shared-password.ts')
+
+  // Shared summary POST safely parses JSON
+  assert.match(sharedRoute, /rawJson = await req\.json\(\)[\s\S]*?Dữ liệu JSON không hợp lệ/)
+
+  // Shared summary DELETE sanitizes and bounds parameters
+  assert.match(sharedRoute, /cleanId = typeof rawId === 'string' && rawId\.trim\(\)\.length <= 64/)
+  assert.match(sharedRoute, /cleanSessionId = typeof rawSessionId === 'string' && rawSessionId\.trim\(\)\.length <= 64/)
+  assert.match(sharedRoute, /cleanFolderId = typeof rawFolderId === 'string' && rawFolderId\.trim\(\)\.length <= 64/)
+
+  // Shared password trims input and checks type
+  assert.match(sharedPassword, /cleanPassword = password\.trim\(\)/)
+  assert.match(sharedPassword, /!password \|\| typeof password !== 'string' \|\| !password\.trim\(\)/)
+
+  // Shared summary client guards clipboard copy
+  assert.match(sharedClient, /navigator\.clipboard\?\.writeText/)
+})
+
+
 
