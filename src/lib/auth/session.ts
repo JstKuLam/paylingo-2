@@ -41,19 +41,12 @@ export async function createMagicToken(email: string): Promise<{ token: string; 
   // 15 minutes expiration
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
-  // Clean up old tokens for this email
-  await db.prepare('DELETE FROM auth_tokens WHERE email = ? OR datetime(expires_at) < datetime(\'now\')')
-    .bind(sanitizedEmail)
-    .run()
-
-  // Insert magic link token and OTP
-  await db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
-    .bind(token, sanitizedEmail, expiresAt)
-    .run()
-
-  await db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
-    .bind(otp, sanitizedEmail, expiresAt)
-    .run()
+  // Clean up old tokens for this email and insert magic link token and OTP atomically
+  await db.batch([
+    db.prepare('DELETE FROM auth_tokens WHERE email = ? OR datetime(expires_at) < datetime(\'now\')').bind(sanitizedEmail),
+    db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))').bind(token, sanitizedEmail, expiresAt),
+    db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))').bind(otp, sanitizedEmail, expiresAt),
+  ])
 
   return { token, otp }
 }
@@ -76,7 +69,13 @@ export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionR
 
   if (!record) return null
 
-  // Delete used tokens for this email
+  // Atomically delete token and verify changes > 0 to prevent concurrent replay race conditions
+  const deleteRes = await db.prepare('DELETE FROM auth_tokens WHERE token = ?').bind(cleanInput).run()
+  if (!deleteRes.success || (deleteRes.meta && deleteRes.meta.changes === 0)) {
+    return null
+  }
+
+  // Delete any other tokens for this email
   await db.prepare('DELETE FROM auth_tokens WHERE email = ?').bind(record.email).run()
 
   // Find or create user
@@ -88,17 +87,24 @@ export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionR
 
   if (!user) {
     const newUserId = crypto.randomUUID()
-    await db.prepare(
-      'INSERT INTO auth_users (id, email, email_confirmed_at, created_at) VALUES (?, ?, ?, ?)'
-    )
-      .bind(newUserId, record.email, nowIso, nowIso)
-      .run()
+    try {
+      await db.prepare(
+        'INSERT INTO auth_users (id, email, email_confirmed_at, created_at) VALUES (?, ?, ?, ?)'
+      )
+        .bind(newUserId, record.email, nowIso, nowIso)
+        .run()
 
-    user = {
-      id: newUserId,
-      email: record.email,
-      email_confirmed_at: nowIso,
-      created_at: nowIso,
+      user = {
+        id: newUserId,
+        email: record.email,
+        email_confirmed_at: nowIso,
+        created_at: nowIso,
+      }
+    } catch {
+      // Concurrently inserted by parallel request
+      user = await db.prepare('SELECT * FROM auth_users WHERE lower(email) = lower(?)')
+        .bind(record.email)
+        .first<AuthUser>()
     }
   } else if (!user.email_confirmed_at) {
     await db.prepare('UPDATE auth_users SET email_confirmed_at = ? WHERE id = ?')
@@ -106,6 +112,8 @@ export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionR
       .run()
     user.email_confirmed_at = nowIso
   }
+
+  if (!user) return null
 
   // Create session
   const sessionToken = `${crypto.randomUUID()}-${crypto.randomUUID()}`
@@ -182,10 +190,10 @@ export async function getAuthenticatedUser(
 }
 
 /**
- * Destroys an active session.
+ * Destroys an active session and purges expired sessions.
  */
 export async function destroySession(token: string): Promise<boolean> {
   const db = getD1()
-  const res = await db.prepare('DELETE FROM auth_sessions WHERE token = ?').bind(token).run()
+  const res = await db.prepare('DELETE FROM auth_sessions WHERE token = ? OR datetime(expires_at) < datetime(\'now\')').bind(token).run()
   return res.success
 }
