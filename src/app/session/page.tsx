@@ -392,8 +392,11 @@ function SessionActiveArea({
   const selectedPartner = getPartnerLanguage(partnerLang, language) ?? PARTNER_LANGUAGES[0]
   const isStarting = state === 'starting' || state === 'connecting'
   const canStart = state === 'idle' || state === 'stopped' || state === 'error'
+  const isBusyRef = useRef(false)
 
   const handleStart = async () => {
+    if (isBusyRef.current || !canStart) return
+    isBusyRef.current = true
     setOperationError('')
     try {
       await startSession(selectedPartner.name)
@@ -404,10 +407,14 @@ function SessionActiveArea({
       setOperationError(
         error instanceof Error ? error.message : t.errorStartSession
       )
+    } finally {
+      isBusyRef.current = false
     }
   }
 
   const handleStop = async () => {
+    if (isBusyRef.current) return
+    isBusyRef.current = true
     setOperationError('')
     try {
       await stop()
@@ -416,6 +423,7 @@ function SessionActiveArea({
       setOperationError(t.errorStopSession)
     } finally {
       await stopSession()
+      isBusyRef.current = false
     }
   }
 

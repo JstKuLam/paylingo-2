@@ -141,9 +141,12 @@ export function useSessionLifecycle({
           if (session && session.ended_at === null) {
             const startTime = new Date(session.started_at).getTime()
             const validStart = Number.isFinite(startTime) ? startTime : Date.now()
+            const latestEntryMs = messagesRef.current.reduce((max, msg) => Math.max(max, msg.end_ms || 0), 0)
+            const durationFromEntries = Math.ceil(latestEntryMs / 1000)
             const duration = Math.max(
               Number.isFinite(session.duration_seconds) ? session.duration_seconds : 0,
-              Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+              Math.max(0, Math.floor((Date.now() - validStart) / 1000)),
+              durationFromEntries
             )
             return db.sessions.update(sid, {
               ended_at: now,

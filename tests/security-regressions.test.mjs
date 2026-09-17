@@ -689,6 +689,20 @@ test('sw.js protects caches.match against errors and PwaUpdater and error bounda
   assert.match(globalErrorBoundary, /try\s*\{[\s\S]*?sessionStorage\.removeItem\('pwa_chunk_last_recovery'\)[\s\S]*?\}\s*catch/)
 })
 
+test('session lifecycle protects unmount duration with entry timestamps and session page guards double-click start', async () => {
+  const lifecycle = await source('src/hooks/useSessionLifecycle.ts')
+  const sessionPage = await source('src/app/session/page.tsx')
+
+  // Unmount session close factors in durationFromEntries
+  assert.match(lifecycle, /latestEntryMs = messagesRef\.current\.reduce[\s\S]*?durationFromEntries = Math\.ceil\(latestEntryMs \/ 1000\)[\s\S]*?duration = Math\.max\([\s\S]*?durationFromEntries/)
+
+  // Session page guards handleStart and handleStop with isBusyRef
+  assert.match(sessionPage, /isBusyRef = useRef\(false\)/)
+  assert.match(sessionPage, /if \(isBusyRef\.current \|\| !canStart\) return/)
+  assert.match(sessionPage, /isBusyRef\.current = true/)
+})
+
+
 
 
 
