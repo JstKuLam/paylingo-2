@@ -73,6 +73,33 @@ class PayLingoDatabase extends Dexie {
         if (!entry.sync_status) entry.sync_status = 'synced'
       })
     })
+
+    this.version(4).stores({
+      sessions: 'id, owner_id, [owner_id+started_at], username, folder_id, started_at, sync_status, updated_at',
+      transcriptEntries: 'id, session_id, [session_id+start_ms], sync_status, updated_at',
+      folders: 'id, owner_id, username, sync_status, updated_at'
+    }).upgrade(async (tx) => {
+      // Validate duration_seconds and transcript ranges on upgraded records
+      await tx.table('sessions').toCollection().modify((session) => {
+        if (typeof session.duration_seconds !== 'number' || isNaN(session.duration_seconds) || session.duration_seconds < 0) {
+          session.duration_seconds = 0
+        }
+        if (!session.sync_status || !['synced', 'pending', 'failed'].includes(session.sync_status)) {
+          session.sync_status = 'synced'
+        }
+      })
+      await tx.table('transcriptEntries').toCollection().modify((entry) => {
+        if (typeof entry.start_ms !== 'number' || isNaN(entry.start_ms) || entry.start_ms < 0) {
+          entry.start_ms = 0
+        }
+        if (typeof entry.end_ms !== 'number' || isNaN(entry.end_ms) || entry.end_ms < entry.start_ms) {
+          entry.end_ms = entry.start_ms
+        }
+        if (!entry.sync_status || !['synced', 'pending', 'failed'].includes(entry.sync_status)) {
+          entry.sync_status = 'synced'
+        }
+      })
+    })
   }
 }
 
@@ -96,10 +123,10 @@ export async function claimLegacyLocalData(ownerId: string, username: string) {
       )
 
       for (const session of legacySessions) {
-        await db.sessions.update(session.id, { owner_id: ownerId })
+        await db.sessions.update(session.id, { owner_id: ownerId, sync_status: 'pending' })
       }
       for (const folder of legacyFolders) {
-        await db.folders.update(folder.id, { owner_id: ownerId })
+        await db.folders.update(folder.id, { owner_id: ownerId, sync_status: 'pending' })
       }
     })
   } catch (err) {

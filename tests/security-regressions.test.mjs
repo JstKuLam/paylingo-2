@@ -517,3 +517,20 @@ test('magic link auth enforces per-email rate limits, CRLF sanitization, dot-stu
   // Callback route rate limits attempts
   assert.match(callbackRoute, /auth-callback:\$\{getRequestIp\(request\)\}/)
 })
+
+test('Dexie database version 4 adds compound indexes, sanitizes legacy entries, and sets sync_status pending on claimed records', async () => {
+  const dbSource = await source('src/lib/db.ts')
+
+  // Version 4 compound index and stores
+  assert.match(dbSource, /version\(4\)\.stores\(\{[\s\S]*?\[owner_id\+started_at\]/)
+  assert.match(dbSource, /version\(4\)[\s\S]*?\.upgrade\(async/)
+
+  // Upgrade data validation
+  assert.match(dbSource, /typeof session\.duration_seconds !== 'number' \|\| isNaN\(session\.duration_seconds\)/)
+  assert.match(dbSource, /entry\.end_ms < entry\.start_ms/)
+
+  // Claimed legacy records set to pending
+  assert.match(dbSource, /await db\.sessions\.update\(session\.id,\s*\{\s*owner_id:\s*ownerId,\s*sync_status:\s*'pending'\s*\}\)/)
+  assert.match(dbSource, /await db\.folders\.update\(folder\.id,\s*\{\s*owner_id:\s*ownerId,\s*sync_status:\s*'pending'\s*\}\)/)
+})
+
