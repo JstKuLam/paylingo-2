@@ -5,6 +5,14 @@ import { useEffect } from 'react'
 export default function PwaUpdater() {
   useEffect(() => {
     const recoverFromCacheStaleness = async () => {
+      const lastRecovery = Number(sessionStorage.getItem('pwa_chunk_last_recovery') || 0)
+      const now = Date.now()
+      if (now - lastRecovery < 10_000) {
+        console.warn('[PWA] Suppressing chunk recovery loop; last attempt was less than 10s ago')
+        return
+      }
+      sessionStorage.setItem('pwa_chunk_last_recovery', now.toString())
+
       try {
         const registrations = await navigator.serviceWorker.getRegistrations()
         await Promise.all(

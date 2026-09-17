@@ -141,12 +141,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Cuộc hội thoại chưa có nội dung để tóm tắt' }, { status: 400 })
     }
 
+    // Cap transcript entries to prevent Edge Worker memory exhaustion and token overflow
+    const MAX_ENTRIES_FOR_SUMMARY = 800
+    const isTruncated = allEntries.length > MAX_ENTRIES_FOR_SUMMARY
+    const effectiveEntries = isTruncated ? allEntries.slice(0, MAX_ENTRIES_FOR_SUMMARY) : allEntries
+
     let formattedTranscript = ''
     if (folderId && sessionsToSummarize.length > 1) {
       sessionsToSummarize.forEach((sess, idx) => {
         const dateStr = new Date(sess.started_at).toLocaleString('vi-VN')
         formattedTranscript += `=== CUỘC HỘI THOẠI ${idx + 1}: ${sess.name || 'Chưa đặt tên'} (${dateStr}) ===\n`
-        const sessEntries = allEntries.filter((e: TranscriptEntry) => e.session_id === sess.id || !e.session_id)
+        const sessEntries = effectiveEntries.filter((e: TranscriptEntry) => e.session_id === sess.id || !e.session_id)
         sessEntries.forEach((entry) => {
           const timeStr = `${Math.floor(entry.start_ms / 1000)}s`
           const speaker = entry.speaker === 'host' ? 'Host (Người Việt)' : 'Partner (Đối tác)'
@@ -157,13 +162,17 @@ export async function POST(req: Request) {
         formattedTranscript += '\n'
       })
     } else {
-      allEntries.forEach((entry) => {
+      effectiveEntries.forEach((entry) => {
         const timeStr = `${Math.floor(entry.start_ms / 1000)}s`
         const speaker = entry.speaker === 'host' ? 'Host (Người Việt)' : 'Partner (Đối tác)'
         formattedTranscript += `[${timeStr}] ${speaker}:\n`
         formattedTranscript += `- Gốc: ${entry.original_text}\n`
         formattedTranscript += `- Dịch: ${entry.translated_text}\n\n`
       })
+    }
+
+    if (isTruncated) {
+      formattedTranscript += '\n[Ghi chú: Bản ghi dài hơn 800 đoạn thoại, nội dung đã được rút gọn để đảm bảo hiệu năng và giới hạn token của AI]\n'
     }
 
     // Fetch active API configurations from D1
@@ -299,6 +308,9 @@ ${sanitizedTranscript}
     return NextResponse.json({ summary: summaryText })
   } catch (error: unknown) {
     console.error('Error in summarize API:', error)
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.message.toLowerCase().includes('timeout') || error.message.toLowerCase().includes('aborted'))) {
+      return NextResponse.json({ error: 'Quá thời gian xử lý yêu cầu AI (Timeout). Vui lòng thử lại sau.' }, { status: 504 })
+    }
     return NextResponse.json({ error: 'Lỗi hệ thống khi tóm tắt' }, { status: 500 })
   }
 }

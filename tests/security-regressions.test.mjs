@@ -102,11 +102,14 @@ test('expensive and password-protected APIs have abuse controls', async () => {
   assert.match(summarize, /max\(500\)/)
   assert.match(summarize, /owner_id !== user\.id/)
   assert.match(summarize, /getSafeAiEndpoint/)
+  assert.match(summarize, /MAX_ENTRIES_FOR_SUMMARY/)
+  assert.match(summarize, /TimeoutError/)
   assert.doesNotMatch(shared, /searchParams\.get\('password'\)/)
   assert.match(shared, /shared-summary:/)
   assert.match(shared, /shared-summary-get:/)
   assert.match(magicLink, /magic-link-ip:/)
   assert.match(rateLimit, /buckets\.size > 500/)
+  assert.match(rateLimit, /buckets\.size > 1000/)
 })
 
 test('web and mobile ship with baseline data-exposure defenses', async () => {

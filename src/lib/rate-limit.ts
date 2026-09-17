@@ -22,6 +22,15 @@ export function checkRateLimit(options: { key: string; limit: number; windowMs: 
         buckets.delete(k)
       }
     }
+    if (buckets.size > 1000) {
+      const excess = buckets.size - 1000
+      let pruned = 0
+      for (const k of buckets.keys()) {
+        if (pruned >= excess) break
+        buckets.delete(k)
+        pruned++
+      }
+    }
   }
 
   if (!current || current.resetAt <= now) {

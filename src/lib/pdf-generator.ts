@@ -14,7 +14,8 @@ function safeFilename(value: string) {
 }
 
 function formatOffset(milliseconds: number) {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const safeMs = Number.isFinite(milliseconds) ? Math.max(0, milliseconds) : 0
+  const totalSeconds = Math.floor(safeMs / 1000)
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60

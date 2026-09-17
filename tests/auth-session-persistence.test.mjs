@@ -27,4 +27,5 @@ test('Next.js edge middleware checks session cookies on incoming requests', asyn
 
   assert.match(middleware, /export async function middleware/)
   assert.match(middleware, /AUTH_COOKIE_NAME/)
+  assert.match(middleware, /searchParams\.has\('error'\)/)
 })

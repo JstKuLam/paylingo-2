@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { generateSessionPrintHTML } from '../src/lib/pdf-generator.ts'
+import { formatTimeline } from '../src/lib/utils.ts'
 
 test('printable transcript escapes content and formats relative timestamps', () => {
   const html = generateSessionPrintHTML(
@@ -28,4 +29,37 @@ test('printable transcript escapes content and formats relative timestamps', () 
   assert.match(html, /lang="und"/)
   assert.match(html, /01:01:01/)
   assert.match(html, /&lt;svg onload=alert\(4\)&gt;/)
+})
+
+test('printable transcript handles invalid or NaN timestamps safely', () => {
+  const html = generateSessionPrintHTML(
+    'Session NaN',
+    'en',
+    'English',
+    'invalid-date',
+    [{
+      id: 'entry-nan',
+      session_id: 'session-nan',
+      speaker: 'host',
+      original_text: 'Hello',
+      translated_text: 'Xin chào',
+      start_ms: Number.NaN,
+      end_ms: Number.NaN,
+      created_at: 'invalid-date',
+      sync_status: 'synced',
+      updated_at: 'invalid-date',
+    }]
+  )
+
+  assert.doesNotMatch(html, /NaN:NaN:NaN/)
+  assert.match(html, /00:00:00/)
+  assert.match(html, /Không rõ/)
+})
+
+test('formatTimeline handles negative, NaN, and normal durations cleanly', () => {
+  assert.equal(formatTimeline(0), '00:00')
+  assert.equal(formatTimeline(-5000), '00:00')
+  assert.equal(formatTimeline(Number.NaN), '00:00')
+  assert.equal(formatTimeline(65_000), '01:05')
+  assert.equal(formatTimeline(3_665_000), '01:01:05')
 })
