@@ -863,6 +863,22 @@ test('ProfileMenu guards against unmounted updates and ensures logout redirectio
   assert.match(profileMenu, /try\s*\{[\s\S]*?await authClient\.signOut\(\)[\s\S]*?\}\s*catch[\s\S]*?finally\s*\{[\s\S]*?router\.replace\('\/'\)[\s\S]*?\}/)
 })
 
+test('SMTP transport bounds buffer size, cancels edge reader, and enforces connection timeout', async () => {
+  const smtp = await source('src/lib/auth/smtp.ts')
+
+  // Buffer size bound
+  assert.match(smtp, /buffer\.length > 64 \* 1024/)
+  assert.match(smtp, /SMTP buffer limit exceeded/)
+
+  // Reader stream cancellation in edge socket finally
+  assert.match(smtp, /reader\.cancel\(\)\.catch/)
+
+  // Node TLS connection timeout
+  assert.match(smtp, /setTimeout\([\s\S]*?15_000\)/)
+  assert.match(smtp, /SMTP connection timed out/)
+})
+
+
 
 
 

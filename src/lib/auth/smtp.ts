@@ -44,6 +44,9 @@ async function sendSmtpViaEdgeSocket(options: SmtpEmailOptions, config: SmtpConf
         const { value, done } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
+        if (buffer.length > 64 * 1024) {
+          throw new Error('SMTP buffer limit exceeded')
+        }
       }
       
       const idx = buffer.indexOf('\r\n')
@@ -131,20 +134,27 @@ async function sendSmtpViaEdgeSocket(options: SmtpEmailOptions, config: SmtpConf
     await sendCmd('QUIT')
     return { success: true }
   } finally {
-    try { writer.close() } catch {}
+    try { writer.close().catch(() => {}) } catch {}
+    try { reader.cancel().catch(() => {}) } catch {}
   }
 }
 
 function sendSmtpViaNodeTls(options: SmtpEmailOptions, config: SmtpConfig): Promise<{ success: boolean; error?: string }> {
   return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | null = null
     try {
-      const proc = (globalThis as unknown as { process?: { getBuiltinModule?: (name: string) => { connect: (port: number, host: string, cb: () => void) => { on: (event: string, handler: (data: Buffer) => void) => void; write: (data: string) => void; end: () => void } } } }).process
+      const proc = (globalThis as unknown as { process?: { getBuiltinModule?: (name: string) => { connect: (port: number, host: string, cb: () => void) => { on: (event: string, handler: (data: Buffer) => void) => void; write: (data: string) => void; end: () => void; destroy?: () => void } } } }).process
       const tls = typeof proc?.getBuiltinModule === 'function' ? proc.getBuiltinModule('node:tls') : null
       if (!tls) {
         throw new Error('Node TLS module not accessible')
       }
 
       const socket = tls.connect(config.port, config.host, () => {})
+      timer = setTimeout(() => {
+        try { socket.destroy?.() } catch {}
+        reject(new Error('SMTP connection timed out'))
+      }, 15_000)
+
       let buffer = ''
       let state = 'INIT'
 
@@ -192,17 +202,23 @@ function sendSmtpViaNodeTls(options: SmtpEmailOptions, config: SmtpConfig): Prom
             ].join('\r\n') + '\r\n'
             socket.write(msg)
           } else if (line.startsWith('250 ') && state === 'BODY') {
+            if (timer) clearTimeout(timer)
             socket.write('QUIT\r\n')
             socket.end()
             resolve({ success: true })
           } else if (line.startsWith('4') || line.startsWith('5')) {
+            if (timer) clearTimeout(timer)
             reject(new Error(`SMTP Error: ${line}`))
           }
         }
       })
 
-      socket.on('error', (err: unknown) => reject(err instanceof Error ? err : new Error(String(err))))
+      socket.on('error', (err: unknown) => {
+        if (timer) clearTimeout(timer)
+        reject(err instanceof Error ? err : new Error(String(err)))
+      })
     } catch (e) {
+      if (timer) clearTimeout(timer)
       reject(e)
     }
   })
