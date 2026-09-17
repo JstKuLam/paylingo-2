@@ -702,6 +702,25 @@ test('session lifecycle protects unmount duration with entry timestamps and sess
   assert.match(sessionPage, /isBusyRef\.current = true/)
 })
 
+test('sync route executes chunked D1 batch inserts and validates ID types and lengths', async () => {
+  const syncRoute = await source('src/app/api/sync/route.ts')
+
+  // Entity ID string and length checks
+  assert.match(syncRoute, /typeof folder\.id !== 'string' \|\| folder\.id\.length > 64/)
+  assert.match(syncRoute, /typeof sess\.id !== 'string' \|\| sess\.id\.length > 64/)
+  assert.match(syncRoute, /typeof entry\.id !== 'string' \|\| entry\.id\.length > 64/)
+  assert.match(syncRoute, /typeof entry\.session_id !== 'string' \|\| entry\.session_id\.length > 64/)
+
+  // Text bounds on original and translated text
+  assert.match(syncRoute, /origText = typeof entry\.original_text === 'string' \? entry\.original_text\.slice\(0, 10_000\) : ''/)
+  assert.match(syncRoute, /transText = typeof entry\.translated_text === 'string' \? entry\.translated_text\.slice\(0, 10_000\) : ''/)
+
+  // Chunked D1 batch execution
+  assert.match(syncRoute, /CHUNK_SIZE = 50/)
+  assert.match(syncRoute, /await db\.batch\(statements\)/)
+})
+
+
 
 
 

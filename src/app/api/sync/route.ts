@@ -66,7 +66,7 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
     // 1. Sync Folders
     if (Array.isArray(folders) && folders.length > 0) {
       for (const folder of folders) {
-        if (!folder.id || !folder.name) continue
+        if (!folder.id || typeof folder.id !== 'string' || folder.id.length > 64 || !folder.name) continue
         const existingFolder = await db.prepare('SELECT id, owner_id FROM folders WHERE id = ?').bind(folder.id).first<{ id: string; owner_id: string }>()
         if (existingFolder && existingFolder.owner_id !== user.id) {
           continue
@@ -97,7 +97,7 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
     // 2. Sync Sessions
     if (Array.isArray(sessions) && sessions.length > 0) {
       for (const sess of sessions) {
-        if (!sess.id || !sess.name) continue
+        if (!sess.id || typeof sess.id !== 'string' || sess.id.length > 64 || !sess.name) continue
         const existingSession = await db.prepare('SELECT id, owner_id FROM sessions WHERE id = ?').bind(sess.id).first<{ id: string; owner_id: string }>()
         if (existingSession && existingSession.owner_id !== user.id) {
           continue
@@ -180,18 +180,48 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
         }
       }
 
+      const validEntries: Array<{
+        id: string
+        session_id: string
+        speaker: 'partner' | 'host'
+        origText: string
+        transText: string
+        startMs: number
+        endMs: number
+        createdAt: string
+      }> = []
+
       for (const entry of entries) {
-        if (!entry.id || !entry.session_id || !authorizedSessionIds.has(entry.session_id)) continue
+        if (!entry.id || typeof entry.id !== 'string' || entry.id.length > 64) continue
+        if (!entry.session_id || typeof entry.session_id !== 'string' || entry.session_id.length > 64) continue
+        if (!authorizedSessionIds.has(entry.session_id)) continue
+
         const nowIso = new Date().toISOString()
         const createdAt = clampIsoTimestamp(entry.created_at, nowIso)
         const startMs = Math.max(0, Math.floor(typeof entry.start_ms === 'number' && Number.isFinite(entry.start_ms) ? entry.start_ms : 0))
         const endMs = Math.max(startMs, Math.floor(typeof entry.end_ms === 'number' && Number.isFinite(entry.end_ms) ? entry.end_ms : startMs))
         const speaker = entry.speaker === 'partner' ? 'partner' : 'host'
-        const origText = typeof entry.original_text === 'string' ? entry.original_text : ''
-        const transText = typeof entry.translated_text === 'string' ? entry.translated_text : ''
+        const origText = typeof entry.original_text === 'string' ? entry.original_text.slice(0, 10_000) : ''
+        const transText = typeof entry.translated_text === 'string' ? entry.translated_text.slice(0, 10_000) : ''
 
-        try {
-          await db.prepare(`
+        validEntries.push({
+          id: entry.id,
+          session_id: entry.session_id,
+          speaker,
+          origText,
+          transText,
+          startMs,
+          endMs,
+          createdAt,
+        })
+      }
+
+      // Batch entry writes in chunks of 50 for optimal D1 throughput and transaction safety
+      const CHUNK_SIZE = 50
+      for (let i = 0; i < validEntries.length; i += CHUNK_SIZE) {
+        const chunk = validEntries.slice(i, i + CHUNK_SIZE)
+        const statements = chunk.map((entry) => {
+          return db.prepare(`
             INSERT INTO transcript_entries (id, session_id, speaker, original_text, translated_text, start_ms, end_ms, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
@@ -200,12 +230,13 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
               translated_text = excluded.translated_text,
               start_ms = excluded.start_ms,
               end_ms = excluded.end_ms
-          `)
-            .bind(entry.id, entry.session_id, speaker, origText, transText, startMs, endMs, createdAt)
-            .run()
-          syncedEntries++
-        } catch (entryErr) {
-          console.warn(`[Sync] Skipping entry ${entry.id}:`, entryErr)
+          `).bind(entry.id, entry.session_id, entry.speaker, entry.origText, entry.transText, entry.startMs, entry.endMs, entry.createdAt)
+        })
+        try {
+          await db.batch(statements)
+          syncedEntries += chunk.length
+        } catch (chunkErr) {
+          console.warn('[Sync] Failed to batch sync chunk:', chunkErr)
         }
       }
     }
