@@ -38,3 +38,25 @@ test('parseTokensToMessages drops isolated filler tokens', () => {
   assert.equal(messages.length, 1)
   assert.equal(messages[0].original_text, 'Welcome.')
 })
+
+test('parseTokensToMessages sanitizes NaN/negative start_ms and handles early translation tokens cleanly', () => {
+  // Case 1: Early translation token before any original token
+  const earlyTranslation = parseTokensToMessages([
+    { text: 'Hello there.', source_language: 'vi', translation_status: 'translation', is_final: true },
+  ], [])
+
+  assert.equal(earlyTranslation.length, 1)
+  assert.equal(earlyTranslation[0].start_ms, 0)
+  assert.ok(earlyTranslation[0].start_ms < 1000) // Must NOT be Date.now() timestamp!
+  assert.equal(earlyTranslation[0].translated_text, 'Hello there.')
+
+  // Case 2: NaN or negative start_ms/end_ms
+  const invalidTimestamps = parseTokensToMessages([
+    { text: 'Valid text.', language: 'en', translation_status: 'original', start_ms: Number.NaN, end_ms: -50, is_final: true },
+  ], [])
+
+  assert.equal(invalidTimestamps.length, 1)
+  assert.equal(invalidTimestamps[0].start_ms, 0)
+  assert.equal(invalidTimestamps[0].end_ms, 0)
+})
+

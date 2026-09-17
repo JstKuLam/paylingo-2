@@ -134,8 +134,10 @@ export function parseTokensToMessages(
 
     if (isOriginal) {
       const lastMsg = speaker === 'host' ? lastHostMessage : lastPartnerMessage
-      const startMs = token.start_ms ?? (lastMsg ? lastMsg.end_ms : 0)
-      const endMs = token.end_ms ?? startMs
+      const rawStart = typeof token.start_ms === 'number' && Number.isFinite(token.start_ms) ? Math.max(0, token.start_ms) : null
+      const startMs = rawStart ?? (lastMsg ? lastMsg.end_ms : 0)
+      const rawEnd = typeof token.end_ms === 'number' && Number.isFinite(token.end_ms) ? Math.max(startMs, token.end_ms) : null
+      const endMs = rawEnd ?? startMs
 
       const shouldStartNew =
         !lastMsg ||
@@ -174,7 +176,10 @@ export function parseTokensToMessages(
 
       if (!lastMsg) {
         // Fallback: if no original message exists yet, create a placeholder
-        const startMs = Date.now()
+        const rawStart = typeof token.start_ms === 'number' && Number.isFinite(token.start_ms) ? Math.max(0, token.start_ms) : null
+        const startMs = rawStart ?? 0
+        const rawEnd = typeof token.end_ms === 'number' && Number.isFinite(token.end_ms) ? Math.max(startMs, token.end_ms) : null
+        const endMs = rawEnd ?? startMs
         const initialText = tokenText.startsWith(' ') ? tokenText.slice(1) : tokenText
         const newMsg: TranscriptMessage = {
           id: `msg-${speaker}-${startMs}`,
@@ -182,7 +187,7 @@ export function parseTokensToMessages(
           original_text: '',
           translated_text: initialText,
           start_ms: startMs,
-          end_ms: startMs,
+          end_ms: endMs,
           is_final: !!token.is_final,
         }
 
