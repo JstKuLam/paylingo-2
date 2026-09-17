@@ -74,6 +74,8 @@ export default function SessionDetailPage({ params }: PageProps) {
   const [selectedStyle, setSelectedStyle] = useState<SummaryStyle>('default')
 
   const loadSessionData = useCallback(async () => {
+    if (!id || id === 'fallback') return
+
     try {
       const { data: { user } } = await authClient.getUser()
       const username = user?.user_metadata?.username ||
@@ -110,7 +112,13 @@ export default function SessionDetailPage({ params }: PageProps) {
         }
       }
 
-      const cloudRes = await fetch(`/api/history?table=sessions&id=${encodeURIComponent(id)}&single=1`).then(r => r.json()).catch(() => ({}))
+      const cloudRes = await fetch(`/api/history?table=sessions&id=${encodeURIComponent(id)}&single=1`)
+        .then(async (r) => {
+          if (!r.ok) return {}
+          const ct = r.headers.get('content-type') || ''
+          return ct.includes('application/json') ? r.json() : {}
+        })
+        .catch(() => ({}))
       const cloudSession = cloudRes.item
       const cloudEntries = cloudRes.entries || []
 

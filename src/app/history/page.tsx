@@ -80,8 +80,20 @@ export default function HistoryPage() {
 
       // Sync cloud sessions and folders from Cloudflare D1
       const [foldersRes, sessionsRes] = await Promise.all([
-        fetch('/api/history?table=folders').then(r => r.json()).catch(() => ({ items: [] })),
-        fetch('/api/history?table=sessions').then(r => r.json()).catch(() => ({ items: [] })),
+        fetch('/api/history?table=folders')
+          .then(async (r) => {
+            if (!r.ok) return { items: [] }
+            const ct = r.headers.get('content-type') || ''
+            return ct.includes('application/json') ? r.json() : { items: [] }
+          })
+          .catch(() => ({ items: [] })),
+        fetch('/api/history?table=sessions')
+          .then(async (r) => {
+            if (!r.ok) return { items: [] }
+            const ct = r.headers.get('content-type') || ''
+            return ct.includes('application/json') ? r.json() : { items: [] }
+          })
+          .catch(() => ({ items: [] })),
       ])
 
       type CloudFolderRecord = { id: string; owner_id?: string; username?: string; name: string; created_at: string; updated_at?: string }
@@ -167,7 +179,10 @@ export default function HistoryPage() {
   const independentSessions = filteredSessions.filter((session) => !session.folder_id)
   const visibleSessions = isSelectMode || normalizedSearch ? filteredSessions : independentSessions
   const pendingCount = sessions.filter((session) => session.sync_status !== 'synced').length
-  const totalDuration = sessions.reduce((total, session) => total + session.duration_seconds, 0)
+  const totalDuration = sessions.reduce((total, session) => {
+    const dur = Number.isFinite(session.duration_seconds) ? session.duration_seconds : 0
+    return total + Math.max(0, dur)
+  }, 0)
 
   const toggleSelectMode = () => {
     setIsSelectMode((current) => !current)

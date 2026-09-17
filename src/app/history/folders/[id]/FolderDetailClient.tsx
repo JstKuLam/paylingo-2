@@ -67,6 +67,8 @@ export default function FolderDetailPage({ params }: PageProps) {
   const [selectedStyle, setSelectedStyle] = useState<SummaryStyle>('default')
 
   const loadFolderData = useCallback(async () => {
+    if (!id || id === 'fallback') return
+
     try {
       const { data: { user } } = await authClient.getUser()
       const username = user?.user_metadata?.username ||
@@ -91,7 +93,13 @@ export default function FolderDetailPage({ params }: PageProps) {
         return
       }
 
-      const cloudRes = await fetch(`/api/history?table=folders&id=${encodeURIComponent(id)}&single=1`).then(r => r.json()).catch(() => ({}))
+      const cloudRes = await fetch(`/api/history?table=folders&id=${encodeURIComponent(id)}&single=1`)
+        .then(async (r) => {
+          if (!r.ok) return {}
+          const ct = r.headers.get('content-type') || ''
+          return ct.includes('application/json') ? r.json() : {}
+        })
+        .catch(() => ({}))
       const cloudFolder = cloudRes.item
       const cloudSessions = cloudRes.sessions || []
 

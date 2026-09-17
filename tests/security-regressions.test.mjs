@@ -423,6 +423,22 @@ test('session lifecycle hook manages dual silence timers, sanitizes duration, an
   assert.match(sessionPage, /stopRef\.current/)
 })
 
+test('history pages guard fallback IDs, prevent non-JSON crashes, and sanitize total duration', async () => {
+  const historyPage = await source('src/app/history/page.tsx')
+  const sessionDetail = await source('src/app/history/sessions/[id]/SessionDetailClient.tsx')
+  const folderDetail = await source('src/app/history/folders/[id]/FolderDetailClient.tsx')
+
+  // Total duration guards against NaN values
+  assert.match(historyPage, /Number\.isFinite\(session\.duration_seconds\)/)
+  assert.match(historyPage, /r\.headers\.get\('content-type'\)/)
+
+  // Session and Folder detail bail early on fallback id
+  assert.match(sessionDetail, /if \(!id \|\| id === 'fallback'\) return/)
+  assert.match(sessionDetail, /r\.headers\.get\('content-type'\)/)
+  assert.match(folderDetail, /if \(!id \|\| id === 'fallback'\) return/)
+  assert.match(folderDetail, /r\.headers\.get\('content-type'\)/)
+})
+
 
 
 
