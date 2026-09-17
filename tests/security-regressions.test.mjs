@@ -268,6 +268,16 @@ test('AI summarize API bounds payload size, entry length, and inserts summaries 
   // Explicit raw body size check protects against chunked transfer bloat
   assert.match(summarizeRoute, /rawBody\.length > 300_000/)
 
+  // Universal noStoreHeader on all responses
+  assert.match(summarizeRoute, /const noStoreHeader = \{\s*['"]Cache-Control['"]:\s*['"]no-store,\s*max-age=0['"],?\s*\}/)
+
+  // Strips null bytes from transcript text
+  assert.match(summarizeRoute, /\.replace\(\/\\0\/g,\s*['"]['"]\)/)
+
+  // Checks model blockReason and finishReason
+  assert.match(summarizeRoute, /blockReason/)
+  assert.match(summarizeRoute, /finishReason/)
+
   // Foreign key safe bindings avoid SQLite FK constraint crashes on unsynced sessions
   assert.match(summarizeRoute, /isSessionOwned\s*\?\s*sessionId\s*:\s*null/)
   assert.match(summarizeRoute, /isFolderOwned\s*\?\s*folderId\s*:\s*null/)
