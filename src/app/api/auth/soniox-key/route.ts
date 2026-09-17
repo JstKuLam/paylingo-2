@@ -36,12 +36,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const keyLimit = checkRateLimit({
-      key: `soniox-key:${user.id}:${getRequestIp(request)}`,
+    const userKeyLimit = checkRateLimit({
+      key: `soniox-key-user:${user.id}`,
       limit: 30,
       windowMs: 60 * 60_000,
     })
-    if (!keyLimit.allowed) return rateLimitResponse(keyLimit.retryAfterSeconds)
+    if (!userKeyLimit.allowed) return rateLimitResponse(userKeyLimit.retryAfterSeconds)
+
+    const ipKeyLimit = checkRateLimit({
+      key: `soniox-key-ip:${getRequestIp(request)}`,
+      limit: 60,
+      windowMs: 60 * 60_000,
+    })
+    if (!ipKeyLimit.allowed) return rateLimitResponse(ipKeyLimit.retryAfterSeconds)
 
     // 3. Verify SONIOX_API_KEY env is set
     if (!process.env.SONIOX_API_KEY) {
@@ -130,6 +137,13 @@ export async function DELETE(request: NextRequest) {
         { status: 401, headers: noStoreHeader },
       )
     }
+
+    const deleteLimit = checkRateLimit({
+      key: `account-delete:${user.id}:${getRequestIp(request)}`,
+      limit: 5,
+      windowMs: 60 * 60_000,
+    })
+    if (!deleteLimit.allowed) return rateLimitResponse(deleteLimit.retryAfterSeconds)
 
     const db = getD1()
     await db.batch([

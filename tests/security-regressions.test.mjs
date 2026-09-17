@@ -534,3 +534,15 @@ test('Dexie database version 4 adds compound indexes, sanitizes legacy entries, 
   assert.match(dbSource, /await db\.folders\.update\(folder\.id,\s*\{\s*owner_id:\s*ownerId,\s*sync_status:\s*'pending'\s*\}\)/)
 })
 
+test('Soniox key route enforces dual per-user and per-IP rate limits and throttles account deletion', async () => {
+  const sonioxRoute = await source('src/app/api/auth/soniox-key/route.ts')
+
+  // Dual rate limits on key minting
+  assert.match(sonioxRoute, /soniox-key-user:\$\{user\.id\}/)
+  assert.match(sonioxRoute, /soniox-key-ip:\$\{getRequestIp\(request\)\}/)
+
+  // Account deletion rate limit
+  assert.match(sonioxRoute, /account-delete:\$\{user\.id\}:\$\{getRequestIp\(request\)\}/)
+})
+
+
