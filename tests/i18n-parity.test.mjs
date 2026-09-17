@@ -63,3 +63,19 @@ test('detectMachineLanguage returns a valid supported language', () => {
   const lang = detectMachineLanguage()
   assert.ok(['vi', 'en', 'zh'].includes(lang))
 })
+
+test('useLanguage and useTheme hooks guard against SSR undefined window and normalize inputs', async () => {
+  const fs = await import('node:fs/promises')
+  const path = await import('node:path')
+  const root = path.resolve(import.meta.dirname, '..')
+  const langHook = await fs.readFile(path.join(root, 'src/hooks/useLanguage.ts'), 'utf8')
+  const themeHook = await fs.readFile(path.join(root, 'src/hooks/useTheme.ts'), 'utf8')
+
+  // SSR guards in subscription
+  assert.match(langHook, /if \(typeof window === 'undefined'\) return \(\) => undefined/)
+  assert.match(themeHook, /if \(typeof window === 'undefined'\) return \(\) => undefined/)
+
+  // Input normalization in change callbacks
+  assert.match(langHook, /validLang:\s*Language\s*=\s*newLang === 'vi' \|\| newLang === 'en' \|\| newLang === 'zh' \? newLang : 'vi'/)
+  assert.match(themeHook, /validTheme:\s*ThemeType\s*=\s*newTheme === 'light' \? 'light' : 'dark'/)
+})

@@ -14,6 +14,7 @@ function getLanguageSnapshot(): Language {
 }
 
 function subscribeToLanguage(callback: () => void) {
+  if (typeof window === 'undefined') return () => undefined
   window.addEventListener('storage', callback)
   window.addEventListener(LANGUAGE_EVENT, callback)
   return () => {
@@ -30,9 +31,16 @@ export function useLanguage(): {
   const language = useSyncExternalStore<Language>(subscribeToLanguage, getLanguageSnapshot, () => 'vi')
 
   const changeLanguage = (newLang: Language) => {
-    localStorage.setItem(STORAGE_KEY, newLang)
-    document.documentElement.lang = newLang
-    window.dispatchEvent(new Event(LANGUAGE_EVENT))
+    const validLang: Language = newLang === 'vi' || newLang === 'en' || newLang === 'zh' ? newLang : 'vi'
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, validLang)
+    }
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = validLang
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(LANGUAGE_EVENT))
+    }
   }
 
   const rawTranslations = translations[language] || translations.vi

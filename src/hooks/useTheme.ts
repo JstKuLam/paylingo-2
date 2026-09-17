@@ -14,6 +14,7 @@ function getThemeSnapshot(): ThemeType {
 }
 
 function subscribeToTheme(callback: () => void) {
+  if (typeof window === 'undefined') return () => undefined
   window.addEventListener('storage', callback)
   window.addEventListener(THEME_EVENT, callback)
   return () => {
@@ -26,10 +27,17 @@ export function useTheme() {
   const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, () => 'dark')
 
   const changeTheme = (newTheme: ThemeType) => {
-    document.documentElement.setAttribute('data-theme', newTheme)
-    document.documentElement.classList.toggle('dark', newTheme === 'dark')
-    localStorage.setItem('theme', newTheme)
-    window.dispatchEvent(new Event(THEME_EVENT))
+    const validTheme: ThemeType = newTheme === 'light' ? 'light' : 'dark'
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', validTheme)
+      document.documentElement.classList.toggle('dark', validTheme === 'dark')
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('theme', validTheme)
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(THEME_EVENT))
+    }
   }
 
   const toggleTheme = () => {
