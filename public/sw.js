@@ -9,7 +9,7 @@ self.addEventListener('install', (event) => {
       return Promise.allSettled(
         SHELL_URLS.map((url) =>
           fetch(url, { cache: 'no-cache' }).then((res) => {
-            if (res.status === 200) return cache.put(url, res);
+            if (res.status === 200 && !res.redirected) return cache.put(url, res);
           })
         )
       );
@@ -56,7 +56,7 @@ async function cacheFirst(request) {
 async function rootNetworkFirst(request) {
   try {
     const response = await fetch(request);
-    if (response.status === 200) {
+    if (response.status === 200 && !response.redirected) {
       const cache = await caches.open(SHELL_CACHE);
       await cache.put('/', response.clone());
     }

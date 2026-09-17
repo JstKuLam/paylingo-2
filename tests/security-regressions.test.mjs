@@ -246,7 +246,8 @@ test('service worker and PWA updater prevent stale cache lock-in and handle erro
   // sw.js installation is resilient with Promise.allSettled and skips cache on install
   assert.match(sw, /Promise\.allSettled/)
   assert.match(sw, /cache:\s*'no-cache'/)
-  assert.match(sw, /response\.status === 200/)
+  assert.match(sw, /response\.status === 200 && !response\.redirected/)
+  assert.match(sw, /res\.status === 200 && !res\.redirected/)
   assert.match(sw, /SKIP_WAITING/)
 
   // Headers prevent caching of sw.js across Cloudflare Pages and Next.js
