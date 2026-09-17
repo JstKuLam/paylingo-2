@@ -166,7 +166,9 @@ export default function SharedSummaryPage({ params }: PageProps) {
         <header>
           <p className="eyebrow">Bản tóm tắt AI</p>
           <h1>{summary?.title}</h1>
-          {summary?.created_at && <p>Tạo ngày {new Date(summary.created_at).toLocaleDateString('vi-VN')}</p>}
+          {summary?.created_at && Number.isFinite(new Date(summary.created_at).getTime()) && (
+            <p>Tạo ngày {new Date(summary.created_at).toLocaleDateString('vi-VN')}</p>
+          )}
         </header>
         <SummaryDocument content={summary?.summary_content || ''} />
         <footer>PayLingo Live Interpreter</footer>
