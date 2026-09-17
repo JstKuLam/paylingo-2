@@ -177,11 +177,14 @@ export default function FolderDetailPage({ params }: PageProps) {
     if (!folder || !confirm('Xóa thư mục? Các hội thoại bên trong sẽ được chuyển về danh sách chính.')) return
     setPageError('')
     try {
-      await fetch('/api/history', {
+      const res = await fetch('/api/history', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ table: 'folders', field: 'id', value: folder.id }),
       })
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`)
+      }
 
       const now = new Date().toISOString()
       await db.transaction('rw', db.folders, db.sessions, async () => {
@@ -204,11 +207,14 @@ export default function FolderDetailPage({ params }: PageProps) {
     if (!confirm('Chuyển hội thoại này ra khỏi thư mục?')) return
     setPageError('')
     try {
-      await fetch('/api/history', {
+      const res = await fetch('/api/history', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ table: 'sessions', field: 'id', value: sessionId, payload: { folder_id: null } }),
       })
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`)
+      }
       const now = new Date().toISOString()
       await db.sessions.update(sessionId, { folder_id: null, sync_status: 'pending', updated_at: now })
       setSessions((current) => current.filter((session) => session.id !== sessionId))

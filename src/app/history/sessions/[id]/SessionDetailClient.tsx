@@ -156,11 +156,19 @@ export default function SessionDetailPage({ params }: PageProps) {
         updated_at: entry.updated_at || new Date().toISOString(),
       }))
 
+      const existingEntries = await db.transcriptEntries.where('session_id').equals(id).toArray()
+      const localPendingEntryIds = new Set(
+        existingEntries.filter((entry) => entry.sync_status === 'pending').map((entry) => entry.id)
+      )
+      const safeEntries = formattedEntries.filter((entry) => !localPendingEntryIds.has(entry.id))
+
       await db.transaction('rw', db.sessions, db.transcriptEntries, async () => {
         if (!localSession || localSession.sync_status !== 'pending') {
           await db.sessions.put(formattedSession)
         }
-        await db.transcriptEntries.bulkPut(formattedEntries)
+        if (safeEntries.length > 0) {
+          await db.transcriptEntries.bulkPut(safeEntries)
+        }
       })
 
       setSession(formattedSession)
@@ -193,11 +201,14 @@ export default function SessionDetailPage({ params }: PageProps) {
     if (!session || !confirm(t.sessionDetailDeleteConfirm)) return
     setPageError('')
     try {
-      await fetch('/api/history', {
+      const res = await fetch('/api/history', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ table: 'sessions', field: 'id', value: session.id }),
       })
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`)
+      }
 
       await db.transaction('rw', db.sessions, db.transcriptEntries, async () => {
         await db.transcriptEntries.where('session_id').equals(session.id).delete()

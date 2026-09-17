@@ -340,3 +340,22 @@ test('auth endpoints enforce CSPRNG OTP, input length bounds, and universal no-s
   assert.match(signoutRoute, /authHeader\?\.startsWith\('Bearer '\)/)
 })
 
+test('client-side sync reconciliation preserves pending entries and checks server status before local mutations', async () => {
+  const sessionDetail = await source('src/app/history/sessions/[id]/SessionDetailClient.tsx')
+  const folderDetail = await source('src/app/history/folders/[id]/FolderDetailClient.tsx')
+
+  // Transcript entries reconciliation protects pending edits
+  assert.match(sessionDetail, /localPendingEntryIds\s*=\s*new Set/)
+  assert.match(sessionDetail, /safeEntries\s*=\s*formattedEntries\.filter/)
+  assert.match(sessionDetail, /db\.transcriptEntries\.bulkPut\(safeEntries\)/)
+
+  // Server response status verified before local session deletion
+  assert.match(sessionDetail, /const res = await fetch\('\/api\/history'/)
+  assert.match(sessionDetail, /if \(!res\.ok\)\s*\{\s*throw new Error/)
+
+  // Server response status verified before local folder operations
+  assert.match(folderDetail, /const res = await fetch\('\/api\/history'/)
+  assert.match(folderDetail, /if \(!res\.ok\)\s*\{\s*throw new Error/)
+})
+
+
