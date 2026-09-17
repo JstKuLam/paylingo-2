@@ -378,5 +378,23 @@ test('rate limiter bounds IP length, preserves LRU ordering, and edge middleware
   assert.doesNotMatch(headers, /supabase\.co/)
 })
 
+test('sync manager retries failed entries, batches payloads, and sync API validates bounds', async () => {
+  const syncManager = await source('src/lib/sync-manager.ts')
+  const syncRoute = await source('src/app/api/sync/route.ts')
+
+  // Retries failed transcript entries
+  assert.match(syncManager, /db\.transcriptEntries\.where\('sync_status'\)\.equals\('failed'\)\.modify\(\{\s*sync_status:\s*'pending'\s*\}\)/)
+
+  // Batches entries and marks failed on network rejection
+  assert.match(syncManager, /BATCH_ENTRIES_LIMIT/)
+  assert.match(syncManager, /sync_status:\s*'failed'/)
+
+  // Sync route checks array limits and error response no-store headers
+  assert.match(syncRoute, /folders\.length > 500 \|\| sessions\.length > 500 \|\| entries\.length > 2000/)
+  assert.match(syncRoute, /status:\s*401,\s*headers:\s*noStoreHeader/)
+  assert.match(syncRoute, /status:\s*500,\s*headers:\s*noStoreHeader/)
+})
+
+
 
 

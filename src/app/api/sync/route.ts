@@ -5,15 +5,45 @@ import { getD1 } from '@/lib/d1-client'
 export const runtime = 'edge'
 
 
+const noStoreHeader = {
+  'Cache-Control': 'no-store, max-age=0',
+}
+
 export async function POST(request: Request) {
   try {
     const user = await getAuthenticatedUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+      return NextResponse.json(
+        { error: 'Chưa đăng nhập' },
+        { status: 401, headers: noStoreHeader }
+      )
     }
 
-    const payload = await request.json()
+    let payload: { folders?: unknown; sessions?: unknown; entries?: unknown }
+    try {
+      payload = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Dữ liệu payload JSON không hợp lệ.' },
+        { status: 400, headers: noStoreHeader }
+      )
+    }
+
     const { folders = [], sessions = [], entries = [] } = payload
+    if (!Array.isArray(folders) || !Array.isArray(sessions) || !Array.isArray(entries)) {
+      return NextResponse.json(
+        { error: 'Định dạng dữ liệu không hợp lệ.' },
+        { status: 400, headers: noStoreHeader }
+      )
+    }
+
+    if (folders.length > 500 || sessions.length > 500 || entries.length > 2000) {
+      return NextResponse.json(
+        { error: 'Kích thước dữ liệu vượt quá giới hạn cho phép.' },
+        { status: 400, headers: noStoreHeader }
+      )
+    }
+
     const db = getD1()
 
     let syncedFolders = 0
@@ -172,7 +202,7 @@ export async function POST(request: Request) {
     console.error('Error in sync API:', err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Lỗi hệ thống khi đồng bộ dữ liệu.' },
-      { status: 500 }
+      { status: 500, headers: noStoreHeader }
     )
   }
 }

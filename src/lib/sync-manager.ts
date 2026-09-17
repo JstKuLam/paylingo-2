@@ -36,14 +36,15 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
     // Ensure failed records for this owner are retried
     await db.sessions.where('owner_id').equals(ownerId).filter(s => s.sync_status === 'failed').modify({ sync_status: 'pending' })
     await db.folders.where('owner_id').equals(ownerId).filter(f => f.sync_status === 'failed').modify({ sync_status: 'pending' })
+    await db.transcriptEntries.where('sync_status').equals('failed').modify({ sync_status: 'pending' })
 
     // 0. Prepare pending/failed folders
     const pendingFolders = await db.folders.where('sync_status').anyOf(['pending', 'failed']).toArray()
-    const ownedFolders = pendingFolders.filter((folder) => folder.owner_id === ownerId)
+    const ownedFolders = pendingFolders.filter((folder) => folder.owner_id === ownerId).slice(0, 100)
 
     // 1. Prepare pending/failed sessions
     const pendingSessions = await db.sessions.where('sync_status').anyOf(['pending', 'failed']).toArray()
-    const ownedSessions = pendingSessions.filter((localSession) => localSession.owner_id === ownerId)
+    const ownedSessions = pendingSessions.filter((localSession) => localSession.owner_id === ownerId).slice(0, 100)
 
     // 2. Prepare pending/failed transcript entries
     const pendingEntries = await db.transcriptEntries.where('sync_status').anyOf(['pending', 'failed']).toArray()
@@ -55,7 +56,12 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
         verifiedSessionIds.add(sessId)
       }
     }
-    const safeEntries = pendingEntries.filter(entry => verifiedSessionIds.has(entry.session_id))
+    const allSafeEntries = pendingEntries.filter(entry => verifiedSessionIds.has(entry.session_id))
+    const BATCH_ENTRIES_LIMIT = 500
+    const safeEntries = allSafeEntries.slice(0, BATCH_ENTRIES_LIMIT)
+    if (allSafeEntries.length > BATCH_ENTRIES_LIMIT || pendingSessions.length > 100 || pendingFolders.length > 100) {
+      hasQueuedSync = true
+    }
 
     if (ownedFolders.length === 0 && ownedSessions.length === 0 && safeEntries.length === 0) {
       return { success: true, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0 }
@@ -107,7 +113,19 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}))
-      throw new Error(errData.error || `Sync API error ${res.status}`)
+      const errorMsg = errData.error || `Sync API error ${res.status}`
+      await db.transaction('rw', db.folders, db.sessions, db.transcriptEntries, async () => {
+        if (ownedFolders.length > 0) {
+          await db.folders.where('id').anyOf(ownedFolders.map(f => f.id)).modify({ sync_status: 'failed' })
+        }
+        if (ownedSessions.length > 0) {
+          await db.sessions.where('id').anyOf(ownedSessions.map(s => s.id)).modify({ sync_status: 'failed' })
+        }
+        if (safeEntries.length > 0) {
+          await db.transcriptEntries.where('id').anyOf(safeEntries.map(e => e.id)).modify({ sync_status: 'failed' })
+        }
+      })
+      throw new Error(errorMsg)
     }
 
     await res.json().catch(() => ({}))
