@@ -96,7 +96,11 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   } catch (err) {
     console.error('Error in send-magic-link route:', err)
     return NextResponse.json(

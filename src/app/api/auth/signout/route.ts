@@ -14,7 +14,11 @@ export async function POST(request: Request) {
       await destroySession(token)
     }
 
-    const response = NextResponse.json({ success: true })
+    const response = NextResponse.json({ success: true }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
       value: '',

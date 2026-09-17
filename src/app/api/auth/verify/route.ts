@@ -29,6 +29,10 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       user: sessionRes.user,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
     })
 
     response.cookies.set({

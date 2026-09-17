@@ -65,40 +65,44 @@ export function useSessionLifecycle({
   // Auto-close any abandoned sessions belonging to this user on mount (handling browser hard close)
   useEffect(() => {
     const autoCloseAbandonedSessions = async () => {
-      const { data: { session } } = await authClient.getSession()
-      const username = session?.user?.user_metadata?.username ||
-                       session?.user?.user_metadata?.full_name ||
-                       session?.user?.user_metadata?.name ||
-                       session?.user?.email?.split('@')[0]
-      const ownerId = session?.user?.id
-      const legacyUsername = session?.user?.email?.split('@')[0]
+      try {
+        const { data: { session } } = await authClient.getSession()
+        const username = session?.user?.user_metadata?.username ||
+                         session?.user?.user_metadata?.full_name ||
+                         session?.user?.user_metadata?.name ||
+                         session?.user?.email?.split('@')[0]
+        const ownerId = session?.user?.id
+        const legacyUsername = session?.user?.email?.split('@')[0]
 
-      if (username && legacyUsername && ownerId) {
-        await claimLegacyLocalData(ownerId, legacyUsername)
-        const abandonedSessions = await db.sessions
-          .where('owner_id')
-          .equals(ownerId)
-          .toArray()
-          
-        const now = new Date().toISOString()
-        for (const sess of abandonedSessions) {
-          if (sess.ended_at === null) {
-            if (activeSessionRef.current && sess.id === activeSessionRef.current) continue
-            const startTime = new Date(sess.started_at).getTime()
-            const validStart = Number.isFinite(startTime) ? startTime : Date.now()
-            const durationSeconds = Math.max(
-              sess.duration_seconds || 0,
-              Math.max(0, Math.floor((Date.now() - validStart) / 1000))
-            )
-            await db.sessions.update(sess.id, {
-              ended_at: now,
-              duration_seconds: durationSeconds,
-              sync_status: 'pending',
-              updated_at: now
-            })
+        if (username && legacyUsername && ownerId) {
+          await claimLegacyLocalData(ownerId, legacyUsername)
+          const abandonedSessions = await db.sessions
+            .where('owner_id')
+            .equals(ownerId)
+            .toArray()
+            
+          const now = new Date().toISOString()
+          for (const sess of abandonedSessions) {
+            if (sess.ended_at === null) {
+              if (activeSessionRef.current && sess.id === activeSessionRef.current) continue
+              const startTime = new Date(sess.started_at).getTime()
+              const validStart = Number.isFinite(startTime) ? startTime : Date.now()
+              const durationSeconds = Math.max(
+                sess.duration_seconds || 0,
+                Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+              )
+              await db.sessions.update(sess.id, {
+                ended_at: now,
+                duration_seconds: durationSeconds,
+                sync_status: 'pending',
+                updated_at: now
+              })
+            }
           }
+          syncPendingData()
         }
-        syncPendingData()
+      } catch (err) {
+        console.warn('Failed to auto-close abandoned sessions:', err)
       }
     }
     autoCloseAbandonedSessions()
@@ -249,20 +253,24 @@ export function useSessionLifecycle({
     setSilenceWarning(false)
 
     if (currentSessionId) {
-      const now = new Date().toISOString()
-      const activeSession = await db.sessions.get(currentSessionId)
-      const durationSeconds = activeSession
-        ? Math.max(
-            activeSession.duration_seconds,
-            Math.floor((Date.now() - new Date(activeSession.started_at).getTime()) / 1000)
-          )
-        : 0
-      await db.sessions.update(currentSessionId, {
-        ended_at: now,
-        duration_seconds: durationSeconds,
-        sync_status: 'pending',
-        updated_at: now
-      })
+      try {
+        const now = new Date().toISOString()
+        const activeSession = await db.sessions.get(currentSessionId)
+        const durationSeconds = activeSession
+          ? Math.max(
+              activeSession.duration_seconds,
+              Math.floor((Date.now() - new Date(activeSession.started_at).getTime()) / 1000)
+            )
+          : 0
+        await db.sessions.update(currentSessionId, {
+          ended_at: now,
+          duration_seconds: durationSeconds,
+          sync_status: 'pending',
+          updated_at: now
+        })
+      } catch (err) {
+        console.warn('Failed to update session upon stop:', err)
+      }
     }
 
     // Release Wake Lock
@@ -277,44 +285,48 @@ export function useSessionLifecycle({
     if (!sessionId || messages.length === 0) return
 
     const saveMessages = async () => {
-      const activeSession = await db.sessions.get(sessionId)
-      if (!activeSession) return
-      const rawStartTime = new Date(activeSession.started_at).getTime()
-      const sessionStartedAt = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
+      try {
+        const activeSession = await db.sessions.get(sessionId)
+        if (!activeSession) return
+        const rawStartTime = new Date(activeSession.started_at).getTime()
+        const sessionStartedAt = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
 
-      const localEntries: LocalTranscriptEntry[] = messages.filter((message) => message.is_final).map(msg => {
-        const startMs = Number.isFinite(msg.start_ms) ? Math.max(0, msg.start_ms) : 0
-        const endMs = Number.isFinite(msg.end_ms) ? Math.max(startMs, msg.end_ms) : startMs
-        const createdAtTime = sessionStartedAt + startMs
-        const validCreatedAt = Number.isFinite(createdAtTime) ? new Date(createdAtTime).toISOString() : new Date().toISOString()
-        return {
-          id: stringToUUID(`${sessionId}:${msg.id}`),
-          session_id: sessionId,
-          speaker: msg.speaker,
-          original_text: msg.original_text,
-          translated_text: msg.translated_text,
-          start_ms: startMs,
-          end_ms: endMs,
-          created_at: validCreatedAt,
-          sync_status: 'pending',
-          updated_at: new Date().toISOString()
+        const localEntries: LocalTranscriptEntry[] = messages.filter((message) => message.is_final).map(msg => {
+          const startMs = Number.isFinite(msg.start_ms) ? Math.max(0, msg.start_ms) : 0
+          const endMs = Number.isFinite(msg.end_ms) ? Math.max(startMs, msg.end_ms) : startMs
+          const createdAtTime = sessionStartedAt + startMs
+          const validCreatedAt = Number.isFinite(createdAtTime) ? new Date(createdAtTime).toISOString() : new Date().toISOString()
+          return {
+            id: stringToUUID(`${sessionId}:${msg.id}`),
+            session_id: sessionId,
+            speaker: msg.speaker,
+            original_text: msg.original_text,
+            translated_text: msg.translated_text,
+            start_ms: startMs,
+            end_ms: endMs,
+            created_at: validCreatedAt,
+            sync_status: 'pending',
+            updated_at: new Date().toISOString()
+          }
+        })
+
+        if (localEntries.length === 0) return
+
+        const existingEntries = await db.transcriptEntries.bulkGet(localEntries.map((entry) => entry.id))
+        const changedEntries = localEntries.flatMap((entry, index) => {
+          const existing = existingEntries[index]
+          const hasChanged = !existing
+            || existing.original_text !== entry.original_text
+            || existing.translated_text !== entry.translated_text
+            || existing.end_ms !== entry.end_ms
+          return hasChanged ? [{ ...entry, created_at: existing?.created_at || entry.created_at }] : []
+        })
+
+        if (changedEntries.length > 0) {
+          await db.transcriptEntries.bulkPut(changedEntries)
         }
-      })
-
-      if (localEntries.length === 0) return
-
-      const existingEntries = await db.transcriptEntries.bulkGet(localEntries.map((entry) => entry.id))
-      const changedEntries = localEntries.flatMap((entry, index) => {
-        const existing = existingEntries[index]
-        const hasChanged = !existing
-          || existing.original_text !== entry.original_text
-          || existing.translated_text !== entry.translated_text
-          || existing.end_ms !== entry.end_ms
-        return hasChanged ? [{ ...entry, created_at: existing?.created_at || entry.created_at }] : []
-      })
-
-      if (changedEntries.length > 0) {
-        await db.transcriptEntries.bulkPut(changedEntries)
+      } catch (err) {
+        console.warn('Failed to autosave transcript entries:', err)
       }
       
       // Note: We do not trigger syncPendingData() here because this useEffect runs 

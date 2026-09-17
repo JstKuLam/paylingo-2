@@ -143,3 +143,28 @@ test('deleting sessions and folders cascades to session_summaries and shared_sum
   assert.match(sharedSummaryRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(adminSettingsRoute, /'Cache-Control': 'no-store, max-age=0'/)
 })
+
+test('history route enforces multi-tenant ownership on read, update, and delete', async () => {
+  const historyRoute = await source('src/app/api/history/route.ts')
+  const verifyRoute = await source('src/app/api/auth/verify/route.ts')
+  const signoutRoute = await source('src/app/api/auth/signout/route.ts')
+  const magicLinkRoute = await source('src/app/api/auth/send-magic-link/route.ts')
+
+  // History GET protects transcripts from cross-user reads
+  assert.match(historyRoute, /if \(!session\) \{\s*return NextResponse\.json\(\{ item: null, entries: \[\] \}, \{ status: 404/)
+  assert.match(historyRoute, /if \(!folder\) \{\s*return NextResponse\.json\(\{ item: null, sessions: \[\] \}, \{ status: 404/)
+
+  // History DELETE verifies ownership before cascading deletes
+  assert.match(historyRoute, /SELECT id FROM sessions WHERE id = \? AND owner_id = \?/)
+  assert.match(historyRoute, /SELECT id FROM folders WHERE id = \? AND owner_id = \?/)
+
+  // History PATCH verifies destination folder belongs to the user
+  assert.match(historyRoute, /SELECT id FROM folders WHERE id = \? AND owner_id = \?/)
+
+  // Cache-Control headers on sensitive auth and user data endpoints
+  assert.match(historyRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(verifyRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(signoutRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(magicLinkRoute, /'Cache-Control': 'no-store, max-age=0'/)
+})
+

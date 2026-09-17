@@ -17,22 +17,26 @@ export async function GET(request: Request) {
     const single = searchParams.get('single') === '1'
     const id = searchParams.get('id')
     const db = getD1()
+    const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
 
     if (table === 'folders') {
       if (single && id) {
         const folder = await db.prepare('SELECT * FROM folders WHERE id = ? AND owner_id = ?')
           .bind(id, user.id)
           .first()
+        if (!folder) {
+          return NextResponse.json({ item: null, sessions: [] }, { status: 404, headers: noStoreHeader })
+        }
         const sessions = await db.prepare('SELECT * FROM sessions WHERE folder_id = ? AND owner_id = ? ORDER BY started_at DESC')
           .bind(id, user.id)
           .all()
-        return NextResponse.json({ item: folder, sessions: sessions.results || [] })
+        return NextResponse.json({ item: folder, sessions: sessions.results || [] }, { headers: noStoreHeader })
       }
 
       const res = await db.prepare('SELECT * FROM folders WHERE owner_id = ? ORDER BY created_at DESC')
         .bind(user.id)
         .all()
-      return NextResponse.json({ items: res.results || [] })
+      return NextResponse.json({ items: res.results || [] }, { headers: noStoreHeader })
     }
 
     if (table === 'sessions') {
@@ -40,19 +44,22 @@ export async function GET(request: Request) {
         const session = await db.prepare('SELECT * FROM sessions WHERE id = ? AND owner_id = ?')
           .bind(id, user.id)
           .first()
+        if (!session) {
+          return NextResponse.json({ item: null, entries: [] }, { status: 404, headers: noStoreHeader })
+        }
         const entries = await db.prepare('SELECT * FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC')
           .bind(id)
           .all()
-        return NextResponse.json({ item: session, entries: entries.results || [] })
+        return NextResponse.json({ item: session, entries: entries.results || [] }, { headers: noStoreHeader })
       }
 
       const res = await db.prepare('SELECT * FROM sessions WHERE owner_id = ? ORDER BY started_at DESC')
         .bind(user.id)
         .all()
-      return NextResponse.json({ items: res.results || [] })
+      return NextResponse.json({ items: res.results || [] }, { headers: noStoreHeader })
     }
 
-    return NextResponse.json({ items: [] })
+    return NextResponse.json({ items: [] }, { headers: noStoreHeader })
   } catch (err: unknown) {
     console.error('Error in history GET API:', err)
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi lấy dữ liệu lịch sử' }, { status: 500 })
@@ -75,6 +82,14 @@ export async function PATCH(request: Request) {
 
     if (table === 'sessions' && value && payload) {
       if ('folder_id' in payload) {
+        if (payload.folder_id !== null) {
+          const folder = await db.prepare('SELECT id FROM folders WHERE id = ? AND owner_id = ?')
+            .bind(payload.folder_id, user.id)
+            .first()
+          if (!folder) {
+            return NextResponse.json({ success: false, error: 'Thư mục không tồn tại hoặc không có quyền' }, { status: 400 })
+          }
+        }
         await db.prepare('UPDATE sessions SET folder_id = ?, updated_at = datetime(\'now\') WHERE id = ? AND owner_id = ?')
           .bind(payload.folder_id, value, user.id)
           .run()
@@ -114,6 +129,12 @@ export async function DELETE(request: Request) {
     const db = getD1()
 
     if (table === 'sessions' && field === 'id' && value) {
+      const session = await db.prepare('SELECT id FROM sessions WHERE id = ? AND owner_id = ?')
+        .bind(value, user.id)
+        .first()
+      if (!session) {
+        return NextResponse.json({ success: false, error: 'Không tìm thấy phiên hoặc không có quyền' }, { status: 404 })
+      }
       await db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(value).run()
       await db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(value).run()
       await db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(value).run()
@@ -122,6 +143,12 @@ export async function DELETE(request: Request) {
     }
 
     if (table === 'folders' && field === 'id' && value) {
+      const folder = await db.prepare('SELECT id FROM folders WHERE id = ? AND owner_id = ?')
+        .bind(value, user.id)
+        .first()
+      if (!folder) {
+        return NextResponse.json({ success: false, error: 'Không tìm thấy thư mục hoặc không có quyền' }, { status: 404 })
+      }
       await db.prepare('UPDATE sessions SET folder_id = NULL WHERE folder_id = ? AND owner_id = ?').bind(value, user.id).run()
       await db.prepare('DELETE FROM session_summaries WHERE folder_id = ?').bind(value).run()
       await db.prepare('DELETE FROM shared_summaries WHERE folder_id = ?').bind(value).run()
