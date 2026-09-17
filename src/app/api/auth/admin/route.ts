@@ -100,7 +100,11 @@ export async function POST(req: Request) {
         maxAge: 30 * 86400
       })
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      })
     }
 
     if (action === 'logout') {
@@ -111,7 +115,11 @@ export async function POST(req: Request) {
         sameSite: 'strict',
         maxAge: 0
       })
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      })
     }
 
     if (action === 'get-challenge') {
@@ -142,6 +150,10 @@ export async function POST(req: Request) {
       return NextResponse.json({
         challengeToken,
         credentialId: creds.passkeyCredId
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
       })
     }
 
@@ -214,7 +226,11 @@ export async function POST(req: Request) {
           maxAge: 30 * 86400
         })
 
-        return NextResponse.json({ success: true })
+        return NextResponse.json({ success: true }, {
+          headers: {
+            'Cache-Control': 'no-store, max-age=0',
+          },
+        })
       } catch (err) {
         console.error('Passkey verification error:', err)
         return NextResponse.json({ error: 'Xác thực passkey thất bại' }, { status: 400 })
@@ -249,7 +265,11 @@ export async function POST(req: Request) {
         maxAge: 30 * 86400
       })
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      })
     }
 
     if (action === 'passkey-register') {
@@ -263,7 +283,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Không thể lưu passkey đăng ký' }, { status: 500 })
       }
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      })
     }
 
     if (action === 'toggle-passkey') {
@@ -273,7 +297,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Không thể thay đổi cài đặt passkey' }, { status: 500 })
       }
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      })
     }
 
     if (action === 'disable-passkey') {
@@ -282,7 +310,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Không thể hủy đăng ký passkey' }, { status: 500 })
       }
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      })
     }
 
     return NextResponse.json({ error: 'Hành động không hợp lệ' }, { status: 400 })

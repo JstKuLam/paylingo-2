@@ -42,5 +42,7 @@ test('account deletion is authenticated and removes owned data before auth user'
     source.indexOf('DELETE FROM sessions') < source.indexOf('DELETE FROM auth_users'),
   )
   assert.match(source, /Cache-Control['"]:\s*['"]no-store/)
+  assert.match(source, /response\.cookies\.set/)
+  assert.match(source, /AUTH_COOKIE_NAME/)
   assert.doesNotMatch(source, /PayLingo account:', error\)/)
 })

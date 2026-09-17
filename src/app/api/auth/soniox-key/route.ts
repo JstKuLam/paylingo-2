@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser } from '@/lib/auth/session'
+import { getAuthenticatedUser, AUTH_COOKIE_NAME } from '@/lib/auth/session'
 import { isAllowedEmail } from '@/lib/auth-utils'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getD1 } from '@/lib/d1-client'
@@ -125,7 +125,7 @@ export async function DELETE(request: NextRequest) {
     await db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(user.id).run()
     await db.prepare('DELETE FROM auth_users WHERE id = ?').bind(user.id).run()
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       { success: true },
       {
         headers: {
@@ -134,6 +134,18 @@ export async function DELETE(request: NextRequest) {
         },
       },
     )
+
+    response.cookies.set({
+      name: AUTH_COOKIE_NAME,
+      value: '',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    })
+
+    return response
   } catch (error: unknown) {
     console.error('Unable to delete PayLingo account:', errorKind(error))
     return NextResponse.json(

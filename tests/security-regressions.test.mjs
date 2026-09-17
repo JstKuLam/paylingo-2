@@ -171,6 +171,7 @@ test('history route enforces multi-tenant ownership on read, update, and delete'
   const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
   const sharedSummaryRoute = await source('src/app/api/shared/summary/route.ts')
   const adminSessionsRoute = await source('src/app/api/admin/sessions/route.ts')
+  const adminAuthRoute = await source('src/app/api/auth/admin/route.ts')
   const historyPage = await source('src/app/history/page.tsx')
 
   assert.match(historyRoute, /'Cache-Control': 'no-store, max-age=0'/)
@@ -180,6 +181,7 @@ test('history route enforces multi-tenant ownership on read, update, and delete'
   assert.match(summarizeRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(sharedSummaryRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(adminSessionsRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(adminAuthRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(historyPage, /f\.owner_id === currentOwnerId/)
   assert.match(historyPage, /s\.owner_id === currentOwnerId/)
 })
