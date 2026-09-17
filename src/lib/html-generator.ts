@@ -57,12 +57,15 @@ function escapeHtml(value: string): string {
  * Fallback to split sections if standard extraction fails.
  */
 function extractFallback(markdown: string, partIndex: number): string {
-  const parts = markdown.split(/(?:#+|\*\*)\s*(?:\d+\.)?\s*(?=[A-ZĐNTRQST])/i)
-  if (parts.length > partIndex) {
-    // Strip the first line (header) of the part
-    const lines = parts[partIndex].split('\n')
-    lines.shift()
-    return lines.join('\n').trim()
+  const parts = markdown.split(/(?:#+|\*\*)\s*(?=\d+\.|\b[A-ZĐNTRQST])/i)
+  for (const part of parts) {
+    const trimmed = part.trim()
+    const firstLine = trimmed.split('\n')[0] || ''
+    if (new RegExp(`^\\s*${partIndex}\\.`, 'i').test(firstLine)) {
+      const lines = trimmed.split('\n')
+      lines.shift()
+      return lines.join('\n').trim()
+    }
   }
   return ''
 }
@@ -109,6 +112,15 @@ function mdToHtml(md: string): string {
   return processedLines.join('\n')
 }
 
+function cleanMindMap(raw: string): string {
+  if (!raw) return ''
+  return raw
+    .trim()
+    .replace(/^```[a-z0-9_-]*\r?\n?/i, '')
+    .replace(/\r?\n?```$/i, '')
+    .trim()
+}
+
 export function generatePremiumHTMLReport({
   sessionName,
   partnerLang = 'English',
@@ -124,7 +136,8 @@ export function generatePremiumHTMLReport({
   const actionItems = extractSection(markdown, 'Hành động kế tiếp|Action Items') || extractFallback(markdown, 4)
   const decisions = extractSection(markdown, 'Quyết định|Decisions') || extractFallback(markdown, 5)
   const risks = extractSection(markdown, 'Rủi ro|Risks') || extractFallback(markdown, 6)
-  const mindMap = extractSection(markdown, 'Sơ đồ tư duy|Mind Map') || extractFallback(markdown, 7)
+  const rawMindMap = extractSection(markdown, 'Sơ đồ tư duy|Mind Map') || extractFallback(markdown, 7)
+  const mindMap = cleanMindMap(rawMindMap)
 
   const cleanTextHtml = mdToHtml(cleanText)
   const speakerIdHtml = mdToHtml(speakerId)
@@ -439,6 +452,19 @@ export function generatePremiumHTMLReport({
         border: none;
         box-shadow: none;
         padding: 0;
+        max-width: 100%;
+      }
+      .section-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border: 1px solid #cbd5e1;
+      }
+      .mindmap-code {
+        white-space: pre-wrap;
+        word-break: break-all;
+        background: #f8fafc;
+        color: #0f172a;
+        border: 1px solid #cbd5e1;
       }
     }
   </style>
@@ -573,6 +599,8 @@ export function safeHtmlFilename(sessionName: string | null | undefined): string
   const dateStr = new Date().toISOString().slice(0, 10)
   const cleanName = safeName
     .toLowerCase()
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // remove tone marks
     .replace(/[\x00-\x1f\x7f\\/:*?"<>|]+/g, '_')

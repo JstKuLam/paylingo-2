@@ -1,6 +1,7 @@
 import type { LocalTranscriptEntry } from './db'
 
-function escapeHtml(value: string) {
+function escapeHtml(value: unknown): string {
+  if (typeof value !== 'string') return ''
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -36,12 +37,16 @@ export function generateSessionPrintHTML(
   startedAt: string,
   entries: LocalTranscriptEntry[]
 ) {
+  const safeSessionName = typeof sessionName === 'string' && sessionName.trim() ? sessionName.trim() : 'Hội thoại PayLingo'
+  const safeEntries = Array.isArray(entries) ? entries : []
   const safeLanguage = /^[a-z]{2,3}(?:-[a-z0-9]+)*$/i.test(partnerLang) ? partnerLang : 'und'
-  const rows = entries.map((entry) => {
-    const hostText = entry.speaker === 'host' ? entry.original_text : entry.translated_text
-    const partnerText = entry.speaker === 'partner' ? entry.original_text : entry.translated_text
-    const hostLabel = entry.speaker === 'host' ? 'Bạn' : `${partnerLangName} (dịch)`
-    const partnerLabel = entry.speaker === 'partner' ? partnerLangName : 'Bạn (dịch)'
+  const safePartnerLangName = partnerLangName || 'Đối tác'
+
+  const rows = safeEntries.map((entry) => {
+    const hostText = entry.speaker === 'host' ? (entry.original_text || '') : (entry.translated_text || '')
+    const partnerText = entry.speaker === 'partner' ? (entry.original_text || '') : (entry.translated_text || '')
+    const hostLabel = entry.speaker === 'host' ? 'Bạn' : `${safePartnerLangName} (dịch)`
+    const partnerLabel = entry.speaker === 'partner' ? safePartnerLangName : 'Bạn (dịch)'
 
     return `
       <tr>
@@ -62,7 +67,7 @@ export function generateSessionPrintHTML(
     <html lang="vi">
       <head>
         <meta charset="utf-8">
-        <title>${escapeHtml(sessionName)} - PayLingo</title>
+        <title>${escapeHtml(safeSessionName)} - PayLingo</title>
         <style>
           @page { size: A4; margin: 16mm; }
           * { box-sizing: border-box; }
@@ -155,17 +160,21 @@ export async function downloadSessionTXT(
   const formattedDate = Number.isFinite(new Date(startedAt).getTime())
     ? new Date(startedAt).toLocaleString('vi-VN')
     : 'Không rõ'
+  const safeSessionName = typeof sessionName === 'string' && sessionName.trim() ? sessionName.trim() : 'Hội thoại PayLingo'
+  const safePartnerLangName = partnerLangName || 'Đối tác'
+  const safeEntries = Array.isArray(entries) ? entries : []
+
   let txtContent = '==================================================\n'
-  txtContent += `HỘI THOẠI: ${sessionName}\n`
+  txtContent += `HỘI THOẠI: ${safeSessionName}\n`
   txtContent += `Thời gian bắt đầu: ${formattedDate}\n`
-  txtContent += `Ngôn ngữ đối tác: ${partnerLangName}\n`
+  txtContent += `Ngôn ngữ đối tác: ${safePartnerLangName}\n`
   txtContent += '==================================================\n\n'
 
-  entries.forEach((entry) => {
-    const speaker = entry.speaker === 'host' ? 'BẠN' : partnerLangName.toUpperCase()
+  safeEntries.forEach((entry) => {
+    const speaker = entry.speaker === 'host' ? 'BẠN' : safePartnerLangName.toUpperCase()
     txtContent += `[${formatOffset(entry.start_ms)}] ${speaker}:\n`
-    txtContent += `- Gốc: ${entry.original_text}\n`
-    txtContent += `- Dịch: ${entry.translated_text}\n`
+    txtContent += `- Gốc: ${entry.original_text || ''}\n`
+    txtContent += `- Dịch: ${entry.translated_text || ''}\n`
     txtContent += '--------------------------------------------------\n'
   })
 
@@ -173,7 +182,7 @@ export async function downloadSessionTXT(
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${safeFilename(sessionName)}.txt`
+  link.download = `${safeFilename(safeSessionName)}.txt`
   document.body.appendChild(link)
   link.click()
   link.remove()
@@ -187,22 +196,27 @@ export async function downloadSessionJSON(
   startedAt: string,
   entries: LocalTranscriptEntry[]
 ) {
+  const safeSessionName = typeof sessionName === 'string' && sessionName.trim() ? sessionName.trim() : 'Hội thoại PayLingo'
+  const safePartnerLang = partnerLang || 'und'
+  const safePartnerLangName = partnerLangName || 'Đối tác'
+  const safeEntries = Array.isArray(entries) ? entries : []
+
   const exportData = {
     appName: 'PayLingo',
-    sessionName,
-    partnerLang,
-    partnerLangName,
+    sessionName: safeSessionName,
+    partnerLang: safePartnerLang,
+    partnerLangName: safePartnerLangName,
     startedAt,
     exportedAt: new Date().toISOString(),
-    entriesCount: entries.length,
-    entries: entries.map((entry) => ({
+    entriesCount: safeEntries.length,
+    entries: safeEntries.map((entry) => ({
       id: entry.id,
       speaker: entry.speaker,
-      original_text: entry.original_text,
-      translated_text: entry.translated_text,
-      start_ms: entry.start_ms,
-      end_ms: entry.end_ms,
-      created_at: entry.created_at,
+      original_text: entry.original_text || '',
+      translated_text: entry.translated_text || '',
+      start_ms: Number.isFinite(entry.start_ms) ? Math.max(0, entry.start_ms) : 0,
+      end_ms: Number.isFinite(entry.end_ms) ? Math.max(0, entry.end_ms) : 0,
+      created_at: entry.created_at || '',
     })),
   }
 
@@ -211,7 +225,7 @@ export async function downloadSessionJSON(
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${safeFilename(sessionName)}.json`
+  link.download = `${safeFilename(safeSessionName)}.json`
   document.body.appendChild(link)
   link.click()
   link.remove()

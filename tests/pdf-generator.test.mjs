@@ -76,3 +76,30 @@ test('safeFilename strips control characters, path separators, dot prefixes, and
   assert.equal(result.length, 64)
 })
 
+test('printable transcript handles null entries, empty session names and missing texts safely', () => {
+  const html = generateSessionPrintHTML('', 'en', '', 'invalid', null)
+  assert.match(html, /<title>Hội thoại PayLingo - PayLingo<\/title>/)
+  assert.match(html, /<tbody><\/tbody>/)
+
+  const htmlWithMissingText = generateSessionPrintHTML(
+    'Test Session',
+    'en',
+    'English',
+    '2026-01-01T00:00:00Z',
+    [{
+      id: 'e1',
+      session_id: 's1',
+      speaker: 'partner',
+      original_text: null,
+      translated_text: undefined,
+      start_ms: -100,
+      end_ms: 1000,
+      created_at: '',
+      sync_status: 'synced',
+      updated_at: '',
+    }]
+  )
+  assert.match(htmlWithMissingText, /00:00:00/)
+  assert.match(htmlWithMissingText, /<p><\/p>/)
+})
+
