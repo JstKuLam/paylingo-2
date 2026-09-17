@@ -120,10 +120,10 @@ export async function POST(request: Request) {
       syncedSessions,
       syncedEntries,
     })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in sync API:', err)
     return NextResponse.json(
-      { error: err?.message || 'Lỗi hệ thống khi đồng bộ dữ liệu.' },
+      { error: err instanceof Error ? err.message : 'Lỗi hệ thống khi đồng bộ dữ liệu.' },
       { status: 500 }
     )
   }

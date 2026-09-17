@@ -11,13 +11,15 @@ interface UseSessionLifecycleProps {
   isActive: boolean
   messages: TranscriptMessage[]
   stopRecording: () => Promise<void>
+  silenceAlertMessage?: string
 }
 
 export function useSessionLifecycle({
   partnerLang,
   isActive,
   messages,
-  stopRecording
+  stopRecording,
+  silenceAlertMessage,
 }: UseSessionLifecycleProps) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [silenceWarning, setSilenceWarning] = useState(false)
@@ -30,10 +32,15 @@ export function useSessionLifecycle({
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const stopRecordingRef = useRef(stopRecording)
+  const silenceAlertMessageRef = useRef(silenceAlertMessage)
 
   useEffect(() => {
     stopRecordingRef.current = stopRecording
   }, [stopRecording])
+
+  useEffect(() => {
+    silenceAlertMessageRef.current = silenceAlertMessage
+  }, [silenceAlertMessage])
 
   // Track network online status
   useEffect(() => {
@@ -296,7 +303,7 @@ export function useSessionLifecycle({
         silenceTimerRef.current = setTimeout(async () => {
           await stopRecordingRef.current()
           await stopSession()
-          alert('Hội thoại đã tự động kết thúc do 5 phút không hoạt động để tránh hao tổn phí API.')
+          alert(silenceAlertMessageRef.current || 'Hội thoại đã tự động kết thúc do 5 phút không hoạt động để tránh hao tổn phí API.')
         }, 60000)
 
       }, 240000)

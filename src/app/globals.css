@@ -103,6 +103,8 @@
   --color-host: var(--primary);
   --color-partner: var(--partner);
   --color-amber-glow: var(--warning);
+  --color-brand-start: #859EFF;
+  --color-brand-end: #5427D4;
   --font-sans: var(--font-app-sans);
   --font-mono: var(--font-app-mono);
   --radius-sm: 4px;

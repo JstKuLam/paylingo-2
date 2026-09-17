@@ -552,8 +552,8 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/admin/sessions?id=${encodeURIComponent(session.id)}`).then(r => r.json())
       setSessionEntries((res.entries || []) as AdminTranscriptEntry[])
-    } catch (err: any) {
-      setDataError(err?.message || 'Không thể tải transcript')
+    } catch (err: unknown) {
+      setDataError(err instanceof Error ? err.message : 'Không thể tải transcript')
     } finally {
       setLoadingEntries(false)
     }
@@ -573,8 +573,8 @@ export default function AdminPage() {
       }
       setGlobalSessions((current) => current.filter((session) => session.id !== viewingSession.id))
       setViewingSession(null)
-    } catch (err: any) {
-      setDataError(err?.message || 'Không thể xóa phiên')
+    } catch (err: unknown) {
+      setDataError(err instanceof Error ? err.message : 'Không thể xóa phiên')
     }
   }
 

@@ -341,6 +341,7 @@ function SessionActiveArea({
     isActive,
     messages,
     stopRecording: stop,
+    silenceAlertMessage: t.silenceTimeoutAlert,
   })
 
   const selectedPartner = getPartnerLanguage(partnerLang, language) ?? PARTNER_LANGUAGES[0]

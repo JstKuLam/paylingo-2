@@ -12,11 +12,20 @@ interface SmtpConfig {
   from: string
 }
 
+interface EdgeSocket {
+  writable: { getWriter: () => WritableStreamDefaultWriter<Uint8Array> }
+  readable: { getReader: () => ReadableStreamDefaultReader<Uint8Array> }
+}
+
+interface CfSocketsModule {
+  connect: (address: { hostname: string; port: number }, options?: { secureTransport?: string }) => EdgeSocket
+}
+
 async function sendSmtpViaEdgeSocket(options: SmtpEmailOptions, config: SmtpConfig) {
-  // @ts-ignore
-  const cfSockets: any = await import(/* webpackIgnore: true */ 'cloudflare:sockets')
+  // @ts-expect-error cloudflare:sockets is dynamically provided at edge runtime
+  const cfSockets = (await import(/* webpackIgnore: true */ 'cloudflare:sockets')) as CfSocketsModule
   
-  const socket: any = cfSockets.connect(
+  const socket = cfSockets.connect(
     { hostname: config.host, port: config.port },
     { secureTransport: 'on' }
   )
@@ -129,7 +138,7 @@ async function sendSmtpViaEdgeSocket(options: SmtpEmailOptions, config: SmtpConf
 function sendSmtpViaNodeTls(options: SmtpEmailOptions, config: SmtpConfig): Promise<{ success: boolean; error?: string }> {
   return new Promise((resolve, reject) => {
     try {
-      const proc = (globalThis as any).process
+      const proc = (globalThis as unknown as { process?: { getBuiltinModule?: (name: string) => { connect: (port: number, host: string, cb: () => void) => { on: (event: string, handler: (data: Buffer) => void) => void; write: (data: string) => void; end: () => void } } } }).process
       const tls = typeof proc?.getBuiltinModule === 'function' ? proc.getBuiltinModule('node:tls') : null
       if (!tls) {
         throw new Error('Node TLS module not accessible')
@@ -192,7 +201,7 @@ function sendSmtpViaNodeTls(options: SmtpEmailOptions, config: SmtpConfig): Prom
         }
       })
 
-      socket.on('error', reject)
+      socket.on('error', (err: unknown) => reject(err instanceof Error ? err : new Error(String(err))))
     } catch (e) {
       reject(e)
     }
@@ -210,11 +219,11 @@ export async function sendEmail(options: SmtpEmailOptions): Promise<{ success: b
 
   try {
     // 1. Try Cloudflare Sockets if running on Cloudflare Edge
-    if (typeof (globalThis as any).WebSocketPair !== 'undefined') {
+    if (typeof (globalThis as unknown as { WebSocketPair?: unknown }).WebSocketPair !== 'undefined') {
       try {
         await sendSmtpViaEdgeSocket(options, config)
         return { success: true }
-      } catch (edgeErr: any) {
+      } catch (edgeErr: unknown) {
         console.error('Edge socket send error:', edgeErr)
         throw edgeErr
       }
@@ -223,8 +232,8 @@ export async function sendEmail(options: SmtpEmailOptions): Promise<{ success: b
     // 2. Node.js runtime fallback (local dev / test) via direct TLS socket
     await sendSmtpViaNodeTls(options, config)
     return { success: true }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Failed to send email via SMTP:', err)
-    return { success: false, error: err.message || 'Lỗi gửi email SMTP' }
+    return { success: false, error: err instanceof Error ? err.message : 'Lỗi gửi email SMTP' }
   }
 }

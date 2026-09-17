@@ -42,10 +42,10 @@ export async function POST(request: Request) {
     })
 
     return response
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in verify route:', err)
     return NextResponse.json(
-      { error: err?.message || 'Lỗi hệ thống khi xác thực.' },
+      { error: err instanceof Error ? err.message : 'Lỗi hệ thống khi xác thực.' },
       { status: 500 }
     )
   }

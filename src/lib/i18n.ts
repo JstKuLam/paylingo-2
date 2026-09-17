@@ -74,6 +74,7 @@ export interface I18nTranslations {
   wakeLockNotice: string
   silenceWarningTitle: string
   silenceWarningDesc: string
+  silenceTimeoutAlert: string
   errorInitService: string
   errorStartSession: string
   errorStopSession: string
@@ -295,6 +296,7 @@ export const translations: Record<Language, I18nTranslations> = {
     wakeLockNotice: 'Thiết bị có thể tự tắt màn hình. Hãy tăng thời gian chờ trong cài đặt hệ thống.',
     silenceWarningTitle: 'Sắp tự động dừng',
     silenceWarningDesc: 'Không có âm thanh trong 4 phút. Phiên sẽ dừng sau 1 phút nữa để tránh phát sinh chi phí.',
+    silenceTimeoutAlert: 'Hội thoại đã tự động kết thúc do 5 phút không hoạt động để tránh hao tổn phí API.',
     errorInitService: 'Không thể khởi tạo dịch vụ phiên dịch.',
     errorStartSession: 'Không thể bắt đầu phiên. Vui lòng kiểm tra micro và thử lại.',
     errorStopSession: 'Kết nối âm thanh đã ngắt, nhưng dữ liệu trên máy vẫn được lưu.',
@@ -514,6 +516,7 @@ export const translations: Record<Language, I18nTranslations> = {
     wakeLockNotice: 'Device may sleep automatically. Consider extending screen timeout in system settings.',
     silenceWarningTitle: 'Auto-stop warning',
     silenceWarningDesc: 'No speech detected for 4 minutes. Session will stop in 1 minute to avoid unnecessary charges.',
+    silenceTimeoutAlert: 'Conversation automatically ended after 5 minutes of inactivity to save API usage.',
     errorInitService: 'Failed to initialize interpreter service.',
     errorStartSession: 'Failed to start session. Please check your microphone and try again.',
     errorStopSession: 'Audio connection closed, but local transcript has been saved.',
@@ -733,6 +736,7 @@ export const translations: Record<Language, I18nTranslations> = {
     wakeLockNotice: '设备可能会自动息屏。请在系统设置中延长屏幕常亮时间。',
     silenceWarningTitle: '即将自动停止',
     silenceWarningDesc: '已 4 分钟未检测到声音。为避免产生不必要的费用，同传将在 1 分钟后停止。',
+    silenceTimeoutAlert: '由于 5 分钟未检测到活动，对话已自动结束以节省 API 费用。',
     errorInitService: '无法初始化同传服务。',
     errorStartSession: '无法开始同传，请检查麦克风并重试。',
     errorStopSession: '音频连接已断开，但本地记录已保存。',

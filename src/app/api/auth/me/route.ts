@@ -11,7 +11,7 @@ export async function GET(request: Request) {
       user: user || null,
       authenticated: !!user,
     })
-  } catch (err: any) {
-    return NextResponse.json({ user: null, authenticated: false, error: err?.message }, { status: 500 })
+  } catch (err: unknown) {
+    return NextResponse.json({ user: null, authenticated: false, error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 })
   }
 }

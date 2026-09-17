@@ -42,24 +42,24 @@ export default function PayPayLogo({ className = '', width = '100%', height = '1
       />
       <defs>
         <linearGradient id="paint0_linear_634_381" x1="15.5712" y1="0" x2="15.5712" y2="42.2145" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#859EFF"/>
-          <stop offset="1" stopColor="#5427D4"/>
+          <stop stopColor="var(--color-brand-start)"/>
+          <stop offset="1" stopColor="var(--color-brand-end)"/>
         </linearGradient>
         <linearGradient id="paint1_linear_634_381" x1="113.621" y1="10.1982" x2="113.621" y2="32.3135" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#859EFF"/>
-          <stop offset="1" stopColor="#5427D4"/>
+          <stop stopColor="var(--color-brand-start)"/>
+          <stop offset="1" stopColor="var(--color-brand-end)"/>
         </linearGradient>
         <linearGradient id="paint2_linear_634_381" x1="84.8432" y1="9" x2="84.8432" y2="27.5713" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#859EFF"/>
-          <stop offset="1" stopColor="#5427D4"/>
+          <stop stopColor="var(--color-brand-start)"/>
+          <stop offset="1" stopColor="var(--color-brand-end)"/>
         </linearGradient>
         <linearGradient id="paint3_linear_634_381" x1="84.8432" y1="9" x2="84.5175" y2="32.2482" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#859EFF"/>
-          <stop offset="1" stopColor="#5427D4"/>
+          <stop stopColor="var(--color-brand-start)"/>
+          <stop offset="1" stopColor="var(--color-brand-end)"/>
         </linearGradient>
         <linearGradient id="paint4_linear_634_381" x1="59.8817" y1="9.81051" x2="59.8817" y2="31.9705" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#859EFF"/>
-          <stop offset="1" stopColor="#5427D4"/>
+          <stop stopColor="var(--color-brand-start)"/>
+          <stop offset="1" stopColor="var(--color-brand-end)"/>
         </linearGradient>
       </defs>
     </svg>

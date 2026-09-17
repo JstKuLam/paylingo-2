@@ -29,9 +29,9 @@ export async function GET(request: Request) {
       FROM sessions s
       ORDER BY s.started_at DESC
       LIMIT 500
-    `).all()
+    `).all<Record<string, unknown>>()
 
-    const formatted = (sessions.results || []).map((s: any) => ({
+    const formatted = (sessions.results || []).map((s: Record<string, unknown>) => ({
       ...s,
       transcript_entries: [{ count: Number(s.transcript_count || 0) }]
     }))

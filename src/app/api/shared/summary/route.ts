@@ -27,11 +27,18 @@ const shareRequestSchema = z.object({
  */
 export async function GET(req: Request) {
   try {
+    const getLimit = checkRateLimit({
+      key: `shared-summary-get:${getRequestIp(req)}`,
+      limit: 60,
+      windowMs: 60_000,
+    })
+    if (!getLimit.allowed) return rateLimitResponse(getLimit.retryAfterSeconds)
+
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
 
-    if (!id) {
-      return NextResponse.json({ error: 'Thiếu ID chia sẻ' }, { status: 400 })
+    if (!id || typeof id !== 'string' || id.length > 64) {
+      return NextResponse.json({ error: 'Thiếu hoặc ID chia sẻ không hợp lệ' }, { status: 400 })
     }
 
     const db = getD1()

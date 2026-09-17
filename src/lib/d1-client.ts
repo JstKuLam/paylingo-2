@@ -17,12 +17,19 @@ let cachedDb: D1Database | null = null
 
 function loadLocalDatabase(): D1Database | null {
   try {
-    const proc = (globalThis as any).process
+    const proc = (globalThis as unknown as {
+      process?: {
+        env?: Record<string, string>
+        getBuiltinModule?: (name: string) => { createRequire?: (path: string) => (id: string) => { getLocalD1: () => D1Database } }
+        cwd?: () => string
+      }
+    }).process
+
     if (proc && proc.env?.NEXT_RUNTIME !== 'edge') {
-      let req: any = null
+      let req: ((id: string) => { getLocalD1: () => D1Database }) | null = null
       if (typeof proc.getBuiltinModule === 'function') {
         const mod = proc.getBuiltinModule('node:module')
-        if (mod && typeof mod.createRequire === 'function') {
+        if (mod && typeof mod.createRequire === 'function' && typeof proc.cwd === 'function') {
           req = mod.createRequire(proc.cwd() + '/package.json')
         }
       }
@@ -32,7 +39,7 @@ function loadLocalDatabase(): D1Database | null {
         return local.getLocalD1()
       }
     }
-  } catch (e) {
+  } catch {
     // Edge runtime or require not supported
   }
   return null
@@ -46,7 +53,7 @@ function loadLocalDatabase(): D1Database | null {
 export function getD1(): D1Database {
   if (cachedDb) return cachedDb
 
-  const g = globalThis as any
+  const g = globalThis as unknown as { DB?: D1Database; __env__?: { DB?: D1Database } }
   if (g.DB && typeof g.DB.prepare === 'function') {
     cachedDb = g.DB
     return g.DB
@@ -55,8 +62,9 @@ export function getD1(): D1Database {
     cachedDb = g.__env__.DB
     return g.__env__.DB
   }
-  if (process.env.DB && typeof (process.env.DB as any).prepare === 'function') {
-    cachedDb = process.env.DB as unknown as D1Database
+  const envDb = process.env.DB as unknown as D1Database | undefined
+  if (envDb && typeof envDb.prepare === 'function') {
+    cachedDb = envDb
     return cachedDb
   }
 

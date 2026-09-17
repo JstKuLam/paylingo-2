@@ -117,7 +117,7 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
       throw new Error(errData.error || `Sync API error ${res.status}`)
     }
 
-    const data = await res.json()
+    await res.json()
 
     // Mark folders as synced
     if (ownedFolders.length > 0) {
@@ -173,24 +173,33 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
  * Initializes automatic background synchronization listeners.
  */
 let stopAutoSync: (() => void) | null = null
+let autoSyncRefCount = 0
 
 export function initAutoSync() {
   if (typeof window === 'undefined') return () => undefined
-  if (stopAutoSync) return stopAutoSync
+  autoSyncRefCount++
 
-  const handleOnline = () => void syncPendingData()
-  window.addEventListener('online', handleOnline)
+  if (!stopAutoSync) {
+    const handleOnline = () => void syncPendingData()
+    window.addEventListener('online', handleOnline)
 
-  const intervalId = window.setInterval(() => {
-    if (navigator.onLine) {
-      void syncPendingData()
+    const intervalId = window.setInterval(() => {
+      if (navigator.onLine) {
+        void syncPendingData()
+      }
+    }, 15000)
+
+    stopAutoSync = () => {
+      window.removeEventListener('online', handleOnline)
+      window.clearInterval(intervalId)
+      stopAutoSync = null
     }
-  }, 15000)
-
-  stopAutoSync = () => {
-    window.removeEventListener('online', handleOnline)
-    window.clearInterval(intervalId)
-    stopAutoSync = null
   }
-  return stopAutoSync
+
+  return () => {
+    autoSyncRefCount = Math.max(0, autoSyncRefCount - 1)
+    if (autoSyncRefCount === 0 && stopAutoSync) {
+      stopAutoSync()
+    }
+  }
 }

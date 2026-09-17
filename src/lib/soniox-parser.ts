@@ -78,8 +78,7 @@ function cleanTranscriptText(text: string): string {
   const expanded = expandVietnameseAbbreviations(text)
   return expanded
     .replace(/\s+/g, ' ')                  // collapse multiple spaces
-    .replace(/\s+([.,!?;:])$/g, '$1')      // remove space before end punctuation
-    .replace(/\s+([.,!?;:])\s+/g, '$1 ')   // remove space before punctuation but keep one after
+    .replace(/\s+([.,!?;:])/g, '$1')       // remove space before any punctuation
     .trim()
     .normalize('NFC')
 }
@@ -134,10 +133,9 @@ export function parseTokensToMessages(
     const tokenText = token.text
 
     if (isOriginal) {
-      const startMs = token.start_ms ?? 0
-      const endMs = token.end_ms ?? 0
-      
       const lastMsg = speaker === 'host' ? lastHostMessage : lastPartnerMessage
+      const startMs = token.start_ms ?? (lastMsg ? lastMsg.end_ms : 0)
+      const endMs = token.end_ms ?? startMs
 
       const shouldStartNew =
         !lastMsg ||

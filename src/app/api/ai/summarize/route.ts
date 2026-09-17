@@ -9,6 +9,7 @@ export const runtime = 'edge'
 
 
 interface TranscriptEntry {
+  session_id?: string
   speaker: 'host' | 'partner'
   original_text: string
   translated_text: string
@@ -23,6 +24,7 @@ interface SummarySession {
 }
 
 const transcriptEntrySchema = z.object({
+  session_id: z.string().optional(),
   speaker: z.enum(['host', 'partner']),
   original_text: z.string(),
   translated_text: z.string(),
@@ -129,7 +131,7 @@ export async function POST(req: Request) {
       sessionsToSummarize.forEach((sess, idx) => {
         const dateStr = new Date(sess.started_at).toLocaleString('vi-VN')
         formattedTranscript += `=== CUỘC HỘI THOẠI ${idx + 1}: ${sess.name || 'Chưa đặt tên'} (${dateStr}) ===\n`
-        const sessEntries = allEntries.filter((e: any) => e.session_id === sess.id || !e.session_id)
+        const sessEntries = allEntries.filter((e: TranscriptEntry) => e.session_id === sess.id || !e.session_id)
         sessEntries.forEach((entry) => {
           const timeStr = `${Math.floor(entry.start_ms / 1000)}s`
           const speaker = entry.speaker === 'host' ? 'Host (Người Việt)' : 'Partner (Đối tác)'

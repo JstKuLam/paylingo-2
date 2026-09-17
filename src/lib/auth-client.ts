@@ -46,8 +46,8 @@ export const authClient = {
       cachedUser = data.user || null
       hasFetchedInitial = true
       return { data: { user: cachedUser }, error: null }
-    } catch (err: any) {
-      return { data: { user: cachedUser }, error: err }
+    } catch (err: unknown) {
+      return { data: { user: cachedUser }, error: err instanceof Error ? err : new Error(String(err)) }
     }
   },
 
@@ -75,8 +75,8 @@ export const authClient = {
         return { error: new Error(data.error || 'Gửi mã xác thực thất bại') }
       }
       return { error: null }
-    } catch (err: any) {
-      return { error: err }
+    } catch (err: unknown) {
+      return { error: err instanceof Error ? err : new Error(String(err)) }
     }
   },
 
@@ -98,8 +98,8 @@ export const authClient = {
       }
       notify('SIGNED_IN', session)
       return { data: { user: cachedUser }, error: null }
-    } catch (err: any) {
-      return { data: { user: null }, error: err }
+    } catch (err: unknown) {
+      return { data: { user: null }, error: err instanceof Error ? err : new Error(String(err)) }
     }
   },
 
@@ -109,10 +109,10 @@ export const authClient = {
       cachedUser = null
       notify('SIGNED_OUT', null)
       return { error: null }
-    } catch (err: any) {
+    } catch (err: unknown) {
       cachedUser = null
       notify('SIGNED_OUT', null)
-      return { error: err }
+      return { error: err instanceof Error ? err : new Error(String(err)) }
     }
   },
 

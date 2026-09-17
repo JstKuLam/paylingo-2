@@ -16,6 +16,14 @@ export function checkRateLimit(options: { key: string; limit: number; windowMs: 
   const now = Date.now()
   const current = buckets.get(options.key)
 
+  if (buckets.size > 500) {
+    for (const [k, v] of buckets.entries()) {
+      if (v.resetAt <= now) {
+        buckets.delete(k)
+      }
+    }
+  }
+
   if (!current || current.resetAt <= now) {
     buckets.set(options.key, { count: 1, resetAt: now + options.windowMs })
     return { allowed: true, remaining: Math.max(0, options.limit - 1), retryAfterSeconds: 0 }

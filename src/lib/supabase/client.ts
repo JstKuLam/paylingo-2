@@ -9,7 +9,8 @@ export function createClient() {
     auth: authClient,
     from(tableName: string) {
       return {
-        select(columns = '*') {
+        select(_columns?: string) {
+          void _columns
           return {
             async order(col: string, options?: { ascending?: boolean }) {
               // Direct fetch to API endpoints for sessions or folders
@@ -20,10 +21,10 @@ export function createClient() {
               }
               return { data: [], error: null }
             },
-            async eq(col: string, val: any) {
+            async eq(col: string, val: string | number | boolean) {
               return {
                 async single() {
-                  const res = await fetch(`/api/history?table=${tableName}&${col}=${encodeURIComponent(val)}&single=1`)
+                  const res = await fetch(`/api/history?table=${tableName}&${col}=${encodeURIComponent(String(val))}&single=1`)
                   const data = await res.json()
                   return { data: data.item || null, error: null }
                 },
@@ -35,7 +36,7 @@ export function createClient() {
         },
         async delete() {
           return {
-            async eq(col: string, val: any) {
+            async eq(col: string, val: string | number | boolean) {
               const res = await fetch(`/api/history`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
@@ -46,9 +47,9 @@ export function createClient() {
             }
           }
         },
-        async update(payload: any) {
+        async update(payload: Record<string, unknown>) {
           return {
-            async eq(col: string, val: any) {
+            async eq(col: string, val: string | number | boolean) {
               const res = await fetch(`/api/history`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },

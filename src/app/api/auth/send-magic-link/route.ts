@@ -26,6 +26,13 @@ export async function POST(request: Request) {
       )
     }
 
+    const ipLimit = checkRateLimit({
+      key: `magic-link-ip:${getRequestIp(request)}`,
+      limit: 15,
+      windowMs: 15 * 60_000,
+    })
+    if (!ipLimit.allowed) return rateLimitResponse(ipLimit.retryAfterSeconds)
+
     const requestLimit = checkRateLimit({
       key: `magic-link:${getRequestIp(request)}:${sanitizedEmail}`,
       limit: 5,

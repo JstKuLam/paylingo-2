@@ -53,9 +53,9 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ items: [] })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in history GET API:', err)
-    return NextResponse.json({ error: err?.message || 'Lỗi lấy dữ liệu lịch sử' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi lấy dữ liệu lịch sử' }, { status: 500 })
   }
 }
 
@@ -69,23 +69,27 @@ export async function PATCH(request: Request) {
     const { table, field, value, payload } = await request.json()
     const db = getD1()
 
-    if (table === 'sessions' && field && value && payload) {
+    if (field !== 'id') {
+      return NextResponse.json({ success: false, error: 'Trường không hợp lệ' }, { status: 400 })
+    }
+
+    if (table === 'sessions' && value && payload) {
       if ('folder_id' in payload) {
-        await db.prepare('UPDATE sessions SET folder_id = ?, updated_at = datetime(\'now\') WHERE ' + field + ' = ? AND owner_id = ?')
+        await db.prepare('UPDATE sessions SET folder_id = ?, updated_at = datetime(\'now\') WHERE id = ? AND owner_id = ?')
           .bind(payload.folder_id, value, user.id)
           .run()
       }
       if ('name' in payload) {
-        await db.prepare('UPDATE sessions SET name = ?, updated_at = datetime(\'now\') WHERE ' + field + ' = ? AND owner_id = ?')
+        await db.prepare('UPDATE sessions SET name = ?, updated_at = datetime(\'now\') WHERE id = ? AND owner_id = ?')
           .bind(payload.name, value, user.id)
           .run()
       }
       return NextResponse.json({ success: true })
     }
 
-    if (table === 'folders' && field && value && payload) {
+    if (table === 'folders' && value && payload) {
       if ('name' in payload) {
-        await db.prepare('UPDATE folders SET name = ?, updated_at = datetime(\'now\') WHERE ' + field + ' = ? AND owner_id = ?')
+        await db.prepare('UPDATE folders SET name = ?, updated_at = datetime(\'now\') WHERE id = ? AND owner_id = ?')
           .bind(payload.name, value, user.id)
           .run()
       }
@@ -93,9 +97,9 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({ success: false, error: 'Thao tác không hợp lệ' }, { status: 400 })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in history PATCH API:', err)
-    return NextResponse.json({ error: err?.message || 'Lỗi cập nhật' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi cập nhật' }, { status: 500 })
   }
 }
 
@@ -122,8 +126,8 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: false, error: 'Thao tác không hợp lệ' }, { status: 400 })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in history DELETE API:', err)
-    return NextResponse.json({ error: err?.message || 'Lỗi xóa dữ liệu' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi xóa dữ liệu' }, { status: 500 })
   }
 }
