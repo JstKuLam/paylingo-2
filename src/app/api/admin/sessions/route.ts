@@ -20,7 +20,11 @@ export async function GET(request: Request) {
       const entries = await db.prepare('SELECT * FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC')
         .bind(sessionId)
         .all()
-      return NextResponse.json({ entries: entries.results || [] })
+      return NextResponse.json({ entries: entries.results || [] }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      })
     }
 
     const sessions = await db.prepare(`
@@ -73,7 +77,11 @@ export async function DELETE(request: Request) {
     await db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(id).run()
     await db.prepare('DELETE FROM sessions WHERE id = ?').bind(id).run()
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   } catch (error: unknown) {
     console.error('Unable to delete admin session:', error)
     return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })

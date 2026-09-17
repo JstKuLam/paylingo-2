@@ -4,37 +4,55 @@ import { verifyMagicToken, AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE } from '@/lib/a
 export const runtime = 'edge'
 
 
-function safeNextPath(nextParam: string | null): string {
-  if (!nextParam || !nextParam.startsWith('/') || nextParam.startsWith('//')) {
+function safeNextPath(nextParam: string | null, origin: string): string {
+  if (!nextParam || typeof nextParam !== 'string') return '/session'
+  if (!nextParam.startsWith('/') || nextParam.startsWith('//') || nextParam.includes('\\')) {
     return '/session'
   }
-  return nextParam
+  try {
+    const parsed = new URL(nextParam, origin)
+    if (parsed.origin !== origin) return '/session'
+    return parsed.pathname + parsed.search + parsed.hash
+  } catch {
+    return '/session'
+  }
 }
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
+  const origin = requestUrl.origin
   const token =
     requestUrl.searchParams.get('token') ||
     requestUrl.searchParams.get('token_hash') ||
     requestUrl.searchParams.get('code') ||
     requestUrl.searchParams.get('otp')
   const nextParam = requestUrl.searchParams.get('next')
-  const targetPath = safeNextPath(nextParam)
-
-  const origin = requestUrl.origin
+  const targetPath = safeNextPath(nextParam, origin)
 
   if (!token) {
-    return NextResponse.redirect(`${origin}/?error=missing_token`)
+    return NextResponse.redirect(`${origin}/?error=missing_token`, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   }
 
   // verifyOtp / exchangeCodeForSession logic via D1 verifyMagicToken
   const sessionRes = await verifyMagicToken(token)
   if (!sessionRes) {
-    return NextResponse.redirect(`${origin}/?error=invalid_or_expired_token`)
+    return NextResponse.redirect(`${origin}/?error=invalid_or_expired_token`, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   }
 
   const targetUrl = new URL(targetPath, origin)
-  const response = NextResponse.redirect(targetUrl.toString())
+  const response = NextResponse.redirect(targetUrl.toString(), {
+    headers: {
+      'Cache-Control': 'no-store, max-age=0',
+    },
+  })
 
   response.cookies.set({
     name: AUTH_COOKIE_NAME,

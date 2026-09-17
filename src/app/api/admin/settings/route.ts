@@ -105,7 +105,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Không thể lưu cài đặt' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   } catch (error: unknown) {
     console.error('Unable to save API settings:', error)
     return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })

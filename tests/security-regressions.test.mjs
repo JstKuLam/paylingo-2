@@ -22,13 +22,17 @@ test('privileged Supabase secrets are not embedded in application source', async
   assert.doesNotMatch(combined, /sb_secret_[A-Za-z0-9_-]+/)
 })
 
-test('auth callback never guesses a recently signed-in user', async () => {
+test('auth callback never guesses a recently signed-in user and hardens against open redirect', async () => {
   const callback = await source('src/app/auth/callback/route.ts')
   assert.doesNotMatch(callback, /listUsers|generateLink|last_sign_in_at|createAdminClient/)
   assert.match(callback, /exchangeCodeForSession/)
   assert.match(callback, /verifyOtp/)
   assert.match(callback, /safeNextPath/)
+  assert.match(callback, /nextParam\.includes\('\\\\'\)/)
+  assert.match(callback, /parsed\.origin !== origin/)
+  assert.match(callback, /'Cache-Control': 'no-store, max-age=0'/)
 })
+
 
 test('admin authentication fails closed and uses hardened password/session primitives', async () => {
   const auth = await source('src/lib/admin-auth.ts')
@@ -166,12 +170,47 @@ test('history route enforces multi-tenant ownership on read, update, and delete'
   // Cache-Control headers on sensitive auth and user data endpoints
   const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
   const sharedSummaryRoute = await source('src/app/api/shared/summary/route.ts')
+  const adminSessionsRoute = await source('src/app/api/admin/sessions/route.ts')
+  const historyPage = await source('src/app/history/page.tsx')
+
   assert.match(historyRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(verifyRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(signoutRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(magicLinkRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(summarizeRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(sharedSummaryRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(adminSessionsRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(historyPage, /f\.owner_id === currentOwnerId/)
+  assert.match(historyPage, /s\.owner_id === currentOwnerId/)
 })
+
+test('safeNextPath logic strictly prevents protocol-relative and backslash open redirect vectors', () => {
+  function safeNextPath(nextParam, origin) {
+    if (!nextParam || typeof nextParam !== 'string') return '/session'
+    if (!nextParam.startsWith('/') || nextParam.startsWith('//') || nextParam.includes('\\')) {
+      return '/session'
+    }
+    try {
+      const parsed = new URL(nextParam, origin)
+      if (parsed.origin !== origin) return '/session'
+      return parsed.pathname + parsed.search + parsed.hash
+    } catch {
+      return '/session'
+    }
+  }
+
+  const origin = 'https://noidi.9phut.org'
+  assert.strictEqual(safeNextPath(null, origin), '/session')
+  assert.strictEqual(safeNextPath('', origin), '/session')
+  assert.strictEqual(safeNextPath('https://attacker.com', origin), '/session')
+  assert.strictEqual(safeNextPath('//attacker.com', origin), '/session')
+  assert.strictEqual(safeNextPath('/\\attacker.com', origin), '/session')
+  assert.strictEqual(safeNextPath('/\\\\attacker.com', origin), '/session')
+  assert.strictEqual(safeNextPath('/\\/attacker.com', origin), '/session')
+  assert.strictEqual(safeNextPath('javascript:alert(1)', origin), '/session')
+  assert.strictEqual(safeNextPath('/history?tab=1', origin), '/history?tab=1')
+  assert.strictEqual(safeNextPath('/session', origin), '/session')
+})
+
 
 

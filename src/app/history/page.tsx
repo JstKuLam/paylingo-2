@@ -87,29 +87,33 @@ export default function HistoryPage() {
       type CloudFolderRecord = { id: string; owner_id?: string; username?: string; name: string; created_at: string; updated_at?: string }
       type CloudSessionRecord = { id: string; owner_id?: string; username?: string; folder_id?: string | null; name: string; partner_language: string; started_at: string; ended_at: string; duration_seconds: number; updated_at?: string }
 
-      const cloudFolders: LocalFolder[] = ((foldersRes.items as CloudFolderRecord[]) || []).map((f) => ({
-        id: f.id,
-        owner_id: f.owner_id || currentOwnerId,
-        username: f.username || name,
-        name: f.name,
-        created_at: f.created_at,
-        updated_at: f.updated_at || new Date().toISOString(),
-        sync_status: 'synced',
-      }))
+      const cloudFolders: LocalFolder[] = ((foldersRes.items as CloudFolderRecord[]) || [])
+        .filter((f) => !f.owner_id || f.owner_id === currentOwnerId)
+        .map((f) => ({
+          id: f.id,
+          owner_id: currentOwnerId,
+          username: f.username || name,
+          name: f.name,
+          created_at: f.created_at,
+          updated_at: f.updated_at || new Date().toISOString(),
+          sync_status: 'synced',
+        }))
 
-      const cloudSessions: LocalSession[] = ((sessionsRes.items as CloudSessionRecord[]) || []).map((s) => ({
-        id: s.id,
-        owner_id: s.owner_id || currentOwnerId,
-        username: s.username || name,
-        folder_id: s.folder_id,
-        name: s.name,
-        partner_language: s.partner_language,
-        started_at: s.started_at,
-        ended_at: s.ended_at,
-        duration_seconds: s.duration_seconds,
-        sync_status: 'synced',
-        updated_at: s.updated_at || new Date().toISOString(),
-      }))
+      const cloudSessions: LocalSession[] = ((sessionsRes.items as CloudSessionRecord[]) || [])
+        .filter((s) => !s.owner_id || s.owner_id === currentOwnerId)
+        .map((s) => ({
+          id: s.id,
+          owner_id: currentOwnerId,
+          username: s.username || name,
+          folder_id: s.folder_id,
+          name: s.name,
+          partner_language: s.partner_language,
+          started_at: s.started_at,
+          ended_at: s.ended_at,
+          duration_seconds: s.duration_seconds,
+          sync_status: 'synced',
+          updated_at: s.updated_at || new Date().toISOString(),
+        }))
 
       const localPendingSessionIds = new Set(
         localSessions.filter((s) => s.sync_status === 'pending').map((s) => s.id)
