@@ -44,7 +44,8 @@ function extractSection(markdown: string, keywords: string): string {
   return found ? sectionContent.join('\n').trim() : ''
 }
 
-function escapeHtml(value: string): string {
+function escapeHtml(value: unknown): string {
+  if (typeof value !== 'string') return ''
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -152,7 +153,8 @@ export function generatePremiumHTMLReport({
     : `<div class="empty-state">Không có dữ liệu sơ đồ tư duy cuộc họp.</div>`
 
   // Title display
-  const displayTitle = escapeHtml(sessionName || 'Tóm tắt Hội thoại PayLingo')
+  const safeSessionName = typeof sessionName === 'string' && sessionName.trim() ? sessionName.trim() : 'Tóm tắt Hội thoại PayLingo'
+  const displayTitle = escapeHtml(safeSessionName)
   const displayGeneratedAt = escapeHtml(generatedAt)
   const displayPartnerLang = escapeHtml(partnerLang)
 

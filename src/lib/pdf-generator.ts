@@ -87,11 +87,11 @@ export function generateSessionPrintHTML(
       </head>
       <body>
         <header>
-          <h1>${escapeHtml(sessionName)}</h1>
-          <p>Bắt đầu: ${escapeHtml(Number.isFinite(new Date(startedAt).getTime()) ? new Date(startedAt).toLocaleString('vi-VN') : 'Không rõ')} · Ngôn ngữ đối tác: ${escapeHtml(partnerLangName)}</p>
+          <h1>${escapeHtml(safeSessionName)}</h1>
+          <p>Bắt đầu: ${escapeHtml(Number.isFinite(new Date(startedAt).getTime()) ? new Date(startedAt).toLocaleString('vi-VN') : 'Không rõ')} · Ngôn ngữ đối tác: ${escapeHtml(safePartnerLangName)}</p>
         </header>
         <table>
-          <thead><tr><th>Bạn · Tiếng Việt</th><th lang="${safeLanguage}">Đối tác · ${escapeHtml(partnerLangName)}</th></tr></thead>
+          <thead><tr><th>Bạn · Tiếng Việt</th><th lang="${safeLanguage}">Đối tác · ${escapeHtml(safePartnerLangName)}</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         <footer>PayLingo · Bản ghi hội thoại song ngữ</footer>

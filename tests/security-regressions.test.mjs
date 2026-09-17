@@ -557,3 +557,17 @@ test('useSessionLifecycle ensures monotonic session duration and rejects zombie 
   assert.match(lifecycle, /if \(activeSessionRef\.current !== sessionId\) return[\s\S]*?db\.transcriptEntries\.bulkPut/)
 })
 
+test('PDF and HTML report generators sanitize empty session titles and provide crash-proof escapeHtml', async () => {
+  const pdfGen = await source('src/lib/pdf-generator.ts')
+  const htmlGen = await source('src/lib/html-generator.ts')
+
+  // PDF generator uses safe variables in header and table header
+  assert.match(pdfGen, /<h1>\$\{escapeHtml\(safeSessionName\)\}<\/h1>/)
+  assert.match(pdfGen, /Ngôn ngữ đối tác:\s*\$\{escapeHtml\(safePartnerLangName\)\}/)
+  assert.match(pdfGen, /<th>Bạn · Tiếng Việt<\/th><th lang="\$\{safeLanguage\}">Đối tác · \$\{escapeHtml\(safePartnerLangName\)\}<\/th>/)
+
+  // HTML generator crash-proof escapeHtml and safe session title
+  assert.match(htmlGen, /if \(typeof value !== 'string'\) return ''/)
+  assert.match(htmlGen, /safeSessionName = typeof sessionName === 'string' && sessionName\.trim\(\) \? sessionName\.trim\(\) : 'Tóm tắt Hội thoại PayLingo'/)
+})
+
