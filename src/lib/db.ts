@@ -61,6 +61,17 @@ class PayLingoDatabase extends Dexie {
       sessions: 'id, owner_id, username, folder_id, started_at, sync_status, updated_at',
       transcriptEntries: 'id, session_id, [session_id+start_ms], sync_status, updated_at',
       folders: 'id, owner_id, username, sync_status, updated_at'
+    }).upgrade(async (tx) => {
+      // Safe schema migration: ensure sync_status is valid on legacy records
+      await tx.table('sessions').toCollection().modify((session) => {
+        if (!session.sync_status) session.sync_status = 'synced'
+      })
+      await tx.table('folders').toCollection().modify((folder) => {
+        if (!folder.sync_status) folder.sync_status = 'synced'
+      })
+      await tx.table('transcriptEntries').toCollection().modify((entry) => {
+        if (!entry.sync_status) entry.sync_status = 'synced'
+      })
     })
   }
 }
@@ -68,7 +79,7 @@ class PayLingoDatabase extends Dexie {
 export const db = new PayLingoDatabase()
 
 export async function claimLegacyLocalData(ownerId: string, username: string) {
-  if (!ownerId || !username) return
+  if (typeof window === 'undefined' || typeof indexedDB === 'undefined' || !ownerId || !username) return
   const cleanUsername = username.trim().toLowerCase()
   if (!cleanUsername) return
 
@@ -84,12 +95,12 @@ export async function claimLegacyLocalData(ownerId: string, username: string) {
         (folder) => !folder.owner_id && folder.username?.trim().toLowerCase() === cleanUsername
       )
 
-      await Promise.all(
-        legacySessions.map((session) => db.sessions.update(session.id, { owner_id: ownerId }))
-      )
-      await Promise.all(
-        legacyFolders.map((folder) => db.folders.update(folder.id, { owner_id: ownerId }))
-      )
+      for (const session of legacySessions) {
+        await db.sessions.update(session.id, { owner_id: ownerId })
+      }
+      for (const folder of legacyFolders) {
+        await db.folders.update(folder.id, { owner_id: ownerId })
+      }
     })
   } catch (err) {
     console.warn('Failed to claim legacy local data:', err)

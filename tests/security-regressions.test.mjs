@@ -80,6 +80,8 @@ test('local synchronization never reassigns records with an existing owner', asy
   assert.match(sync, /where\('owner_id'\)\.equals\(ownerId\)/)
   assert.match(db, /!session\.owner_id && session\.username/)
   assert.match(db, /!folder\.owner_id && folder\.username/)
+  assert.match(db, /\.upgrade\(async/)
+  assert.match(db, /typeof window === 'undefined' \|\| typeof indexedDB === 'undefined'/)
   assert.match(history, /safeCloudSessions/)
   assert.match(history, /safeCloudFolders/)
 })
