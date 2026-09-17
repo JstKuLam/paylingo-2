@@ -606,4 +606,25 @@ test('history route enforces D1 result bounds, safe JSON parsing, and token leng
   assert.match(sessionAuth, /cleanToken\.length < 10 \|\| cleanToken\.length > 256/)
 })
 
+test('AI summarize bounds transcript character length, neutralizes delimiter injections, and client safely parses responses', async () => {
+  const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
+  const sessionDetail = await source('src/app/history/sessions/[id]/SessionDetailClient.tsx')
+  const folderDetail = await source('src/app/history/folders/[id]/FolderDetailClient.tsx')
+
+  // Total transcript character limit to prevent memory and token exhaustion
+  assert.match(summarizeRoute, /MAX_TRANSCRIPT_CHARS = 100_000/)
+  assert.match(summarizeRoute, /cleanTranscript\.length > MAX_TRANSCRIPT_CHARS/)
+
+  // Transcript closing tags and control character sanitization
+  assert.match(summarizeRoute, /replace\(\/\[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F\]\/g,\s*''\)/)
+  assert.match(summarizeRoute, /cleanTranscript = formattedTranscript[\s\S]*?transcript\\b\[\^>\]\*/)
+
+  // Status text fallback for HTTP/2 responses
+  assert.match(summarizeRoute, /response\.statusText \|\| `HTTP \$\{response\.status\}`/)
+
+  // History detail clients wrap response.json() in try/catch to prevent JSON syntax crash
+  assert.match(sessionDetail, /data = await response\.json\(\)[\s\S]*?catch\s*\{[\s\S]*?response\.status === 413/)
+  assert.match(folderDetail, /data = await response\.json\(\)[\s\S]*?catch\s*\{[\s\S]*?response\.status === 413/)
+})
+
 

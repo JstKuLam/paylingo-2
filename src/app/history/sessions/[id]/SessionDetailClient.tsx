@@ -286,7 +286,12 @@ export default function SessionDetailPage({ params }: PageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: session.id, sessions: [session], entries, style }),
       })
-      const data: { summary?: string; error?: string } = await response.json()
+      let data: { summary?: string; error?: string } = {}
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error(response.status === 413 ? 'Dữ liệu quá lớn để tóm tắt' : t.summaryModalServiceError)
+      }
       if (!response.ok || !data.summary) throw new Error(data.error || t.summaryModalGenerateError)
       setAiSummary(data.summary)
     } catch (error) {
@@ -312,7 +317,12 @@ export default function SessionDetailPage({ params }: PageProps) {
           password: sharePassword,
         }),
       })
-      const data: { id?: string; error?: string } = await response.json()
+      let data: { id?: string; error?: string } = {}
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error(t.summaryModalCreateLinkError)
+      }
       if (!response.ok || !data.id) throw new Error(data.error || t.summaryModalCreateLinkError)
       setShareLink(`${window.location.origin}/shared/summary/${data.id}`)
     } catch (error) {

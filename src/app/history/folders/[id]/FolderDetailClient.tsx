@@ -253,7 +253,12 @@ export default function FolderDetailPage({ params }: PageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folderId: folder.id, sessions: localSessions, entries: entriesBySession.flat(), style }),
       })
-      const data: { summary?: string; error?: string } = await response.json()
+      let data: { summary?: string; error?: string } = {}
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error(response.status === 413 ? 'Dữ liệu quá lớn để tóm tắt' : 'Không thể kết nối dịch vụ tóm tắt.')
+      }
       if (!response.ok || !data.summary) throw new Error(data.error || 'Không thể tạo bản tóm tắt.')
       setAiSummary(data.summary)
     } catch (error) {
@@ -279,7 +284,12 @@ export default function FolderDetailPage({ params }: PageProps) {
           password: sharePassword,
         }),
       })
-      const data: { id?: string; error?: string } = await response.json()
+      let data: { id?: string; error?: string } = {}
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error('Không thể tạo liên kết.')
+      }
       if (!response.ok || !data.id) throw new Error(data.error || 'Không thể tạo liên kết.')
       setShareLink(`${window.location.origin}/shared/summary/${data.id}`)
     } catch (error) {
