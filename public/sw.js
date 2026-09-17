@@ -44,8 +44,12 @@ async function cacheFirst(request) {
   try {
     const response = await fetch(request);
     if (response.status === 200) {
-      const cache = await caches.open(STATIC_CACHE);
-      await cache.put(request, response.clone());
+      try {
+        const cache = await caches.open(STATIC_CACHE);
+        await cache.put(request, response.clone());
+      } catch (cacheErr) {
+        console.warn('[SW] Failed to cache static asset:', cacheErr);
+      }
     }
     return response;
   } catch {
@@ -57,8 +61,12 @@ async function rootNetworkFirst(request) {
   try {
     const response = await fetch(request);
     if (response.status === 200 && !response.redirected) {
-      const cache = await caches.open(SHELL_CACHE);
-      await cache.put('/', response.clone());
+      try {
+        const cache = await caches.open(SHELL_CACHE);
+        await cache.put('/', response.clone());
+      } catch (cacheErr) {
+        console.warn('[SW] Failed to cache shell:', cacheErr);
+      }
     }
     return response;
   } catch {

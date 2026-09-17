@@ -458,6 +458,18 @@ test('history pages guard fallback IDs, prevent non-JSON crashes, and sanitize t
   assert.match(folderDetail, /r\.headers\.get\('content-type'\)/)
 })
 
+test('app-version checks client semver, rate limits requests, and sw protects against cache quota errors', async () => {
+  const appVersion = await source('src/app/api/app-version/route.ts')
+  const sw = await source('public/sw.js')
 
+  // App version semver & rate limiting
+  assert.match(appVersion, /checkRateLimit\(\{[\s\S]*?key:\s*`app-version:\$\{getRequestIp\(request\)\}`/)
+  assert.match(appVersion, /compareSemver/)
+  assert.match(appVersion, /forceUpdate/)
+  assert.match(appVersion, /needsUpdate/)
+  assert.match(appVersion, /'Cache-Control': 'no-store, max-age=0'/)
 
-
+  // Service worker handles cache.put errors gracefully
+  assert.match(sw, /try\s*\{[\s\S]*?cache\.put\(request,\s*response\.clone\(\)\);[\s\S]*?\}\s*catch\s*\(cacheErr\)/)
+  assert.match(sw, /try\s*\{[\s\S]*?cache\.put\('\/',\s*response\.clone\(\)\);[\s\S]*?\}\s*catch\s*\(cacheErr\)/)
+})
