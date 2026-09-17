@@ -214,5 +214,25 @@ test('safeNextPath logic strictly prevents protocol-relative and backslash open 
   assert.strictEqual(safeNextPath('/session', origin), '/session')
 })
 
+test('session lifecycle cleans up aborted sessions and finalizes unexpected stops', async () => {
+  const lifecycle = await source('src/hooks/useSessionLifecycle.ts')
+  const sessionPage = await source('src/app/session/page.tsx')
 
+  // abortSession prevents ghost/unstarted records
+  assert.match(lifecycle, /abortSession/)
+  assert.match(lifecycle, /await db\.sessions\.delete\(currentSessionId\)/)
+  assert.match(sessionPage, /await abortSession\(\)/)
 
+  // Wake lock is cleaned up safely in finally block
+  assert.match(lifecycle, /finally\s*\{\s*wakeLockRef\.current = null/)
+
+  // Unexpected stop listener finalizes dangling session
+  assert.match(lifecycle, /wasActiveRef\.current && !isActive && activeSessionRef\.current/)
+
+  // Starting state disables partner selector to prevent mid-handshake unmount
+  assert.match(sessionPage, /disabled=\{isActive \|\| isStarting \|\| recordingMode === 'one_way'\}/)
+
+  // Recording errors are captured and rendered in the alert stack
+  assert.match(sessionPage, /error:\s*recordingError/)
+  assert.match(sessionPage, /recordingError\?\.message/)
+})

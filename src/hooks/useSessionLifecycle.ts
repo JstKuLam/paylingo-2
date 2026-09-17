@@ -135,6 +135,8 @@ export function useSessionLifecycle({
               updated_at: now,
             })
           }
+        }).then(() => {
+          syncPendingData()
         }).catch((err) => {
           console.error('Failed to close session on unmount:', err)
         })
@@ -162,12 +164,46 @@ export function useSessionLifecycle({
     if (wakeLockRef.current) {
       try {
         await wakeLockRef.current.release()
-        wakeLockRef.current = null
       } catch (err) {
         console.error('Failed to release Wake Lock:', err)
+      } finally {
+        wakeLockRef.current = null
       }
     }
   }, [])
+
+  // Automatically finalize session if recording becomes inactive unexpectedly
+  const wasActiveRef = useRef(false)
+  useEffect(() => {
+    if (wasActiveRef.current && !isActive && activeSessionRef.current) {
+      const sid = activeSessionRef.current
+      activeSessionRef.current = null
+      setSessionId(null)
+      const now = new Date().toISOString()
+      void db.sessions.get(sid).then((session) => {
+        if (session && session.ended_at === null) {
+          const startTime = new Date(session.started_at).getTime()
+          const validStart = Number.isFinite(startTime) ? startTime : Date.now()
+          const duration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+          return db.sessions.update(sid, {
+            ended_at: now,
+            duration_seconds: duration,
+            sync_status: 'pending',
+            updated_at: now,
+          })
+        }
+      }).then(() => {
+        syncPendingData()
+      }).catch((err) => {
+        console.warn('Failed to finalize session after unexpected stop:', err)
+      })
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {})
+        wakeLockRef.current = null
+      }
+    }
+    wasActiveRef.current = isActive
+  }, [isActive])
 
   // Handle automatic re-acquisition on tab visibility changes
   useEffect(() => {
@@ -196,6 +232,28 @@ export function useSessionLifecycle({
     
     if (!session || !username || !ownerId) {
       throw new Error('Unauthenticated')
+    }
+
+    // If an earlier session was left unclosed, finalize it first
+    if (activeSessionRef.current) {
+      const prevSid = activeSessionRef.current
+      const now = new Date().toISOString()
+      try {
+        const prevSession = await db.sessions.get(prevSid)
+        if (prevSession && prevSession.ended_at === null) {
+          const startTime = new Date(prevSession.started_at).getTime()
+          const validStart = Number.isFinite(startTime) ? startTime : Date.now()
+          const duration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+          await db.sessions.update(prevSid, {
+            ended_at: now,
+            duration_seconds: duration,
+            sync_status: 'pending',
+            updated_at: now,
+          })
+        }
+      } catch (err) {
+        console.warn('Failed to close previous dangling session:', err)
+      }
     }
 
     const newSessionId = crypto.randomUUID()
@@ -233,9 +291,6 @@ export function useSessionLifecycle({
 
     // Request Wake Lock
     await requestWakeLock()
-
-    // Sync in background immediately
-    void syncPendingData()
 
     return newSessionId
   }, [partnerLang, requestWakeLock])
@@ -278,6 +333,30 @@ export function useSessionLifecycle({
 
     // Sync everything
     void syncPendingData()
+  }, [releaseWakeLock])
+
+  // Abort an unstarted or failed session to prevent ghost records
+  const abortSession = useCallback(async () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
+
+    const currentSessionId = activeSessionRef.current
+    activeSessionRef.current = null
+    setSessionId(null)
+    setSilenceWarning(false)
+
+    if (currentSessionId) {
+      try {
+        await db.sessions.delete(currentSessionId)
+        await db.transcriptEntries.where('session_id').equals(currentSessionId).delete()
+      } catch (err) {
+        console.warn('Failed to clean up aborted session:', err)
+      }
+    }
+
+    await releaseWakeLock()
   }, [releaseWakeLock])
 
   // 4. Autosave active messages to local IndexedDB (Dexie)
@@ -358,8 +437,16 @@ export function useSessionLifecycle({
 
         // Force stop at 5 minutes of silence (300 seconds)
         silenceTimerRef.current = setTimeout(async () => {
-          await stopRecordingRef.current()
-          await stopSession()
+          try {
+            await stopRecordingRef.current()
+          } catch (err) {
+            console.warn('Error during silence timeout stopRecording:', err)
+          }
+          try {
+            await stopSession()
+          } catch (err) {
+            console.warn('Error during silence timeout stopSession:', err)
+          }
           alert(silenceAlertMessageRef.current || 'Hội thoại đã tự động kết thúc do 5 phút không hoạt động để tránh hao tổn phí API.')
         }, 60000)
 
@@ -380,6 +467,7 @@ export function useSessionLifecycle({
     wakeLockError,
     offlineIndicator,
     startSession,
-    stopSession
+    stopSession,
+    abortSession,
   }
 }

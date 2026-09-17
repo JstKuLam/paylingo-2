@@ -306,7 +306,7 @@ function SessionActiveArea({
     }
   }, [partnerLang, recordingMode])
 
-  const { isActive, state, finalTokens, partialTokens, start, stop } = useRecording({
+  const { isActive, state, error: recordingError, finalTokens, partialTokens, start, stop } = useRecording({
     config: getSonioxConfig,
     model: 'stt-rt-v5',
     enable_language_identification: true,
@@ -356,6 +356,7 @@ function SessionActiveArea({
     offlineIndicator,
     startSession,
     stopSession,
+    abortSession,
   } = useSessionLifecycle({
     partnerLang,
     isActive,
@@ -375,7 +376,7 @@ function SessionActiveArea({
       await start()
     } catch (error) {
       console.error('Failed to start session:', error)
-      await stopSession()
+      await abortSession()
       setOperationError(
         error instanceof Error ? error.message : t.errorStartSession
       )
@@ -442,7 +443,7 @@ function SessionActiveArea({
             <select
               id="partner-language"
               value={partnerLang}
-              disabled={isActive || recordingMode === 'one_way'}
+              disabled={isActive || isStarting || recordingMode === 'one_way'}
               onChange={(event) => setPartnerLang(event.target.value)}
             >
               {getLocalizedPartnerLanguages(language)
@@ -495,7 +496,7 @@ function SessionActiveArea({
         </div>
       </div>
 
-      {(offlineIndicator || (wakeLockError && isActive) || operationError) && (
+      {(offlineIndicator || (wakeLockError && isActive) || operationError || (state === 'error' && recordingError)) && (
         <div className="session-alert-stack">
           {offlineIndicator && (
             <div className="session-alert session-alert--warning" role="status">
@@ -509,10 +510,10 @@ function SessionActiveArea({
               <p>{t.wakeLockNotice}</p>
             </div>
           )}
-          {operationError && (
+          {(operationError || (state === 'error' && recordingError)) && (
             <div className="session-alert session-alert--danger" role="alert">
               <AlertTriangle aria-hidden="true" />
-              <p>{operationError}</p>
+              <p>{operationError || recordingError?.message || t.statusError}</p>
             </div>
           )}
         </div>
