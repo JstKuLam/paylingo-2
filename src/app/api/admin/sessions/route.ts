@@ -6,10 +6,11 @@ export const runtime = 'edge'
 
 
 export async function GET(request: Request) {
+  const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const isAuthorized = await checkAdminSession()
     if (!isAuthorized) {
-      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403, headers: noStoreHeader })
     }
 
     const { searchParams } = new URL(request.url)
@@ -21,9 +22,7 @@ export async function GET(request: Request) {
         .bind(sessionId)
         .all()
       return NextResponse.json({ entries: entries.results || [] }, {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       })
     }
 
@@ -41,9 +40,7 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json(formatted, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: noStoreHeader,
     })
   } catch (error: unknown) {
     console.error('Unable to load admin sessions:', error)
@@ -51,24 +48,23 @@ export async function GET(request: Request) {
       { error: 'Lỗi hệ thống' },
       {
         status: 500,
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       }
     )
   }
 }
 
 export async function DELETE(request: Request) {
+  const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const isAuthorized = await checkAdminSession()
     if (!isAuthorized) {
-      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403, headers: noStoreHeader })
     }
 
     const { id } = await request.json()
-    if (!id) {
-      return NextResponse.json({ error: 'Thiếu ID phiên' }, { status: 400 })
+    if (!id || typeof id !== 'string' || id.length > 64) {
+      return NextResponse.json({ error: 'Thiếu hoặc ID phiên không hợp lệ' }, { status: 400, headers: noStoreHeader })
     }
 
     const db = getD1()
@@ -78,12 +74,10 @@ export async function DELETE(request: Request) {
     await db.prepare('DELETE FROM sessions WHERE id = ?').bind(id).run()
 
     return NextResponse.json({ success: true }, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: noStoreHeader,
     })
   } catch (error: unknown) {
     console.error('Unable to delete admin session:', error)
-    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
+    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500, headers: noStoreHeader })
   }
 }

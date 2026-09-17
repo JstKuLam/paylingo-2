@@ -51,6 +51,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const body = await req.json()
     const { action } = body
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
     if (action === 'login') {
       const { password } = body
       if (!password) {
-        return NextResponse.json({ error: 'Mật khẩu trống' }, { status: 400 })
+        return NextResponse.json({ error: 'Mật khẩu trống' }, { status: 400, headers: noStoreHeader })
       }
 
       const loginLimit = checkRateLimit({
@@ -72,11 +73,11 @@ export async function POST(req: Request) {
       if (!loginLimit.allowed) return rateLimitResponse(loginLimit.retryAfterSeconds)
 
       if (!creds.configured) {
-        return NextResponse.json({ error: 'Admin chưa được cấu hình an toàn' }, { status: 503 })
+        return NextResponse.json({ error: 'Admin chưa được cấu hình an toàn' }, { status: 503, headers: noStoreHeader })
       }
 
       if (!(await verifyPassword(password, creds.passwordHash))) {
-        return NextResponse.json({ error: 'Sai mật khẩu' }, { status: 400 })
+        return NextResponse.json({ error: 'Sai mật khẩu' }, { status: 400, headers: noStoreHeader })
       }
 
       let activePasswordHash = creds.passwordHash
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
           creds.passkeyCredId,
           creds.passkeyEnabled
         )
-        if (!migrated) return NextResponse.json({ error: 'Không thể nâng cấp bảo mật mật khẩu' }, { status: 500 })
+        if (!migrated) return NextResponse.json({ error: 'Không thể nâng cấp bảo mật mật khẩu' }, { status: 500, headers: noStoreHeader })
       }
 
       const token = await createSessionToken(activePasswordHash)
@@ -101,9 +102,7 @@ export async function POST(req: Request) {
       })
 
       return NextResponse.json({ success: true }, {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       })
     }
 
@@ -116,15 +115,13 @@ export async function POST(req: Request) {
         maxAge: 0
       })
       return NextResponse.json({ success: true }, {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       })
     }
 
     if (action === 'get-challenge') {
       if (!creds.configured || !creds.passkeyEnabled || !creds.passkeySpki || !creds.passkeyCredId) {
-        return NextResponse.json({ error: 'Passkey chưa được cấu hình' }, { status: 400 })
+        return NextResponse.json({ error: 'Passkey chưa được cấu hình' }, { status: 400, headers: noStoreHeader })
       }
       const challengeLimit = checkRateLimit({
         key: `admin-passkey:${getRequestIp(req)}`,
@@ -160,7 +157,7 @@ export async function POST(req: Request) {
     if (action === 'passkey-login') {
       const { challengeToken, credentialId, clientDataJSON, authenticatorData, signature } = body
       if (!challengeToken || !credentialId || !clientDataJSON || !authenticatorData || !signature) {
-        return NextResponse.json({ error: 'Thiếu dữ liệu xác thực passkey' }, { status: 400 })
+        return NextResponse.json({ error: 'Thiếu dữ liệu xác thực passkey' }, { status: 400, headers: noStoreHeader })
       }
 
       // Verify challenge token
@@ -172,16 +169,16 @@ export async function POST(req: Request) {
           !timingSafeEqualStr(cookieChallenge, challengeToken) ||
           !timingSafeEqualStr(credentialId, creds.passkeyCredId)
         ) {
-          return NextResponse.json({ error: 'Yêu cầu xác thực không hợp lệ hoặc đã được sử dụng' }, { status: 400 })
+          return NextResponse.json({ error: 'Yêu cầu xác thực không hợp lệ hoặc đã được sử dụng' }, { status: 400, headers: noStoreHeader })
         }
 
         const challengeStr = await verifySignedAdminValue(challengeToken, creds.passwordHash)
-        if (!challengeStr) return NextResponse.json({ error: 'Chữ ký yêu cầu không hợp lệ' }, { status: 400 })
+        if (!challengeStr) return NextResponse.json({ error: 'Chữ ký yêu cầu không hợp lệ' }, { status: 400, headers: noStoreHeader })
         const [expiresAtStr] = challengeStr.split(':')
         const expiresAt = parseInt(expiresAtStr || '0', 10)
 
         if (isNaN(expiresAt) || expiresAt < Date.now()) {
-          return NextResponse.json({ error: 'Yêu cầu xác thực đã hết hạn' }, { status: 400 })
+          return NextResponse.json({ error: 'Yêu cầu xác thực đã hết hạn' }, { status: 400, headers: noStoreHeader })
         }
 
         // Verify clientDataJSON contains the challengeToken (in base64url encoded format)
@@ -195,12 +192,12 @@ export async function POST(req: Request) {
         const expectedChallenge = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 
         if (clientData.challenge !== expectedChallenge) {
-          return NextResponse.json({ error: 'Thử thách xác thực không khớp' }, { status: 400 })
+          return NextResponse.json({ error: 'Thử thách xác thực không khớp' }, { status: 400, headers: noStoreHeader })
         }
 
         // Verify signature
         if (!creds.passkeySpki) {
-          return NextResponse.json({ error: 'Chưa đăng ký Passkey trên thiết bị này' }, { status: 400 })
+          return NextResponse.json({ error: 'Chưa đăng ký Passkey trên thiết bị này' }, { status: 400, headers: noStoreHeader })
         }
 
         const isPasskeyValid = await verifyPasskeyAssertion(
@@ -213,7 +210,7 @@ export async function POST(req: Request) {
         )
 
         if (!isPasskeyValid) {
-          return NextResponse.json({ error: 'Mã xác thực sinh trắc không hợp lệ' }, { status: 400 })
+          return NextResponse.json({ error: 'Mã xác thực sinh trắc không hợp lệ' }, { status: 400, headers: noStoreHeader })
         }
 
         // Login successful
@@ -227,32 +224,30 @@ export async function POST(req: Request) {
         })
 
         return NextResponse.json({ success: true }, {
-          headers: {
-            'Cache-Control': 'no-store, max-age=0',
-          },
+          headers: noStoreHeader,
         })
       } catch (err) {
         console.error('Passkey verification error:', err)
-        return NextResponse.json({ error: 'Xác thực passkey thất bại' }, { status: 400 })
+        return NextResponse.json({ error: 'Xác thực passkey thất bại' }, { status: 400, headers: noStoreHeader })
       }
     }
 
     // --- PROTECTED ACTIONS ---
     const isAuthorized = await checkAdminSession()
     if (!isAuthorized) {
-      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403, headers: noStoreHeader })
     }
 
     if (action === 'change-password') {
       const { newPassword } = body
       if (!newPassword || newPassword.length < 12) {
-        return NextResponse.json({ error: 'Mật khẩu phải tối thiểu 12 ký tự' }, { status: 400 })
+        return NextResponse.json({ error: 'Mật khẩu phải tối thiểu 12 ký tự' }, { status: 400, headers: noStoreHeader })
       }
 
       const newHash = await hashPassword(newPassword)
       const ok = await saveAdminCredentials(newHash, creds.passkeySpki, creds.passkeyCredId, creds.passkeyEnabled)
       if (!ok) {
-        return NextResponse.json({ error: 'Không thể lưu mật khẩu mới' }, { status: 500 })
+        return NextResponse.json({ error: 'Không thể lưu mật khẩu mới' }, { status: 500, headers: noStoreHeader })
       }
 
       // Re-sign session with new hash
@@ -266,27 +261,23 @@ export async function POST(req: Request) {
       })
 
       return NextResponse.json({ success: true }, {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       })
     }
 
     if (action === 'passkey-register') {
       const { credentialId, publicKeySpki } = body
       if (!credentialId || !publicKeySpki) {
-        return NextResponse.json({ error: 'Thiếu thông tin passkey đăng ký' }, { status: 400 })
+        return NextResponse.json({ error: 'Thiếu thông tin passkey đăng ký' }, { status: 400, headers: noStoreHeader })
       }
 
       const ok = await saveAdminCredentials(creds.passwordHash, publicKeySpki, credentialId, true)
       if (!ok) {
-        return NextResponse.json({ error: 'Không thể lưu passkey đăng ký' }, { status: 500 })
+        return NextResponse.json({ error: 'Không thể lưu passkey đăng ký' }, { status: 500, headers: noStoreHeader })
       }
 
       return NextResponse.json({ success: true }, {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       })
     }
 
@@ -294,32 +285,28 @@ export async function POST(req: Request) {
       const { enable } = body
       const ok = await saveAdminCredentials(creds.passwordHash, creds.passkeySpki, creds.passkeyCredId, enable)
       if (!ok) {
-        return NextResponse.json({ error: 'Không thể thay đổi cài đặt passkey' }, { status: 500 })
+        return NextResponse.json({ error: 'Không thể thay đổi cài đặt passkey' }, { status: 500, headers: noStoreHeader })
       }
 
       return NextResponse.json({ success: true }, {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       })
     }
 
     if (action === 'disable-passkey') {
       const ok = await saveAdminCredentials(creds.passwordHash, '', '', false)
       if (!ok) {
-        return NextResponse.json({ error: 'Không thể hủy đăng ký passkey' }, { status: 500 })
+        return NextResponse.json({ error: 'Không thể hủy đăng ký passkey' }, { status: 500, headers: noStoreHeader })
       }
 
       return NextResponse.json({ success: true }, {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       })
     }
 
-    return NextResponse.json({ error: 'Hành động không hợp lệ' }, { status: 400 })
+    return NextResponse.json({ error: 'Hành động không hợp lệ' }, { status: 400, headers: noStoreHeader })
   } catch (error: unknown) {
     console.error('API admin auth handler error:', error)
-    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
+    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500, headers: noStoreHeader })
   }
 }

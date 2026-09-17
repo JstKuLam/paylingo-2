@@ -6,10 +6,11 @@ export const runtime = 'edge'
 
 
 export async function GET() {
+  const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const isAuthorized = await checkAdminSession()
     if (!isAuthorized) {
-      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403 })
+      return NextResponse.json({ error: 'Không có quyền truy cập' }, { status: 403, headers: noStoreHeader })
     }
 
     const db = getD1()

@@ -290,3 +290,22 @@ test('shared summary route enforces no-store on all responses and error boundari
   assert.match(appError, /sessionStorage\.removeItem\('pwa_chunk_last_recovery'\)/)
   assert.match(appError, /sessionStorage\.removeItem\('pwa_last_reload'\)/)
 })
+
+test('admin routes enforce no-store headers, validate session IDs, and prevent masked key fallback bugs', async () => {
+  const adminSettings = await source('src/app/api/admin/settings/route.ts')
+  const adminSessions = await source('src/app/api/admin/sessions/route.ts')
+  const adminUsage = await source('src/app/api/admin/usage-logs/route.ts')
+  const adminAuth = await source('src/app/api/auth/admin/route.ts')
+
+  // Masked key fallback bug fix: must check if existing key exists before reusing
+  assert.match(adminSettings, /if \(api_key === MASKED_API_KEY\)\s*\{\s*if \(!existing \|\| !existing\.api_key\)/)
+
+  // noStoreHeader coverage on all admin endpoints
+  assert.match(adminSettings, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
+  assert.match(adminSessions, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
+  assert.match(adminUsage, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
+  assert.match(adminAuth, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
+
+  // Admin sessions DELETE validates ID parameter
+  assert.match(adminSessions, /!id \|\| typeof id !== 'string' \|\| id\.length > 64/)
+})
