@@ -59,10 +59,14 @@ export async function POST(req: Request) {
     const creds = await getAdminCredentials()
     const cookieStore = await cookies()
 
+    if (!action || typeof action !== 'string' || action.length > 64) {
+      return NextResponse.json({ error: 'Hành động không hợp lệ' }, { status: 400, headers: noStoreHeader })
+    }
+
     if (action === 'login') {
       const { password } = body
-      if (!password) {
-        return NextResponse.json({ error: 'Mật khẩu trống' }, { status: 400, headers: noStoreHeader })
+      if (!password || typeof password !== 'string' || password.length > 256) {
+        return NextResponse.json({ error: 'Mật khẩu trống hoặc không hợp lệ' }, { status: 400, headers: noStoreHeader })
       }
 
       const loginLimit = checkRateLimit({
@@ -148,22 +152,40 @@ export async function POST(req: Request) {
         challengeToken,
         credentialId: creds.passkeyCredId
       }, {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       })
     }
 
     if (action === 'passkey-login') {
+      const passkeyLimit = checkRateLimit({
+        key: `admin-passkey-verify:${getRequestIp(req)}`,
+        limit: 10,
+        windowMs: 15 * 60_000,
+      })
+      if (!passkeyLimit.allowed) return rateLimitResponse(passkeyLimit.retryAfterSeconds)
+
       const { challengeToken, credentialId, clientDataJSON, authenticatorData, signature } = body
-      if (!challengeToken || !credentialId || !clientDataJSON || !authenticatorData || !signature) {
-        return NextResponse.json({ error: 'Thiếu dữ liệu xác thực passkey' }, { status: 400, headers: noStoreHeader })
+      if (
+        !challengeToken || typeof challengeToken !== 'string' || challengeToken.length > 2048 ||
+        !credentialId || typeof credentialId !== 'string' || credentialId.length > 2048 ||
+        !clientDataJSON || typeof clientDataJSON !== 'string' || clientDataJSON.length > 4096 ||
+        !authenticatorData || typeof authenticatorData !== 'string' || authenticatorData.length > 4096 ||
+        !signature || typeof signature !== 'string' || signature.length > 2048
+      ) {
+        return NextResponse.json({ error: 'Thiếu hoặc dữ liệu xác thực passkey không hợp lệ' }, { status: 400, headers: noStoreHeader })
       }
 
       // Verify challenge token
       try {
         const cookieChallenge = cookieStore.get(CHALLENGE_COOKIE_NAME)?.value
         cookieStore.delete(CHALLENGE_COOKIE_NAME)
+        cookieStore.set(CHALLENGE_COOKIE_NAME, '', {
+          httpOnly: true,
+          secure: true,
+          path: '/api/auth/admin',
+          sameSite: 'strict',
+          maxAge: 0,
+        })
         if (
           !cookieChallenge ||
           !timingSafeEqualStr(cookieChallenge, challengeToken) ||
@@ -191,7 +213,7 @@ export async function POST(req: Request) {
         const base64 = btoa(String.fromCharCode(...data))
         const expectedChallenge = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 
-        if (clientData.challenge !== expectedChallenge) {
+        if (!clientData.challenge || typeof clientData.challenge !== 'string' || !timingSafeEqualStr(clientData.challenge, expectedChallenge)) {
           return NextResponse.json({ error: 'Thử thách xác thực không khớp' }, { status: 400, headers: noStoreHeader })
         }
 
@@ -240,8 +262,8 @@ export async function POST(req: Request) {
 
     if (action === 'change-password') {
       const { newPassword } = body
-      if (!newPassword || newPassword.length < 12) {
-        return NextResponse.json({ error: 'Mật khẩu phải tối thiểu 12 ký tự' }, { status: 400, headers: noStoreHeader })
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 256) {
+        return NextResponse.json({ error: 'Mật khẩu phải từ 12 đến 256 ký tự' }, { status: 400, headers: noStoreHeader })
       }
 
       const newHash = await hashPassword(newPassword)
@@ -267,8 +289,25 @@ export async function POST(req: Request) {
 
     if (action === 'passkey-register') {
       const { credentialId, publicKeySpki } = body
-      if (!credentialId || !publicKeySpki) {
-        return NextResponse.json({ error: 'Thiếu thông tin passkey đăng ký' }, { status: 400, headers: noStoreHeader })
+      if (
+        !credentialId || typeof credentialId !== 'string' || credentialId.length > 1024 ||
+        !publicKeySpki || typeof publicKeySpki !== 'string' || publicKeySpki.length > 2048
+      ) {
+        return NextResponse.json({ error: 'Thiếu hoặc thông tin passkey đăng ký không hợp lệ' }, { status: 400, headers: noStoreHeader })
+      }
+
+      // Verify that publicKeySpki is a valid ECDSA P-256 SPKI key before persisting
+      try {
+        const spkiBuffer = base64ToArrayBuffer(publicKeySpki)
+        await crypto.subtle.importKey(
+          'spki',
+          spkiBuffer,
+          { name: 'ECDSA', namedCurve: 'P-256' },
+          false,
+          ['verify']
+        )
+      } catch {
+        return NextResponse.json({ error: 'Khoá công khai passkey không đúng định dạng SPKI ECDSA P-256' }, { status: 400, headers: noStoreHeader })
       }
 
       const ok = await saveAdminCredentials(creds.passwordHash, publicKeySpki, credentialId, true)
@@ -283,6 +322,9 @@ export async function POST(req: Request) {
 
     if (action === 'toggle-passkey') {
       const { enable } = body
+      if (typeof enable !== 'boolean') {
+        return NextResponse.json({ error: 'Trạng thái passkey không hợp lệ' }, { status: 400, headers: noStoreHeader })
+      }
       const ok = await saveAdminCredentials(creds.passwordHash, creds.passkeySpki, creds.passkeyCredId, enable)
       if (!ok) {
         return NextResponse.json({ error: 'Không thể thay đổi cài đặt passkey' }, { status: 500, headers: noStoreHeader })

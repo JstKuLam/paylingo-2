@@ -90,6 +90,7 @@ export async function createSignedAdminValue(value: string, passwordHash: string
 }
 
 export async function verifySignedAdminValue(token: string, passwordHash: string): Promise<string | null> {
+  if (typeof token !== 'string' || !token || token.length > 2048 || typeof passwordHash !== 'string' || !passwordHash) return null
   const separator = token.lastIndexOf('.')
   if (separator < 1) return null
   const value = token.slice(0, separator)
@@ -194,7 +195,12 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64)
+  const normalized = base64
+    .trim()
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+  const binaryString = atob(padded)
   const bytes = new Uint8Array(binaryString.length)
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i)
@@ -256,7 +262,8 @@ export async function verifyPasskeyAssertion(
       type?: string
       origin?: string
     }
-    if (clientData.type !== 'webauthn.get' || clientData.origin !== expectedOrigin) return false
+    const normalizeOrigin = (url: string) => url.trim().replace(/\/+$/, '')
+    if (clientData.type !== 'webauthn.get' || normalizeOrigin(clientData.origin || '') !== normalizeOrigin(expectedOrigin)) return false
 
     const authBytes = new Uint8Array(authData)
     if (authBytes.byteLength < 37) return false

@@ -54,8 +54,12 @@ test('passkey verification binds origin, RP ID, credential and one-time challeng
   assert.match(auth, /webAuthnDerSignatureToRaw/)
   assert.match(auth, /userPresent/)
   assert.match(auth, /userVerified/)
+  assert.match(auth, /normalizeOrigin/)
   assert.match(route, /timingSafeEqualStr\(credentialId, creds\.passkeyCredId\)/)
   assert.match(route, /cookieStore\.delete\(CHALLENGE_COOKIE_NAME\)/)
+  assert.match(route, /admin-passkey-verify:/)
+  assert.match(route, /timingSafeEqualStr\(clientData\.challenge, expectedChallenge\)/)
+  assert.match(route, /crypto\.subtle\.importKey\(/)
   assert.match(route, /PASSKEY_ORIGIN/)
 })
 
