@@ -4,20 +4,28 @@ import { destroySession, AUTH_COOKIE_NAME } from '@/lib/auth/session'
 export const runtime = 'edge'
 
 
+const noStoreHeader = {
+  'Cache-Control': 'no-store, max-age=0',
+}
+
 export async function POST(request: Request) {
   try {
-    const cookieHeader = request.headers.get('cookie') || ''
-    const match = cookieHeader.match(new RegExp(`(?:^|; )${AUTH_COOKIE_NAME}=([^;]*)`))
-    const token = match ? decodeURIComponent(match[1]) : null
+    let token: string | null = null
+    const authHeader = request.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7).trim()
+    } else {
+      const cookieHeader = request.headers.get('cookie') || ''
+      const match = cookieHeader.match(new RegExp(`(?:^|; )${AUTH_COOKIE_NAME}=([^;]*)`))
+      token = match ? decodeURIComponent(match[1]) : null
+    }
 
     if (token) {
       await destroySession(token)
     }
 
     const response = NextResponse.json({ success: true }, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: noStoreHeader,
     })
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
@@ -31,6 +39,9 @@ export async function POST(request: Request) {
 
     return response
   } catch (err: unknown) {
-    return NextResponse.json({ success: false, error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500, headers: noStoreHeader }
+    )
   }
 }

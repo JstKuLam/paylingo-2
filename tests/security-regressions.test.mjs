@@ -309,3 +309,34 @@ test('admin routes enforce no-store headers, validate session IDs, and prevent m
   // Admin sessions DELETE validates ID parameter
   assert.match(adminSessions, /!id \|\| typeof id !== 'string' \|\| id\.length > 64/)
 })
+
+test('auth endpoints enforce CSPRNG OTP, input length bounds, and universal no-store headers', async () => {
+  const sessionModule = await source('src/lib/auth/session.ts')
+  const sendMagicLink = await source('src/app/api/auth/send-magic-link/route.ts')
+  const verifyRoute = await source('src/app/api/auth/verify/route.ts')
+  const signoutRoute = await source('src/app/api/auth/signout/route.ts')
+  const callbackRoute = await source('src/app/auth/callback/route.ts')
+  const rateLimitModule = await source('src/lib/rate-limit.ts')
+
+  // CSPRNG OTP generation
+  assert.match(sessionModule, /crypto\.getRandomValues/)
+  assert.match(sessionModule, /generateSecureOtp/)
+  assert.doesNotMatch(sessionModule, /Math\.random\(\)/)
+
+  // Token bounds checking
+  assert.match(sessionModule, /cleanInput\.length < 6 \|\| cleanInput\.length > 128/)
+  assert.match(verifyRoute, /cleanToken\.length < 6 \|\| cleanToken\.length > 128/)
+  assert.match(callbackRoute, /cleanToken\.length < 6 \|\| cleanToken\.length > 128/)
+
+  // no-store on rate limiting
+  assert.match(rateLimitModule, /'Cache-Control':\s*'no-store,\s*max-age=0'/)
+
+  // universal no-store headers
+  assert.match(sendMagicLink, /const noStoreHeader = \{\s*['"]Cache-Control['"]:\s*['"]no-store,\s*max-age=0['"],?\s*\}/)
+  assert.match(verifyRoute, /const noStoreHeader = \{\s*['"]Cache-Control['"]:\s*['"]no-store,\s*max-age=0['"],?\s*\}/)
+  assert.match(signoutRoute, /const noStoreHeader = \{\s*['"]Cache-Control['"]:\s*['"]no-store,\s*max-age=0['"],?\s*\}/)
+
+  // Signout supports Bearer token as well as cookie
+  assert.match(signoutRoute, /authHeader\?\.startsWith\('Bearer '\)/)
+})
+

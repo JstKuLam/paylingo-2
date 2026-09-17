@@ -29,7 +29,8 @@ export async function GET(request: Request) {
   const nextParam = requestUrl.searchParams.get('next')
   const targetPath = safeNextPath(nextParam, origin)
 
-  if (!token) {
+  const cleanToken = token ? token.trim() : ''
+  if (!cleanToken) {
     return NextResponse.redirect(`${origin}/?error=missing_token`, {
       headers: {
         'Cache-Control': 'no-store, max-age=0',
@@ -37,8 +38,16 @@ export async function GET(request: Request) {
     })
   }
 
+  if (cleanToken.length < 6 || cleanToken.length > 128) {
+    return NextResponse.redirect(`${origin}/?error=invalid_or_expired_token`, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
+  }
+
   // verifyOtp / exchangeCodeForSession logic via D1 verifyMagicToken
-  const sessionRes = await verifyMagicToken(token)
+  const sessionRes = await verifyMagicToken(cleanToken)
   if (!sessionRes) {
     return NextResponse.redirect(`${origin}/?error=invalid_or_expired_token`, {
       headers: {

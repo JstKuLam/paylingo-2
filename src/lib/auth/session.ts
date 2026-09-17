@@ -17,6 +17,18 @@ export interface AuthSessionResult {
   expiresAt: string
 }
 
+function generateSecureOtp(): string {
+  const array = new Uint32Array(1)
+  const range = 900_000
+  const maxValid = 0xFFFFFFFF - (0xFFFFFFFF % range)
+  let val: number
+  do {
+    crypto.getRandomValues(array)
+    val = array[0]
+  } while (val >= maxValid)
+  return (100_000 + (val % range)).toString()
+}
+
 /**
  * Creates a magic token and 6-digit OTP for email login.
  */
@@ -24,7 +36,7 @@ export async function createMagicToken(email: string): Promise<{ token: string; 
   const db = getD1()
   const sanitizedEmail = email.trim().toLowerCase()
   const token = crypto.randomUUID()
-  const otp = Math.floor(100000 + Math.random() * 900000).toString()
+  const otp = generateSecureOtp()
   
   // 15 minutes expiration
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
@@ -50,8 +62,11 @@ export async function createMagicToken(email: string): Promise<{ token: string; 
  * Verifies a magic token or OTP code, issues a long-lived user session.
  */
 export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionResult | null> {
-  const db = getD1()
+  if (!tokenOrOtp || typeof tokenOrOtp !== 'string') return null
   const cleanInput = tokenOrOtp.trim()
+  if (cleanInput.length < 6 || cleanInput.length > 128) return null
+
+  const db = getD1()
 
   const record = await db.prepare(
     'SELECT * FROM auth_tokens WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'

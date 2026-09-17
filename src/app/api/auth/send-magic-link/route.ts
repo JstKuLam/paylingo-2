@@ -8,12 +8,29 @@ import { emailTranslations, Language } from '@/lib/i18n'
 export const runtime = 'edge'
 
 
+const noStoreHeader = {
+  'Cache-Control': 'no-store, max-age=0',
+}
+
 export async function POST(request: Request) {
   try {
-    const { email, lang } = await request.json()
+    let body: { email?: unknown; lang?: unknown }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Dữ liệu yêu cầu không hợp lệ.' },
+        { status: 400, headers: noStoreHeader }
+      )
+    }
 
-    if (!email || typeof email !== 'string') {
-      return NextResponse.json({ error: 'Email không hợp lệ.' }, { status: 400 })
+    const { email, lang } = body
+
+    if (!email || typeof email !== 'string' || email.length > 255) {
+      return NextResponse.json(
+        { error: 'Email không hợp lệ.' },
+        { status: 400, headers: noStoreHeader }
+      )
     }
 
     const sanitizedEmail = email.trim().toLowerCase()
@@ -22,7 +39,7 @@ export async function POST(request: Request) {
     if (!isAllowed) {
       return NextResponse.json(
         { error: 'Email không hợp lệ. Vui lòng nhập đúng định dạng email.' },
-        { status: 400 }
+        { status: 400, headers: noStoreHeader }
       )
     }
 
@@ -92,20 +109,16 @@ export async function POST(request: Request) {
     if (!sendRes.success) {
       return NextResponse.json(
         { error: sendRes.error || 'Không thể gửi email xác thực. Vui lòng kiểm tra lại cấu hình SMTP.' },
-        { status: 500 }
+        { status: 500, headers: noStoreHeader }
       )
     }
 
-    return NextResponse.json({ success: true }, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
-    })
+    return NextResponse.json({ success: true }, { headers: noStoreHeader })
   } catch (err) {
     console.error('Error in send-magic-link route:', err)
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Lỗi hệ thống khi gửi email.' },
-      { status: 500 }
+      { status: 500, headers: noStoreHeader }
     )
   }
 }

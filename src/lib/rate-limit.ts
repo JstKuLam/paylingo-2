@@ -53,6 +53,12 @@ export function checkRateLimit(options: { key: string; limit: number; windowMs: 
 export function rateLimitResponse(retryAfterSeconds: number): Response {
   return Response.json(
     { error: 'Quá nhiều yêu cầu. Vui lòng thử lại sau.' },
-    { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } }
+    {
+      status: 429,
+      headers: {
+        'Retry-After': String(retryAfterSeconds),
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    }
   )
 }
