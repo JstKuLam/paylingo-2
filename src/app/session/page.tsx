@@ -358,17 +358,19 @@ function SessionActiveArea({
   }, [isActive])
 
   const isActiveRef = useRef(isActive)
+  const isRecordingOrStartingRef = useRef(isActive)
   const stopRef = useRef(stop)
   useEffect(() => {
     isActiveRef.current = isActive
-  }, [isActive])
+    isRecordingOrStartingRef.current = isActive || state === 'starting' || state === 'connecting'
+  }, [isActive, state])
   useEffect(() => {
     stopRef.current = stop
   }, [stop])
 
   useEffect(() => {
     return () => {
-      if (isActiveRef.current) {
+      if (isActiveRef.current || isRecordingOrStartingRef.current) {
         void stopRef.current().catch(() => {})
       }
     }
@@ -403,6 +405,9 @@ function SessionActiveArea({
       await start()
     } catch (error) {
       console.error('Failed to start session:', error)
+      try {
+        await stop()
+      } catch {}
       await abortSession()
       setOperationError(
         error instanceof Error ? error.message : t.errorStartSession

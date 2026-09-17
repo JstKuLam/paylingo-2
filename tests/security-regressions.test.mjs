@@ -790,6 +790,22 @@ test('auth endpoints enforce dual rate limiting, masked errors, and secure redir
   assert.match(callbackRoute, /['"]X-Content-Type-Options['"]:\s*['"]nosniff['"]/)
 })
 
+test('session lifecycle ensures entry duration on unexpected stops and releases audio locks on unmount', async () => {
+  const lifecycle = await source('src/hooks/useSessionLifecycle.ts')
+  const sessionPage = await source('src/app/session/page.tsx')
+
+  // Unexpected stop factors in durationFromEntries
+  assert.match(lifecycle, /if \(wasActiveRef\.current && !isActive && activeSessionRef\.current\) \{[\s\S]*?latestEntryMs = messagesRef\.current\.reduce[\s\S]*?durationFromEntries = Math\.ceil\(latestEntryMs \/ 1000\)[\s\S]*?duration = Math\.max\([\s\S]*?durationFromEntries/)
+
+  // Unmount cleanup includes starting/connecting state
+  assert.match(sessionPage, /isRecordingOrStartingRef\.current = isActive \|\| state === 'starting' \|\| state === 'connecting'/)
+  assert.match(sessionPage, /if \(isActiveRef\.current \|\| isRecordingOrStartingRef\.current\) \{[\s\S]*?void stopRef\.current\(\)\.catch/)
+
+  // Start error cleanup halts recording
+  assert.match(sessionPage, /catch \(error\) \{[\s\S]*?await stop\(\)[\s\S]*?await abortSession\(\)/)
+})
+
+
 
 
 
