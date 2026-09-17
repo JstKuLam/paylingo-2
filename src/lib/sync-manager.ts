@@ -52,7 +52,9 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
     const verifiedSessionIds = new Set<string>()
     for (const sessId of sessionIds) {
       const localSess = await db.sessions.get(sessId)
-      if (localSess?.owner_id === ownerId) {
+      if (!localSess) {
+        await db.transcriptEntries.where('session_id').equals(sessId).delete()
+      } else if (localSess.owner_id === ownerId) {
         verifiedSessionIds.add(sessId)
       }
     }
@@ -130,20 +132,30 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
 
     await res.json().catch(() => ({}))
 
-    // Mark folders as synced
+    // Mark folders as synced if unchanged during transit
     if (ownedFolders.length > 0) {
-      await db.folders.bulkUpdate(
-        ownedFolders.map(folder => ({ key: folder.id, changes: { sync_status: 'synced' as const } }))
-      )
-      syncedFolders = ownedFolders.length
+      await db.transaction('rw', db.folders, async () => {
+        for (const folder of ownedFolders) {
+          const current = await db.folders.get(folder.id)
+          if (current && (!current.updated_at || current.updated_at === folder.updated_at)) {
+            await db.folders.update(folder.id, { sync_status: 'synced' })
+            syncedFolders++
+          }
+        }
+      })
     }
 
-    // Mark sessions as synced
+    // Mark sessions as synced if unchanged during transit
     if (ownedSessions.length > 0) {
-      await db.sessions.bulkUpdate(
-        ownedSessions.map(session => ({ key: session.id, changes: { sync_status: 'synced' as const } }))
-      )
-      syncedSessions = ownedSessions.length
+      await db.transaction('rw', db.sessions, async () => {
+        for (const session of ownedSessions) {
+          const current = await db.sessions.get(session.id)
+          if (current && (!current.updated_at || current.updated_at === session.updated_at)) {
+            await db.sessions.update(session.id, { sync_status: 'synced' })
+            syncedSessions++
+          }
+        }
+      })
     }
 
     // Mark entries as synced atomically
@@ -153,6 +165,7 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
           const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
             ? entry.id
             : stringToUUID(entry.id)
+          const current = await db.transcriptEntries.get(entry.id)
           if (entryId !== entry.id) {
             await db.transcriptEntries.delete(entry.id)
             await db.transcriptEntries.put({
@@ -161,12 +174,13 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
               sync_status: 'synced',
               updated_at: new Date().toISOString()
             })
-          } else {
+            syncedEntries++
+          } else if (current && (!current.updated_at || current.updated_at === entry.updated_at)) {
             await db.transcriptEntries.update(entry.id, { sync_status: 'synced' })
+            syncedEntries++
           }
         }
       })
-      syncedEntries = safeEntries.length
     }
 
     return { success: true, syncedFolders, syncedSessions, syncedEntries }

@@ -53,6 +53,16 @@ export async function POST(request: Request) {
     const syncedFolderIds = new Set<string>()
     const syncedSessionIds = new Set<string>()
 
+function clampIsoTimestamp(input?: string | null, fallback?: string): string {
+  const fallbackVal = fallback || new Date().toISOString()
+  if (!input || typeof input !== 'string') return fallbackVal
+  const time = Date.parse(input)
+  if (isNaN(time)) return fallbackVal
+  const now = Date.now()
+  if (time > now + 60_000) return new Date(now).toISOString()
+  return new Date(time).toISOString()
+}
+
     // 1. Sync Folders
     if (Array.isArray(folders) && folders.length > 0) {
       for (const folder of folders) {
@@ -62,9 +72,11 @@ export async function POST(request: Request) {
           continue
         }
         const nowIso = new Date().toISOString()
-        const createdAt = folder.created_at || nowIso
-        const updatedAt = folder.updated_at || nowIso
-        const username = folder.username || user.email.split('@')[0]
+        const createdAt = clampIsoTimestamp(folder.created_at, nowIso)
+        const updatedAt = clampIsoTimestamp(folder.updated_at, nowIso)
+        const username = typeof folder.username === 'string' && folder.username.trim()
+          ? folder.username.trim().slice(0, 100)
+          : user.email.split('@')[0]
 
         await db.prepare(`
           INSERT INTO folders (id, name, owner_id, username, created_at, updated_at)
@@ -73,8 +85,9 @@ export async function POST(request: Request) {
             name = excluded.name,
             username = excluded.username,
             updated_at = excluded.updated_at
+          WHERE excluded.updated_at >= folders.updated_at OR folders.updated_at IS NULL
         `)
-          .bind(folder.id, folder.name, user.id, username, createdAt, updatedAt)
+          .bind(folder.id, String(folder.name).slice(0, 200), user.id, username, createdAt, updatedAt)
           .run()
         syncedFolderIds.add(folder.id)
         syncedFolders++
@@ -90,12 +103,16 @@ export async function POST(request: Request) {
           continue
         }
         const nowIso = new Date().toISOString()
-        const startedAt = sess.started_at || nowIso
-        const endedAt = sess.ended_at || null
-        const updatedAt = sess.updated_at || nowIso
-        const username = sess.username || user.email.split('@')[0]
-        const durationSeconds = typeof sess.duration_seconds === 'number' ? sess.duration_seconds : 0
-        const partnerLang = sess.partner_language || 'en'
+        const startedAt = clampIsoTimestamp(sess.started_at, nowIso)
+        const endedAt = sess.ended_at ? clampIsoTimestamp(sess.ended_at, nowIso) : null
+        const updatedAt = clampIsoTimestamp(sess.updated_at, nowIso)
+        const username = typeof sess.username === 'string' && sess.username.trim()
+          ? sess.username.trim().slice(0, 100)
+          : user.email.split('@')[0]
+        const durationSeconds = Math.max(0, Math.floor(typeof sess.duration_seconds === 'number' && Number.isFinite(sess.duration_seconds) ? sess.duration_seconds : 0))
+        const partnerLang = typeof sess.partner_language === 'string' && sess.partner_language.trim()
+          ? sess.partner_language.trim().slice(0, 10)
+          : 'en'
         const rawFolderId = sess.folder_id || null
 
         // Verify folder ownership if folder_id is provided
@@ -123,13 +140,14 @@ export async function POST(request: Request) {
             ended_at = excluded.ended_at,
             duration_seconds = excluded.duration_seconds,
             updated_at = excluded.updated_at
+          WHERE excluded.updated_at >= sessions.updated_at OR sessions.updated_at IS NULL
         `)
           .bind(
             sess.id,
             user.id,
             username,
             validFolderId,
-            sess.name,
+            String(sess.name).slice(0, 200),
             partnerLang,
             startedAt,
             endedAt,
@@ -165,26 +183,30 @@ export async function POST(request: Request) {
       for (const entry of entries) {
         if (!entry.id || !entry.session_id || !authorizedSessionIds.has(entry.session_id)) continue
         const nowIso = new Date().toISOString()
-        const createdAt = entry.created_at || nowIso
-        const startMs = typeof entry.start_ms === 'number' ? entry.start_ms : 0
-        const endMs = typeof entry.end_ms === 'number' ? entry.end_ms : 0
+        const createdAt = clampIsoTimestamp(entry.created_at, nowIso)
+        const startMs = Math.max(0, Math.floor(typeof entry.start_ms === 'number' && Number.isFinite(entry.start_ms) ? entry.start_ms : 0))
+        const endMs = Math.max(startMs, Math.floor(typeof entry.end_ms === 'number' && Number.isFinite(entry.end_ms) ? entry.end_ms : startMs))
         const speaker = entry.speaker === 'partner' ? 'partner' : 'host'
-        const origText = entry.original_text || ''
-        const transText = entry.translated_text || ''
+        const origText = typeof entry.original_text === 'string' ? entry.original_text : ''
+        const transText = typeof entry.translated_text === 'string' ? entry.translated_text : ''
 
-        await db.prepare(`
-          INSERT INTO transcript_entries (id, session_id, speaker, original_text, translated_text, start_ms, end_ms, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            speaker = excluded.speaker,
-            original_text = excluded.original_text,
-            translated_text = excluded.translated_text,
-            start_ms = excluded.start_ms,
-            end_ms = excluded.end_ms
-        `)
-          .bind(entry.id, entry.session_id, speaker, origText, transText, startMs, endMs, createdAt)
-          .run()
-        syncedEntries++
+        try {
+          await db.prepare(`
+            INSERT INTO transcript_entries (id, session_id, speaker, original_text, translated_text, start_ms, end_ms, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              speaker = excluded.speaker,
+              original_text = excluded.original_text,
+              translated_text = excluded.translated_text,
+              start_ms = excluded.start_ms,
+              end_ms = excluded.end_ms
+          `)
+            .bind(entry.id, entry.session_id, speaker, origText, transText, startMs, endMs, createdAt)
+            .run()
+          syncedEntries++
+        } catch (entryErr) {
+          console.warn(`[Sync] Skipping entry ${entry.id}:`, entryErr)
+        }
       }
     }
 

@@ -473,3 +473,21 @@ test('app-version checks client semver, rate limits requests, and sw protects ag
   assert.match(sw, /try\s*\{[\s\S]*?cache\.put\(request,\s*response\.clone\(\)\);[\s\S]*?\}\s*catch\s*\(cacheErr\)/)
   assert.match(sw, /try\s*\{[\s\S]*?cache\.put\('\/',\s*response\.clone\(\)\);[\s\S]*?\}\s*catch\s*\(cacheErr\)/)
 })
+
+test('sync route prevents clock skew exploits, enforces LWW, and sync manager prunes orphaned entries', async () => {
+  const syncRoute = await source('src/app/api/sync/route.ts')
+  const syncManager = await source('src/lib/sync-manager.ts')
+
+  // Clock skew clamping & LWW conflict resolution in sync route
+  assert.match(syncRoute, /clampIsoTimestamp/)
+  assert.match(syncRoute, /now \+ 60_000/)
+  assert.match(syncRoute, /WHERE excluded\.updated_at >= folders\.updated_at OR folders\.updated_at IS NULL/)
+  assert.match(syncRoute, /WHERE excluded\.updated_at >= sessions\.updated_at OR sessions\.updated_at IS NULL/)
+  assert.match(syncRoute, /Math\.max\(0,\s*Math\.floor/)
+
+  // Orphaned entries pruning & concurrency check in sync manager
+  assert.match(syncManager, /!localSess[\s\S]*?db\.transcriptEntries\.where\('session_id'\)\.equals\(sessId\)\.delete\(\)/)
+  assert.match(syncManager, /current\.updated_at === folder\.updated_at/)
+  assert.match(syncManager, /current\.updated_at === session\.updated_at/)
+})
+
