@@ -265,7 +265,12 @@ function SessionActiveArea({
 
   const getSonioxConfig = useCallback(async () => {
     const response = await fetch('/api/auth/soniox-key', { method: 'POST' })
-    const data: { api_key?: string; error?: string } = await response.json()
+    let data: { api_key?: string; error?: string } = {}
+    try {
+      data = await response.json()
+    } catch {
+      throw new Error(t.errorInitService)
+    }
     if (!response.ok || !data.api_key) {
       throw new Error(data.error || t.errorInitService)
     }

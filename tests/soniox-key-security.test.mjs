@@ -41,6 +41,9 @@ test('account deletion is authenticated and removes owned data before auth user'
   assert.ok(
     source.indexOf('DELETE FROM sessions') < source.indexOf('DELETE FROM auth_users'),
   )
+  assert.match(source, /client_reference_id:\s*`paylingo:\${sanitizedUserId}`/)
+  assert.match(source, /sanitizedUserId/)
+  assert.match(source, /db\.batch\(\[/)
   assert.match(source, /Cache-Control['"]:\s*['"]no-store/)
   assert.match(source, /response\.cookies\.set/)
   assert.match(source, /AUTH_COOKIE_NAME/)
