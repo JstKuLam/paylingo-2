@@ -72,22 +72,26 @@ export async function claimLegacyLocalData(ownerId: string, username: string) {
   const cleanUsername = username.trim().toLowerCase()
   if (!cleanUsername) return
 
-  await db.transaction('rw', db.sessions, db.folders, async () => {
-    const allSessions = await db.sessions.toArray()
-    const allFolders = await db.folders.toArray()
+  try {
+    await db.transaction('rw', db.sessions, db.folders, async () => {
+      const allSessions = await db.sessions.toArray()
+      const allFolders = await db.folders.toArray()
 
-    const legacySessions = allSessions.filter(
-      (session) => !session.owner_id && session.username?.trim().toLowerCase() === cleanUsername
-    )
-    const legacyFolders = allFolders.filter(
-      (folder) => !folder.owner_id && folder.username?.trim().toLowerCase() === cleanUsername
-    )
+      const legacySessions = allSessions.filter(
+        (session) => !session.owner_id && session.username?.trim().toLowerCase() === cleanUsername
+      )
+      const legacyFolders = allFolders.filter(
+        (folder) => !folder.owner_id && folder.username?.trim().toLowerCase() === cleanUsername
+      )
 
-    await Promise.all(
-      legacySessions.map((session) => db.sessions.update(session.id, { owner_id: ownerId }))
-    )
-    await Promise.all(
-      legacyFolders.map((folder) => db.folders.update(folder.id, { owner_id: ownerId }))
-    )
-  })
+      await Promise.all(
+        legacySessions.map((session) => db.sessions.update(session.id, { owner_id: ownerId }))
+      )
+      await Promise.all(
+        legacyFolders.map((folder) => db.folders.update(folder.id, { owner_id: ownerId }))
+      )
+    })
+  } catch (err) {
+    console.warn('Failed to claim legacy local data:', err)
+  }
 }

@@ -30,7 +30,7 @@ export async function createMagicToken(email: string): Promise<{ token: string; 
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
   // Clean up old tokens for this email
-  await db.prepare('DELETE FROM auth_tokens WHERE email = ? OR expires_at < datetime(\'now\')')
+  await db.prepare('DELETE FROM auth_tokens WHERE email = ? OR datetime(expires_at) < datetime(\'now\')')
     .bind(sanitizedEmail)
     .run()
 
@@ -54,7 +54,7 @@ export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionR
   const cleanInput = tokenOrOtp.trim()
 
   const record = await db.prepare(
-    'SELECT * FROM auth_tokens WHERE token = ? AND expires_at > datetime(\'now\')'
+    'SELECT * FROM auth_tokens WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
   )
     .bind(cleanInput)
     .first<{ token: string; email: string; expires_at: string }>()
@@ -158,7 +158,7 @@ export async function getAuthenticatedUser(
     SELECT u.id, u.email, u.email_confirmed_at, u.created_at
     FROM auth_sessions s
     JOIN auth_users u ON s.user_id = u.id
-    WHERE s.token = ? AND s.expires_at > datetime('now')
+    WHERE s.token = ? AND datetime(s.expires_at) > datetime('now')
   `)
     .bind(token)
     .first<AuthUser>()

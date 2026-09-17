@@ -44,3 +44,43 @@ test('D1 batch statements execute within transaction', async () => {
   // Clean up
   await db.prepare('DELETE FROM folders WHERE id IN (?, ?)').bind(id1, id2).run()
 })
+
+test('D1 ISO 8601 timestamp comparison with datetime(expires_at) prevents same-day token leakage', async () => {
+  const db = getD1()
+  const expiredToken = 'expired-iso-' + Date.now()
+  const validToken = 'valid-iso-' + Date.now()
+
+  // 10 minutes in the past (same day, ISO format with 'T')
+  const pastIso = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  // 15 minutes in the future (same day, ISO format with 'T')
+  const futureIso = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
+  await db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
+    .bind(expiredToken, 'audit@example.com', pastIso)
+    .run()
+
+  await db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
+    .bind(validToken, 'audit@example.com', futureIso)
+    .run()
+
+  // Verify that datetime(expires_at) > datetime('now') correctly rejects pastIso
+  const expiredRecord = await db.prepare(
+    'SELECT * FROM auth_tokens WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
+  )
+    .bind(expiredToken)
+    .first()
+
+  assert.strictEqual(expiredRecord, null, 'Expired ISO timestamp must NOT be matched')
+
+  // Verify that datetime(expires_at) > datetime('now') correctly accepts futureIso
+  const validRecord = await db.prepare(
+    'SELECT * FROM auth_tokens WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
+  )
+    .bind(validToken)
+    .first()
+
+  assert.ok(validRecord, 'Valid future ISO timestamp must be matched')
+
+  // Clean up
+  await db.prepare('DELETE FROM auth_tokens WHERE token IN (?, ?)').bind(expiredToken, validToken).run()
+})
