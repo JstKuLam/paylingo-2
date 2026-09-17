@@ -395,6 +395,24 @@ test('sync manager retries failed entries, batches payloads, and sync API valida
   assert.match(syncRoute, /status:\s*500,\s*headers:\s*noStoreHeader/)
 })
 
+test('session lifecycle hook manages dual silence timers, sanitizes duration, and prevents leaks', async () => {
+  const lifecycle = await source('src/hooks/useSessionLifecycle.ts')
+  const sessionPage = await source('src/app/session/page.tsx')
+
+  // Force-stop timer separation and universal cleanup
+  assert.match(lifecycle, /forceStopTimerRef/)
+  assert.match(lifecycle, /clearSilenceTimers/)
+  assert.match(lifecycle, /visibilityState === 'visible'/)
+
+  // Duration computation protects against NaN values
+  assert.match(lifecycle, /Number\.isFinite\(rawStartTime\)/)
+  assert.match(lifecycle, /Number\.isFinite\(activeSession\.duration_seconds\)/)
+
+  // Session page unmount cleanup uses stable refs
+  assert.match(sessionPage, /isActiveRef\.current/)
+  assert.match(sessionPage, /stopRef\.current/)
+})
+
 
 
 

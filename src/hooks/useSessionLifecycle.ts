@@ -29,10 +29,22 @@ export function useSessionLifecycle({
   )
 
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const forceStopTimerRef = useRef<NodeJS.Timeout | null>(null)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
   const activeSessionRef = useRef<string | null>(null)
   const stopRecordingRef = useRef(stopRecording)
   const silenceAlertMessageRef = useRef(silenceAlertMessage)
+
+  const clearSilenceTimers = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
+    if (forceStopTimerRef.current) {
+      clearTimeout(forceStopTimerRef.current)
+      forceStopTimerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     stopRecordingRef.current = stopRecording
@@ -115,10 +127,7 @@ export function useSessionLifecycle({
         wakeLockRef.current.release().catch(() => {})
         wakeLockRef.current = null
       }
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current)
-        silenceTimerRef.current = null
-      }
+      clearSilenceTimers()
       const sid = activeSessionRef.current
       if (sid) {
         activeSessionRef.current = null
@@ -142,7 +151,7 @@ export function useSessionLifecycle({
         })
       }
     }
-  }, [])
+  }, [clearSilenceTimers])
 
   // 1. Wake Lock API Integration
   const requestWakeLock = useCallback(async () => {
@@ -176,6 +185,7 @@ export function useSessionLifecycle({
   const wasActiveRef = useRef(false)
   useEffect(() => {
     if (wasActiveRef.current && !isActive && activeSessionRef.current) {
+      clearSilenceTimers()
       const sid = activeSessionRef.current
       activeSessionRef.current = null
       setSessionId(null)
@@ -203,7 +213,7 @@ export function useSessionLifecycle({
       }
     }
     wasActiveRef.current = isActive
-  }, [isActive])
+  }, [isActive, clearSilenceTimers])
 
   // Handle automatic re-acquisition on tab visibility changes
   useEffect(() => {
@@ -297,10 +307,7 @@ export function useSessionLifecycle({
 
   // 3. Stop Session Lifecycle
   const stopSession = useCallback(async () => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current)
-      silenceTimerRef.current = null
-    }
+    clearSilenceTimers()
 
     const currentSessionId = activeSessionRef.current
     activeSessionRef.current = null
@@ -311,12 +318,15 @@ export function useSessionLifecycle({
       try {
         const now = new Date().toISOString()
         const activeSession = await db.sessions.get(currentSessionId)
+        const rawStartTime = activeSession ? new Date(activeSession.started_at).getTime() : NaN
+        const validStart = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
+        const computedDuration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
         const durationSeconds = activeSession
           ? Math.max(
-              activeSession.duration_seconds,
-              Math.floor((Date.now() - new Date(activeSession.started_at).getTime()) / 1000)
+              Number.isFinite(activeSession.duration_seconds) ? activeSession.duration_seconds : 0,
+              computedDuration
             )
-          : 0
+          : computedDuration
         await db.sessions.update(currentSessionId, {
           ended_at: now,
           duration_seconds: durationSeconds,
@@ -333,14 +343,11 @@ export function useSessionLifecycle({
 
     // Sync everything
     void syncPendingData()
-  }, [releaseWakeLock])
+  }, [releaseWakeLock, clearSilenceTimers])
 
   // Abort an unstarted or failed session to prevent ghost records
   const abortSession = useCallback(async () => {
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current)
-      silenceTimerRef.current = null
-    }
+    clearSilenceTimers()
 
     const currentSessionId = activeSessionRef.current
     activeSessionRef.current = null
@@ -357,7 +364,7 @@ export function useSessionLifecycle({
     }
 
     await releaseWakeLock()
-  }, [releaseWakeLock])
+  }, [releaseWakeLock, clearSilenceTimers])
 
   // 4. Autosave active messages to local IndexedDB (Dexie)
   useEffect(() => {
@@ -422,48 +429,57 @@ export function useSessionLifecycle({
     return latestMessage ? `${latestMessage.id}:${latestMessage.end_ms}:${latestMessage.is_final}` : ''
   }, [messages])
 
+  // Reset silence warning on token stream updates using React's recommended state adjustment pattern
+  const [prevMarker, setPrevMarker] = useState(latestMessageMarker)
+  if (latestMessageMarker !== prevMarker) {
+    setPrevMarker(latestMessageMarker)
+    if (silenceWarning) {
+      setSilenceWarning(false)
+    }
+  }
+
   // 5. Silence & inactivity monitoring (5-minute cap)
   useEffect(() => {
-    if (!isActive || !sessionId) return
-
-    const resetSilenceTimers = () => {
-      setSilenceWarning(false)
-
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
-
-      // Warning at 4 minutes of silence (240 seconds)
-      silenceTimerRef.current = setTimeout(() => {
-        setSilenceWarning(true)
-
-        // Force stop at 5 minutes of silence (300 seconds)
-        silenceTimerRef.current = setTimeout(async () => {
-          try {
-            await stopRecordingRef.current()
-          } catch (err) {
-            console.warn('Error during silence timeout stopRecording:', err)
-          }
-          try {
-            await stopSession()
-          } catch (err) {
-            console.warn('Error during silence timeout stopSession:', err)
-          }
-          alert(silenceAlertMessageRef.current || 'Hội thoại đã tự động kết thúc do 5 phút không hoạt động để tránh hao tổn phí API.')
-        }, 60000)
-
-      }, 240000)
+    if (!isActive || !sessionId) {
+      clearSilenceTimers()
+      return
     }
 
-    // Reset timer on token stream updates (whenever messages length or content changes)
-    resetSilenceTimers()
+    clearSilenceTimers()
+
+    // Warning at 4 minutes of silence (240 seconds)
+    silenceTimerRef.current = setTimeout(() => {
+      setSilenceWarning(true)
+
+      // Force stop at 5 minutes of silence (300 seconds)
+      forceStopTimerRef.current = setTimeout(async () => {
+        try {
+          await stopRecordingRef.current()
+        } catch (err) {
+          console.warn('Error during silence timeout stopRecording:', err)
+        }
+        try {
+          await stopSession()
+        } catch (err) {
+          console.warn('Error during silence timeout stopSession:', err)
+        }
+        if (typeof window !== 'undefined' && typeof window.alert === 'function' && document.visibilityState === 'visible') {
+          try {
+            window.alert(silenceAlertMessageRef.current || 'Hội thoại đã tự động kết thúc do 5 phút không hoạt động để tránh hao tổn phí API.')
+          } catch {}
+        }
+      }, 60000)
+
+    }, 240000)
 
     return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+      clearSilenceTimers()
     }
-  }, [isActive, sessionId, latestMessageMarker, stopSession])
+  }, [isActive, sessionId, latestMessageMarker, stopSession, clearSilenceTimers])
 
   return {
     sessionId,
-    silenceWarning,
+    silenceWarning: isActive && Boolean(sessionId) && silenceWarning,
     wakeLockError,
     offlineIndicator,
     startSession,

@@ -342,13 +342,22 @@ function SessionActiveArea({
     }
   }, [isActive])
 
+  const isActiveRef = useRef(isActive)
+  const stopRef = useRef(stop)
+  useEffect(() => {
+    isActiveRef.current = isActive
+  }, [isActive])
+  useEffect(() => {
+    stopRef.current = stop
+  }, [stop])
+
   useEffect(() => {
     return () => {
-      if (isActive) {
-        void stop().catch(() => {})
+      if (isActiveRef.current) {
+        void stopRef.current().catch(() => {})
       }
     }
-  }, [isActive, stop])
+  }, [])
 
   const {
     silenceWarning,
