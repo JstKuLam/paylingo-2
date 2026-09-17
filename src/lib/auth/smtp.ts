@@ -209,6 +209,20 @@ function sendSmtpViaNodeTls(options: SmtpEmailOptions, config: SmtpConfig): Prom
 }
 
 export async function sendEmail(options: SmtpEmailOptions): Promise<{ success: boolean; error?: string }> {
+  const cleanTo = (options.to || '').replace(/[\r\n\x00-\x1f]/g, '').trim()
+  const cleanSubject = (options.subject || '').replace(/[\r\n\x00-\x1f]/g, '').trim()
+  if (!cleanTo || !cleanSubject) {
+    return { success: false, error: 'Địa chỉ người nhận hoặc tiêu đề không hợp lệ.' }
+  }
+
+  // RFC 5321 dot-stuffing to prevent premature data termination / SMTP smuggling
+  const cleanHtml = (options.html || '').replace(/^\./gm, '..')
+  const safeOptions: SmtpEmailOptions = {
+    to: cleanTo,
+    subject: cleanSubject,
+    html: cleanHtml,
+  }
+
   const host = process.env.SMTP_HOST || 'smtp.maileroo.com'
   const port = parseInt(process.env.SMTP_PORT || '465', 10)
   const user = process.env.SMTP_USER || 'no-reply@pay2pay.vn'
@@ -221,7 +235,7 @@ export async function sendEmail(options: SmtpEmailOptions): Promise<{ success: b
     // 1. Try Cloudflare Sockets if running on Cloudflare Edge
     if (typeof (globalThis as unknown as { WebSocketPair?: unknown }).WebSocketPair !== 'undefined') {
       try {
-        await sendSmtpViaEdgeSocket(options, config)
+        await sendSmtpViaEdgeSocket(safeOptions, config)
         return { success: true }
       } catch (edgeErr: unknown) {
         console.error('Edge socket send error:', edgeErr)
@@ -230,7 +244,7 @@ export async function sendEmail(options: SmtpEmailOptions): Promise<{ success: b
     }
 
     // 2. Node.js runtime fallback (local dev / test) via direct TLS socket
-    await sendSmtpViaNodeTls(options, config)
+    await sendSmtpViaNodeTls(safeOptions, config)
     return { success: true }
   } catch (err: unknown) {
     console.error('Failed to send email via SMTP:', err)

@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const sanitizedEmail = email.trim().toLowerCase()
+    const sanitizedEmail = email.trim().toLowerCase().replace(/[\r\n\x00-\x1f]/g, '')
     const isAllowed = isAllowedEmail(sanitizedEmail)
 
     if (!isAllowed) {
@@ -49,6 +49,13 @@ export async function POST(request: Request) {
       windowMs: 15 * 60_000,
     })
     if (!ipLimit.allowed) return rateLimitResponse(ipLimit.retryAfterSeconds)
+
+    const emailLimit = checkRateLimit({
+      key: `magic-link-email:${sanitizedEmail}`,
+      limit: 5,
+      windowMs: 15 * 60_000,
+    })
+    if (!emailLimit.allowed) return rateLimitResponse(emailLimit.retryAfterSeconds)
 
     const requestLimit = checkRateLimit({
       key: `magic-link:${getRequestIp(request)}:${sanitizedEmail}`,

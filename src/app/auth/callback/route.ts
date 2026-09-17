@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { verifyMagicToken, AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE } from '@/lib/auth/session'
+import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'edge'
 
@@ -19,6 +20,15 @@ function safeNextPath(nextParam: string | null, origin: string): string {
 }
 
 export async function GET(request: Request) {
+  const rateLimit = checkRateLimit({
+    key: `auth-callback:${getRequestIp(request)}`,
+    limit: 20,
+    windowMs: 15 * 60_000,
+  })
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit.retryAfterSeconds)
+  }
+
   const requestUrl = new URL(request.url)
   const origin = requestUrl.origin
   const token =

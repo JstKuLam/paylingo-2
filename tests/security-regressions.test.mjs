@@ -491,3 +491,29 @@ test('sync route prevents clock skew exploits, enforces LWW, and sync manager pr
   assert.match(syncManager, /current\.updated_at === session\.updated_at/)
 })
 
+test('magic link auth enforces per-email rate limits, CRLF sanitization, dot-stuffing, and callback throttling', async () => {
+  const sendRoute = await source('src/app/api/auth/send-magic-link/route.ts')
+  const smtp = await source('src/lib/auth/smtp.ts')
+  const authUtils = await source('src/lib/auth-utils.ts')
+  const sessionAuth = await source('src/lib/auth/session.ts')
+  const callbackRoute = await source('src/app/auth/callback/route.ts')
+
+  // Per-email rate limiting & CRLF stripping
+  assert.match(sendRoute, /magic-link-email:\$\{sanitizedEmail\}/)
+  assert.match(sendRoute, /replace\(\/\[\\r\\n\\x00-\\x1f\]\/g,\s*''\)/)
+
+  // Auth utils CRLF defense & length bound
+  assert.match(authUtils, /sanitized\.length > 254/)
+  assert.match(authUtils, /sanitized\.includes\('\\r'\) \|\| sanitized\.includes\('\\n'\)/)
+
+  // SMTP transport CRLF injection defense & RFC 5321 dot-stuffing
+  assert.match(smtp, /cleanTo = \(options\.to \|\| ''\)\.replace\(\/\[\\r\\n\\x00-\\x1f\]\/g,\s*''\)\.trim\(\)/)
+  assert.match(smtp, /cleanSubject = \(options\.subject \|\| ''\)\.replace\(\/\[\\r\\n\\x00-\\x1f\]\/g,\s*''\)\.trim\(\)/)
+  assert.match(smtp, /cleanHtml = \(options\.html \|\| ''\)\.replace\(\/\^\\\.\/gm,\s*'\.\.'\)/)
+
+  // Session token verification checks allowed email
+  assert.match(sessionAuth, /!record \|\| !isAllowedEmail\(record\.email\)/)
+
+  // Callback route rate limits attempts
+  assert.match(callbackRoute, /auth-callback:\$\{getRequestIp\(request\)\}/)
+})

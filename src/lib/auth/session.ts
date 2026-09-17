@@ -1,4 +1,5 @@
 import { getD1 } from '../d1-client'
+import { isAllowedEmail } from '../auth-utils'
 import { cookies } from 'next/headers'
 
 export const AUTH_COOKIE_NAME = 'paylingo_auth_session'
@@ -67,7 +68,7 @@ export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionR
     .bind(cleanInput)
     .first<{ token: string; email: string; expires_at: string }>()
 
-  if (!record) return null
+  if (!record || !isAllowedEmail(record.email)) return null
 
   // Atomically delete token and verify changes > 0 to prevent concurrent replay race conditions
   const deleteRes = await db.prepare('DELETE FROM auth_tokens WHERE token = ?').bind(cleanInput).run()
