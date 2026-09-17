@@ -835,6 +835,23 @@ test('rate limiter validates safe integer options, throttles map sweeps, and san
   assert.match(rateLimit, /Number\.isSafeInteger\(retryAfterSeconds\)/)
 })
 
+test('PDF and HTML export utilities guard against SSR and bound iframe metadata', async () => {
+  const pdfGen = await source('src/lib/pdf-generator.ts')
+  const htmlGen = await source('src/lib/html-generator.ts')
+
+  // PDF generator SSR guards
+  assert.match(pdfGen, /export async function downloadSessionPDF[\s\S]*?if \(typeof window === 'undefined' \|\| typeof document === 'undefined'\) return/)
+  assert.match(pdfGen, /export async function downloadSessionTXT[\s\S]*?if \(typeof window === 'undefined' \|\| typeof document === 'undefined'\) return/)
+  assert.match(pdfGen, /export async function downloadSessionJSON[\s\S]*?if \(typeof window === 'undefined' \|\| typeof document === 'undefined'\) return/)
+
+  // Iframe title bounded & sanitized
+  assert.match(pdfGen, /frame\.title = `Xuất PDF \$\{safeSessionName\.slice\(0,\s*100\)\}`/)
+
+  // HTML generator SSR guard
+  assert.match(htmlGen, /export function downloadSummaryHTML[\s\S]*?if \(typeof window === 'undefined' \|\| typeof document === 'undefined'\) return/)
+})
+
+
 
 
 

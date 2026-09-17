@@ -110,11 +110,13 @@ export async function downloadSessionPDF(
   startedAt: string,
   entries: LocalTranscriptEntry[]
 ) {
-  const html = generateSessionPrintHTML(sessionName, partnerLang, partnerLangName, startedAt, entries)
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
+  const safeSessionName = typeof sessionName === 'string' && sessionName.trim() ? sessionName.trim() : 'Hội thoại PayLingo'
+  const html = generateSessionPrintHTML(safeSessionName, partnerLang, partnerLangName, startedAt, entries)
 
   const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
   const frame = document.createElement('iframe')
-  frame.title = `Xuất PDF ${sessionName}`
+  frame.title = `Xuất PDF ${safeSessionName.slice(0, 100)}`
   frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none'
   frame.src = blobUrl
   document.body.appendChild(frame)
@@ -157,6 +159,7 @@ export async function downloadSessionTXT(
   startedAt: string,
   entries: LocalTranscriptEntry[]
 ) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
   const formattedDate = Number.isFinite(new Date(startedAt).getTime())
     ? new Date(startedAt).toLocaleString('vi-VN')
     : 'Không rõ'
@@ -196,6 +199,7 @@ export async function downloadSessionJSON(
   startedAt: string,
   entries: LocalTranscriptEntry[]
 ) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
   const safeSessionName = typeof sessionName === 'string' && sessionName.trim() ? sessionName.trim() : 'Hội thoại PayLingo'
   const safePartnerLang = partnerLang || 'und'
   const safePartnerLangName = partnerLangName || 'Đối tác'

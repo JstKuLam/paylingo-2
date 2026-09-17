@@ -616,6 +616,7 @@ export function safeHtmlFilename(sessionName: string | null | undefined): string
  * Initiates browser download of the beautiful HTML summary report file.
  */
 export function downloadSummaryHTML(sessionName: string, markdown: string, startedAt?: string, partnerLang?: string) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
   const htmlContent = generatePremiumHTMLReport({
     sessionName,
     markdown,
