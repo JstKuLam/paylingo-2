@@ -15,9 +15,9 @@ export async function GET(request: Request) {
         'Cache-Control': 'no-store, max-age=0',
       },
     })
-  } catch (err: unknown) {
+  } catch {
     return NextResponse.json(
-      { user: null, authenticated: false, error: err instanceof Error ? err.message : 'Unknown error' },
+      { user: null, authenticated: false, error: 'Failed to authenticate user' },
       {
         status: 500,
         headers: {

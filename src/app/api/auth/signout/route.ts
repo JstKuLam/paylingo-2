@@ -8,6 +8,14 @@ const noStoreHeader = {
   'Cache-Control': 'no-store, max-age=0',
 }
 
+function safeDecodeURIComponent(val: string): string {
+  try {
+    return decodeURIComponent(val)
+  } catch {
+    return val
+  }
+}
+
 export async function POST(request: Request) {
   try {
     let token: string | null = null
@@ -17,7 +25,7 @@ export async function POST(request: Request) {
     } else {
       const cookieHeader = request.headers.get('cookie') || ''
       const match = cookieHeader.match(new RegExp(`(?:^|; )${AUTH_COOKIE_NAME}=([^;]*)`))
-      token = match ? decodeURIComponent(match[1]) : null
+      token = match ? safeDecodeURIComponent(match[1]) : null
     }
 
     if (token) {

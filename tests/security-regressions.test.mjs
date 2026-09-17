@@ -752,6 +752,26 @@ test('app-version route strictly validates platform and version parameter format
   assert.match(appVersion, /Number\.isSafeInteger\(parts\[0]\) \? Math\.max\(0, parts\[0]\) : 0/)
 })
 
+test('middleware checks token bounds and headers, auth session safely decodes cookies', async () => {
+  const middleware = await source('src/middleware.ts')
+  const authSession = await source('src/lib/auth/session.ts')
+  const authSignout = await source('src/app/api/auth/signout/route.ts')
+  const authMe = await source('src/app/api/auth/me/route.ts')
+
+  // Middleware token shape check
+  assert.match(middleware, /sessionToken\.length >= 10 && sessionToken\.length <= 256/)
+  assert.match(middleware, /Cross-Origin-Opener-Policy/)
+
+  // Safe URI component decode protection against malformed cookies
+  assert.match(authSession, /function safeDecodeURIComponent/)
+  assert.match(authSignout, /function safeDecodeURIComponent/)
+
+  // Auth me masks internal error
+  assert.match(authMe, /Failed to authenticate user/)
+  assert.doesNotMatch(authMe, /err\.message/)
+})
+
+
 
 
 

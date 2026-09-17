@@ -134,6 +134,14 @@ export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionR
   }
 }
 
+function safeDecodeURIComponent(val: string): string {
+  try {
+    return decodeURIComponent(val)
+  } catch {
+    return val
+  }
+}
+
 /**
  * Extracts and verifies the authenticated user from request cookies or Authorization header.
  */
@@ -153,7 +161,7 @@ export async function getAuthenticatedUser(
       const cookieHeader = requestOrHeaders.headers.get('cookie') || ''
       const match = cookieHeader.match(new RegExp(`(?:^|; )${AUTH_COOKIE_NAME}=([^;]*)`))
       if (match) {
-        token = decodeURIComponent(match[1])
+        token = safeDecodeURIComponent(match[1])
       }
     }
   } else if (requestOrHeaders instanceof Headers) {
@@ -164,7 +172,7 @@ export async function getAuthenticatedUser(
       const cookieHeader = requestOrHeaders.get('cookie') || ''
       const match = cookieHeader.match(new RegExp(`(?:^|; )${AUTH_COOKIE_NAME}=([^;]*)`))
       if (match) {
-        token = decodeURIComponent(match[1])
+        token = safeDecodeURIComponent(match[1])
       }
     }
   } else {
