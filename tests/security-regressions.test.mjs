@@ -80,7 +80,9 @@ test('sync route enforces multi-tenant ownership on folders, sessions, and entri
   const syncRoute = await source('src/app/api/sync/route.ts')
   assert.match(syncRoute, /existingFolder\.owner_id !== user\.id/)
   assert.match(syncRoute, /existingSession\.owner_id !== user\.id/)
-  assert.match(syncRoute, /forbiddenSessionIds/)
+  assert.match(syncRoute, /authorizedSessionIds/)
+  assert.match(syncRoute, /syncedFolderIds/)
+  assert.match(syncRoute, /'Cache-Control': 'no-store, max-age=0'/)
 })
 
 test('latest RLS migration authorizes by immutable owner id only', async () => {
@@ -162,9 +164,14 @@ test('history route enforces multi-tenant ownership on read, update, and delete'
   assert.match(historyRoute, /SELECT id FROM folders WHERE id = \? AND owner_id = \?/)
 
   // Cache-Control headers on sensitive auth and user data endpoints
+  const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
+  const sharedSummaryRoute = await source('src/app/api/shared/summary/route.ts')
   assert.match(historyRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(verifyRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(signoutRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(magicLinkRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(summarizeRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(sharedSummaryRoute, /'Cache-Control': 'no-store, max-age=0'/)
 })
+
 

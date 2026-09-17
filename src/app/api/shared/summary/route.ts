@@ -144,6 +144,10 @@ export async function POST(req: Request) {
         hasPassword,
         isLocked: false,
         created_at: summary.created_at
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
       })
     }
 
@@ -201,7 +205,11 @@ export async function POST(req: Request) {
         .run()
     }
 
-    return NextResponse.json({ success: true, id: resultId })
+    return NextResponse.json({ success: true, id: resultId }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   } catch (error: unknown) {
     console.error('Error creating/verifying shared summary:', error)
     return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })

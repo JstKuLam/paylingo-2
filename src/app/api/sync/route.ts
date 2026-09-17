@@ -20,6 +20,9 @@ export async function POST(request: Request) {
     let syncedSessions = 0
     let syncedEntries = 0
 
+    const syncedFolderIds = new Set<string>()
+    const syncedSessionIds = new Set<string>()
+
     // 1. Sync Folders
     if (Array.isArray(folders) && folders.length > 0) {
       for (const folder of folders) {
@@ -43,6 +46,7 @@ export async function POST(request: Request) {
         `)
           .bind(folder.id, folder.name, user.id, username, createdAt, updatedAt)
           .run()
+        syncedFolderIds.add(folder.id)
         syncedFolders++
       }
     }
@@ -62,7 +66,22 @@ export async function POST(request: Request) {
         const username = sess.username || user.email.split('@')[0]
         const durationSeconds = typeof sess.duration_seconds === 'number' ? sess.duration_seconds : 0
         const partnerLang = sess.partner_language || 'en'
-        const folderId = sess.folder_id || null
+        const rawFolderId = sess.folder_id || null
+
+        // Verify folder ownership if folder_id is provided
+        let validFolderId: string | null = null
+        if (rawFolderId) {
+          if (syncedFolderIds.has(rawFolderId)) {
+            validFolderId = rawFolderId
+          } else {
+            const ownedFolder = await db.prepare('SELECT id FROM folders WHERE id = ? AND owner_id = ?')
+              .bind(rawFolderId, user.id)
+              .first()
+            if (ownedFolder) {
+              validFolderId = rawFolderId
+            }
+          }
+        }
 
         await db.prepare(`
           INSERT INTO sessions (id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, access_code_id, created_at, updated_at)
@@ -79,7 +98,7 @@ export async function POST(request: Request) {
             sess.id,
             user.id,
             username,
-            folderId,
+            validFolderId,
             sess.name,
             partnerLang,
             startedAt,
@@ -90,6 +109,7 @@ export async function POST(request: Request) {
             updatedAt
           )
           .run()
+        syncedSessionIds.add(sess.id)
         syncedSessions++
       }
     }
@@ -97,16 +117,23 @@ export async function POST(request: Request) {
     // 3. Sync Transcript Entries
     if (Array.isArray(entries) && entries.length > 0) {
       const uniqueSessionIds = Array.from(new Set(entries.map((e: { session_id?: string }) => e.session_id).filter(Boolean))) as string[]
-      const forbiddenSessionIds = new Set<string>()
+      const authorizedSessionIds = new Set<string>()
+
       for (const sId of uniqueSessionIds) {
-        const sessOwner = await db.prepare('SELECT id, owner_id FROM sessions WHERE id = ?').bind(sId).first<{ id: string; owner_id: string }>()
-        if (sessOwner && sessOwner.owner_id !== user.id) {
-          forbiddenSessionIds.add(sId)
+        if (syncedSessionIds.has(sId)) {
+          authorizedSessionIds.add(sId)
+        } else {
+          const sess = await db.prepare('SELECT id FROM sessions WHERE id = ? AND owner_id = ?')
+            .bind(sId, user.id)
+            .first()
+          if (sess) {
+            authorizedSessionIds.add(sId)
+          }
         }
       }
 
       for (const entry of entries) {
-        if (!entry.id || !entry.session_id || forbiddenSessionIds.has(entry.session_id)) continue
+        if (!entry.id || !entry.session_id || !authorizedSessionIds.has(entry.session_id)) continue
         const nowIso = new Date().toISOString()
         const createdAt = entry.created_at || nowIso
         const startMs = typeof entry.start_ms === 'number' ? entry.start_ms : 0
@@ -136,6 +163,10 @@ export async function POST(request: Request) {
       syncedFolders,
       syncedSessions,
       syncedEntries,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
     })
   } catch (err: unknown) {
     console.error('Error in sync API:', err)

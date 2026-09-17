@@ -307,7 +307,11 @@ ${sanitizedTranscript}
       .bind(logId, sessionId || folderId || null, 'ai_summarize', JSON.stringify({ username, promptTokens, completionTokens, model, estimatedCost }))
       .run()
 
-    return NextResponse.json({ summary: cleanSummaryText })
+    return NextResponse.json({ summary: cleanSummaryText }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   } catch (error: unknown) {
     console.error('Error in summarize API:', error)
     if (error instanceof Error && (error.name === 'TimeoutError' || error.message.toLowerCase().includes('timeout') || error.message.toLowerCase().includes('aborted'))) {
