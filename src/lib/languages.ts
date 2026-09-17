@@ -24,7 +24,9 @@ export function getLocalizedPartnerLanguages(lang?: Language): PartnerLanguage[]
   return PARTNER_LANGUAGES.map((p) => (p.code === 'any' ? { ...p, name: autoName } : p))
 }
 
-export function getPartnerLanguage(code: string, lang?: Language) {
+export function getPartnerLanguage(code?: string | null, lang?: Language): PartnerLanguage | undefined {
+  if (!code || typeof code !== 'string') return undefined
+  const cleanCode = code.trim().toLowerCase()
   const list = getLocalizedPartnerLanguages(lang)
-  return list.find((language) => language.code === code)
+  return list.find((language) => language.code.toLowerCase() === cleanCode)
 }

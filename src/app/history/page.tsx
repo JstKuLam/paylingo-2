@@ -398,7 +398,7 @@ export default function HistoryPage() {
                     <span className="history-row__main">
                       <strong>{session.name}</strong>
                       <small>
-                        <span className="language-inline"><b>{partner?.shortName ?? session.partner_language.toUpperCase()}</b>{partner?.name ?? session.partner_language}</span>
+                        <span className="language-inline"><b>{partner?.shortName ?? (session.partner_language ? String(session.partner_language).toUpperCase() : 'AUTO')}</b>{partner?.name ?? session.partner_language ?? 'Auto'}</span>
                         <span><Clock3 aria-hidden="true" />{formatDuration(session.duration_seconds, t)}</span>
                       </small>
                     </span>

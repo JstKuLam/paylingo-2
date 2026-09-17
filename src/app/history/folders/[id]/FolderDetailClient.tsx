@@ -378,7 +378,7 @@ export default function FolderDetailPage({ params }: PageProps) {
                   <div className="folder-session-row" key={session.id}>
                     <button type="button" onClick={() => router.push(`/history/sessions/${session.id}`)}>
                       <span className="history-row__date"><strong>{new Date(session.started_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit' })}</strong><small>{new Date(session.started_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN', { month: 'short' })}</small></span>
-                      <span className="history-row__main"><strong>{session.name}</strong><small><span className="language-inline"><b>{partnerLang?.shortName ?? session.partner_language.toUpperCase()}</b>{partnerLang?.name ?? session.partner_language}</span><span><Clock3 aria-hidden="true" />{formatDuration(session.duration_seconds, t)}</span></small></span>
+                      <span className="history-row__main"><strong>{session.name}</strong><small><span className="language-inline"><b>{partnerLang?.shortName ?? (session.partner_language ? String(session.partner_language).toUpperCase() : 'AUTO')}</b>{partnerLang?.name ?? session.partner_language ?? 'Auto'}</span><span><Clock3 aria-hidden="true" />{formatDuration(session.duration_seconds, t)}</span></small></span>
                       <ChevronRight aria-hidden="true" />
                     </button>
                     <button type="button" className="unlink-command" onClick={() => void handleRemoveSession(session.id)} aria-label={t.folderDetailRemoveSessionAria} title={t.folderDetailRemoveSessionAria}><Unlink aria-hidden="true" /></button>

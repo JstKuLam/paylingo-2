@@ -79,3 +79,14 @@ test('useLanguage and useTheme hooks guard against SSR undefined window and norm
   assert.match(langHook, /validLang:\s*Language\s*=\s*newLang === 'vi' \|\| newLang === 'en' \|\| newLang === 'zh' \? newLang : 'vi'/)
   assert.match(themeHook, /validTheme:\s*ThemeType\s*=\s*newTheme === 'light' \? 'light' : 'dark'/)
 })
+
+test('getPartnerLanguage handles uppercase, whitespace, and null/undefined codes gracefully', async () => {
+  const { getPartnerLanguage } = await import('../src/lib/languages.ts')
+  assert.equal(getPartnerLanguage('en')?.code, 'en')
+  assert.equal(getPartnerLanguage('EN')?.code, 'en')
+  assert.equal(getPartnerLanguage('  zh  ')?.code, 'zh')
+  assert.equal(getPartnerLanguage(null), undefined)
+  assert.equal(getPartnerLanguage(undefined), undefined)
+  assert.equal(getPartnerLanguage(''), undefined)
+})
+

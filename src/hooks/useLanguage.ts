@@ -48,20 +48,19 @@ export function useLanguage(): {
   }
 
   const rawTranslations = translations[language] || translations.vi
-  const t: I18nTranslations = language === 'vi'
-    ? rawTranslations
-    : new Proxy(rawTranslations, {
-        get(target, prop: string | symbol) {
-          if (typeof prop === 'string' && prop in target) {
-            const val = target[prop as keyof I18nTranslations]
-            if (val !== undefined && val !== '') return val
-          }
-          if (typeof prop === 'string' && prop in translations.vi) {
-            return translations.vi[prop as keyof I18nTranslations]
-          }
-          return ''
-        },
-      })
+  const t: I18nTranslations = new Proxy(rawTranslations, {
+    get(target, prop: string | symbol) {
+      if (typeof prop === 'string' && prop in target) {
+        const val = target[prop as keyof I18nTranslations]
+        if (val !== undefined && val !== '') return val
+      }
+      if (typeof prop === 'string' && prop in translations.vi) {
+        const fallback = translations.vi[prop as keyof I18nTranslations]
+        if (fallback !== undefined && fallback !== '') return fallback
+      }
+      return ''
+    },
+  })
 
   return { language, changeLanguage, t }
 }

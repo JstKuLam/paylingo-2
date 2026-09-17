@@ -34,7 +34,9 @@ export default function LanguageSwitcher({ className = '', showIcon = true, size
         value={[language]}
         onValueChange={(values) => {
           const nextLanguage = values[0] as Language | undefined
-          if (nextLanguage) changeLanguage(nextLanguage)
+          if (nextLanguage && (nextLanguage === 'vi' || nextLanguage === 'en' || nextLanguage === 'zh')) {
+            changeLanguage(nextLanguage)
+          }
         }}
         aria-label="Language / Ngôn ngữ / 语言"
       >

@@ -893,12 +893,12 @@ export function detectMachineLanguage(): Language {
   if (typeof window === 'undefined') return 'vi'
 
   const nav = navigator as unknown as { userLanguage?: string }
-  const navLang = (
+  const rawLang =
     navigator.languages?.[0] ||
     navigator.language ||
-    nav.userLanguage ||
+    nav?.userLanguage ||
     ''
-  ).toLowerCase()
+  const navLang = (typeof rawLang === 'string' ? rawLang : '').toLowerCase()
 
   if (navLang.startsWith('zh')) return 'zh'
   if (navLang.startsWith('en')) return 'en'
