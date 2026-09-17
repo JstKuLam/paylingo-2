@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { generateSessionPrintHTML } from '../src/lib/pdf-generator.ts'
+import { generateSessionPrintHTML, safeFilename } from '../src/lib/pdf-generator.ts'
 import { formatTimeline } from '../src/lib/utils.ts'
 
 test('printable transcript escapes content and formats relative timestamps', () => {
@@ -63,3 +63,16 @@ test('formatTimeline handles negative, NaN, and normal durations cleanly', () =>
   assert.equal(formatTimeline(65_000), '01:05')
   assert.equal(formatTimeline(3_665_000), '01:01:05')
 })
+
+test('safeFilename strips control characters, path separators, dot prefixes, and bounds length', () => {
+  assert.equal(safeFilename(null), 'hoi-thoai')
+  assert.equal(safeFilename(''), 'hoi-thoai')
+  assert.equal(safeFilename('../../../etc/passwd'), 'etc-passwd')
+  assert.equal(safeFilename('Hội thoại: Bạn & Tôi / 2026?'), 'Hội_thoại-_Bạn_&_Tôi_-_2026')
+  assert.equal(safeFilename('\x00\x1f\x7fcontrol\x00'), 'control')
+
+  const veryLong = 'a'.repeat(200)
+  const result = safeFilename(veryLong)
+  assert.equal(result.length, 64)
+})
+

@@ -568,6 +568,20 @@ export function generatePremiumHTMLReport({
 </html>`;
 }
 
+export function safeHtmlFilename(sessionName: string | null | undefined): string {
+  const safeName = typeof sessionName === 'string' ? sessionName : ''
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const cleanName = safeName
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove tone marks
+    .replace(/[\x00-\x1f\x7f\\/:*?"<>|]+/g, '_')
+    .replace(/[^a-z0-9]+/g, '_')
+    .slice(0, 64)
+    .replace(/^_+|_+$/g, '')
+  return `tom_tat_${cleanName || 'cuoc_hop'}_${dateStr}.html`
+}
+
 /**
  * Initiates browser download of the beautiful HTML summary report file.
  */
@@ -583,17 +597,7 @@ export function downloadSummaryHTML(sessionName: string, markdown: string, start
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  
-  // Format filename cleanly
-  const dateStr = new Date().toISOString().slice(0, 10);
-  const cleanName = sessionName
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // remove tone marks
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/(^_+|_+$)/g, '');
-  
-  link.setAttribute('download', `tom_tat_${cleanName || 'cuoc_hop'}_${dateStr}.html`);
+  link.setAttribute('download', safeHtmlFilename(sessionName));
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

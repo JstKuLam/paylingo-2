@@ -9,8 +9,15 @@ function escapeHtml(value: string) {
     .replaceAll("'", '&#039;')
 }
 
-function safeFilename(value: string) {
-  return value.trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '_') || 'hoi-thoai'
+export function safeFilename(value: string | null | undefined): string {
+  if (!value || typeof value !== 'string') return 'hoi-thoai'
+  const sanitized = value
+    .trim()
+    .replace(/[\x00-\x1f\x7f\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, '_')
+    .slice(0, 64)
+    .replace(/^[-_.]+|[-_.]+$/g, '')
+  return sanitized || 'hoi-thoai'
 }
 
 function formatOffset(milliseconds: number) {
