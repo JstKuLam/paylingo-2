@@ -196,7 +196,7 @@ export default function SessionDetailPage({ params }: PageProps) {
   }, [loadSessionData])
 
   const handleRename = async () => {
-    const cleanName = newName.trim()
+    const cleanName = newName.trim().slice(0, 200)
     if (!session || !cleanName) return
     const now = new Date().toISOString()
     await db.sessions.update(session.id, { name: cleanName, sync_status: 'pending', updated_at: now })
@@ -238,14 +238,16 @@ export default function SessionDetailPage({ params }: PageProps) {
   const handleSaveEntryEdit = async (entryId: string) => {
     if (!editOrigText.trim() && !editTransText.trim()) return
     const now = new Date().toISOString()
+    const safeOrig = editOrigText.slice(0, 10_000)
+    const safeTrans = editTransText.slice(0, 10_000)
     await db.transcriptEntries.update(entryId, {
-      original_text: editOrigText,
-      translated_text: editTransText,
+      original_text: safeOrig,
+      translated_text: safeTrans,
       sync_status: 'pending',
       updated_at: now,
     })
     setEntries((current) => current.map((entry) => entry.id === entryId
-      ? { ...entry, original_text: editOrigText, translated_text: editTransText, sync_status: 'pending', updated_at: now }
+      ? { ...entry, original_text: safeOrig, translated_text: safeTrans, sync_status: 'pending', updated_at: now }
       : entry
     ))
     setEditingEntryId(null)
@@ -333,9 +335,15 @@ export default function SessionDetailPage({ params }: PageProps) {
   }
 
   const handleCopyLink = async () => {
-    await navigator.clipboard.writeText(shareLink)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareLink)
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1800)
+      }
+    } catch {
+      // Ignore clipboard permission restrictions
+    }
   }
 
   if (loading) {

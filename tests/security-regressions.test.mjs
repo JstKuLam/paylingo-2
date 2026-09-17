@@ -720,6 +720,25 @@ test('sync route executes chunked D1 batch inserts and validates ID types and le
   assert.match(syncRoute, /await db\.batch\(statements\)/)
 })
 
+test('history detail clients bound rename and entry lengths and guard clipboard write operations', async () => {
+  const sessionDetail = await source('src/app/history/sessions/[id]/SessionDetailClient.tsx')
+  const folderDetail = await source('src/app/history/folders/[id]/FolderDetailClient.tsx')
+
+  // Session rename and entry edit text bounds
+  assert.match(sessionDetail, /cleanName = newName\.trim\(\)\.slice\(0, 200\)/)
+  assert.match(sessionDetail, /safeOrig = editOrigText\.slice\(0, 10_000\)/)
+  assert.match(sessionDetail, /safeTrans = editTransText\.slice\(0, 10_000\)/)
+
+  // Folder rename text bound
+  assert.match(folderDetail, /cleanName = newName\.trim\(\)\.slice\(0, 200\)/)
+
+  // Clipboard copy protection
+  assert.match(sessionDetail, /try\s*\{[\s\S]*?navigator\.clipboard[\s\S]*?writeText\(shareLink\)[\s\S]*?\}\s*catch/)
+  assert.match(folderDetail, /try\s*\{[\s\S]*?navigator\.clipboard[\s\S]*?writeText\(shareLink\)[\s\S]*?\}\s*catch/)
+})
+
+
+
 
 
 

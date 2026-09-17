@@ -172,7 +172,7 @@ export default function FolderDetailPage({ params }: PageProps) {
   }, [loadFolderData])
 
   const handleRename = async () => {
-    const cleanName = newName.trim()
+    const cleanName = newName.trim().slice(0, 200)
     if (!folder || !cleanName) return
     const now = new Date().toISOString()
     await db.folders.update(folder.id, { name: cleanName, sync_status: 'pending', updated_at: now })
@@ -300,9 +300,15 @@ export default function FolderDetailPage({ params }: PageProps) {
   }
 
   const handleCopyLink = async () => {
-    await navigator.clipboard.writeText(shareLink)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareLink)
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1800)
+      }
+    } catch {
+      // Ignore clipboard permission restrictions
+    }
   }
 
   if (loading) {
