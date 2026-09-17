@@ -26,10 +26,32 @@ function renderInline(text: string): ReactNode[] {
 
 function SummaryDocument({ content }: { content: string }) {
   const lines = content.split('\n')
+  const blocks: { type: 'tree' | 'line'; lines: string[]; originalIndex: number }[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+    const isTree = /^[├└│┌┐┘┴┬┼─]/.test(trimmed)
+    const prev = blocks[blocks.length - 1]
+
+    if (isTree && prev && prev.type === 'tree') {
+      prev.lines.push(line)
+    } else if (isTree) {
+      blocks.push({ type: 'tree', lines: [line], originalIndex: i })
+    } else {
+      blocks.push({ type: 'line', lines: [line], originalIndex: i })
+    }
+  }
+
   return (
     <div className="shared-document__content">
-      {lines.map((line, index) => {
+      {blocks.map((block) => {
+        if (block.type === 'tree') {
+          return <pre className="document-tree" key={block.originalIndex}>{block.lines.join('\n')}</pre>
+        }
+        const line = block.lines[0]
         const trimmed = line.trim()
+        const index = block.originalIndex
         if (!trimmed) return <div className="document-space" key={index} aria-hidden="true" />
         if (trimmed.startsWith('### ')) return <h3 key={index}>{renderInline(trimmed.slice(4))}</h3>
         if (trimmed.startsWith('## ')) return <h2 key={index}>{renderInline(trimmed.slice(3))}</h2>
@@ -40,7 +62,6 @@ function SummaryDocument({ content }: { content: string }) {
           const match = trimmed.match(/^(\d+)\.\s(.*)$/)
           return <div className="document-list-item document-list-item--ordered" key={index}><b>{match?.[1]}</b><p>{renderInline(match?.[2] || '')}</p></div>
         }
-        if (/^[├└│]/.test(trimmed)) return <pre className="document-tree" key={index}>{line}</pre>
         return <p key={index}>{renderInline(trimmed)}</p>
       })}
     </div>

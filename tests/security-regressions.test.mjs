@@ -301,6 +301,11 @@ test('shared summary route enforces no-store on all responses and error boundari
   assert.match(sharedRoute, /status:\s*404,\s*headers:\s*noStoreHeader/)
   assert.match(sharedRoute, /status:\s*500,\s*headers:\s*noStoreHeader/)
 
+  // DELETE revocation handler enforces authentication and ownership
+  assert.match(sharedRoute, /export async function DELETE/)
+  assert.match(sharedRoute, /DELETE FROM shared_summaries WHERE id = \?/)
+  assert.match(sharedRoute, /owner_id = \?/)
+
   // Both error boundaries clear recovery throttling keys
   assert.match(globalError, /sessionStorage\.removeItem\('pwa_chunk_last_recovery'\)/)
   assert.match(globalError, /sessionStorage\.removeItem\('pwa_last_reload'\)/)

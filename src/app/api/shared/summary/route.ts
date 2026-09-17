@@ -22,6 +22,8 @@ const shareRequestSchema = z.object({
   summaryContent: z.string().min(1).max(500_000).optional(),
 })
 
+const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
+
 /**
  * GET handler: Fetch info about a shared summary.
  */
@@ -36,7 +38,6 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
-    const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
 
     if (!id || typeof id !== 'string' || id.length > 64) {
       return NextResponse.json({ error: 'Thiếu hoặc ID chia sẻ không hợp lệ' }, { status: 400, headers: noStoreHeader })
@@ -68,9 +69,7 @@ export async function GET(req: Request) {
       isLocked: false,
       created_at: summary.created_at
     }, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: noStoreHeader,
     })
   } catch (error: unknown) {
     console.error('Error fetching shared summary:', error)
@@ -78,9 +77,7 @@ export async function GET(req: Request) {
       { error: 'Lỗi hệ thống khi tải chia sẻ' },
       {
         status: 500,
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-        },
+        headers: noStoreHeader,
       }
     )
   }
@@ -92,7 +89,6 @@ export async function GET(req: Request) {
  * - Case 2: Verify password and fetch content
  */
 export async function POST(req: Request) {
-  const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const parsedBody = shareRequestSchema.safeParse(await req.json())
     if (!parsedBody.success) {
@@ -209,5 +205,68 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     console.error('Error creating/verifying shared summary:', error)
     return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500, headers: noStoreHeader })
+  }
+}
+
+/**
+ * DELETE handler: Revoke/delete a shared summary (requires ownership).
+ */
+export async function DELETE(req: Request) {
+  try {
+    const user = await getAuthenticatedUser(req)
+    if (!user) {
+      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401, headers: noStoreHeader })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    const sessionId = searchParams.get('sessionId')
+    const folderId = searchParams.get('folderId')
+
+    if (!id && !sessionId && !folderId) {
+      return NextResponse.json({ error: 'Thiếu ID chia sẻ hoặc ID cuộc hội thoại/thư mục' }, { status: 400, headers: noStoreHeader })
+    }
+
+    const db = getD1()
+
+    let targetSummary: { id: string; session_id?: string | null; folder_id?: string | null } | null = null
+
+    if (id) {
+      targetSummary = await db.prepare('SELECT id, session_id, folder_id FROM shared_summaries WHERE id = ?')
+        .bind(id)
+        .first<{ id: string; session_id?: string | null; folder_id?: string | null }>()
+    } else if (sessionId) {
+      targetSummary = await db.prepare('SELECT id, session_id, folder_id FROM shared_summaries WHERE session_id = ?')
+        .bind(sessionId)
+        .first<{ id: string; session_id?: string | null; folder_id?: string | null }>()
+    } else if (folderId) {
+      targetSummary = await db.prepare('SELECT id, session_id, folder_id FROM shared_summaries WHERE folder_id = ?')
+        .bind(folderId)
+        .first<{ id: string; session_id?: string | null; folder_id?: string | null }>()
+    }
+
+    if (!targetSummary) {
+      return NextResponse.json({ error: 'Không tìm thấy liên kết chia sẻ' }, { status: 404, headers: noStoreHeader })
+    }
+
+    // Check ownership of the underlying session or folder
+    if (targetSummary.session_id) {
+      const owned = await db.prepare('SELECT id FROM sessions WHERE id = ? AND owner_id = ?')
+        .bind(targetSummary.session_id, user.id)
+        .first()
+      if (!owned) return NextResponse.json({ error: 'Bạn không có quyền xoá liên kết chia sẻ này' }, { status: 403, headers: noStoreHeader })
+    } else if (targetSummary.folder_id) {
+      const owned = await db.prepare('SELECT id FROM folders WHERE id = ? AND owner_id = ?')
+        .bind(targetSummary.folder_id, user.id)
+        .first()
+      if (!owned) return NextResponse.json({ error: 'Bạn không có quyền xoá liên kết chia sẻ này' }, { status: 403, headers: noStoreHeader })
+    }
+
+    await db.prepare('DELETE FROM shared_summaries WHERE id = ?').bind(targetSummary.id).run()
+
+    return NextResponse.json({ success: true }, { headers: noStoreHeader })
+  } catch (error: unknown) {
+    console.error('Error deleting shared summary:', error)
+    return NextResponse.json({ error: 'Lỗi hệ thống khi xoá liên kết chia sẻ' }, { status: 500, headers: noStoreHeader })
   }
 }
