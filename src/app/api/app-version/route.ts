@@ -8,9 +8,9 @@ const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
 function parseSemver(version: string): [number, number, number] {
   const parts = version.trim().replace(/^v/i, '').split('.').map((part) => parseInt(part, 10))
   return [
-    isNaN(parts[0]) ? 0 : parts[0],
-    isNaN(parts[1]) ? 0 : parts[1],
-    isNaN(parts[2]) ? 0 : parts[2],
+    Number.isSafeInteger(parts[0]) ? Math.max(0, parts[0]) : 0,
+    Number.isSafeInteger(parts[1]) ? Math.max(0, parts[1]) : 0,
+    Number.isSafeInteger(parts[2]) ? Math.max(0, parts[2]) : 0,
   ]
 }
 
@@ -40,8 +40,16 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
-  const platform = searchParams.get('platform')?.toLowerCase()
+  const platform = searchParams.get('platform')?.toLowerCase()?.trim()
   const version = searchParams.get('version')?.trim()
+
+  if (platform && platform !== 'android' && platform !== 'ios') {
+    return NextResponse.json({ error: 'Nền tảng không hợp lệ' }, { status: 400, headers: noStoreHeader })
+  }
+
+  if (version && (version.length > 32 || !/^[0-9a-zA-Z.-]+$/.test(version))) {
+    return NextResponse.json({ error: 'Phiên bản không hợp lệ' }, { status: 400, headers: noStoreHeader })
+  }
 
   if (platform && version) {
     const isAndroid = platform === 'android'

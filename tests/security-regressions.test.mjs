@@ -737,6 +737,22 @@ test('history detail clients bound rename and entry lengths and guard clipboard 
   assert.match(folderDetail, /try\s*\{[\s\S]*?navigator\.clipboard[\s\S]*?writeText\(shareLink\)[\s\S]*?\}\s*catch/)
 })
 
+test('app-version route strictly validates platform and version parameter formats', async () => {
+  const appVersion = await source('src/app/api/app-version/route.ts')
+
+  // Platform enum check
+  assert.match(appVersion, /platform && platform !== 'android' && platform !== 'ios'/)
+  assert.match(appVersion, /Nền tảng không hợp lệ/)
+
+  // Version format and length check
+  assert.match(appVersion, /version && \(version\.length > 32 \|\| !\/[\s\S]*?test\(version\)\)/)
+  assert.match(appVersion, /Phiên bản không hợp lệ/)
+
+  // Safe integer parsing in parseSemver
+  assert.match(appVersion, /Number\.isSafeInteger\(parts\[0]\) \? Math\.max\(0, parts\[0]\) : 0/)
+})
+
+
 
 
 
