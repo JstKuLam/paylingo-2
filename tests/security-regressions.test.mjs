@@ -358,4 +358,25 @@ test('client-side sync reconciliation preserves pending entries and checks serve
   assert.match(folderDetail, /if \(!res\.ok\)\s*\{\s*throw new Error/)
 })
 
+test('rate limiter bounds IP length, preserves LRU ordering, and edge middleware secures redirects', async () => {
+  const rateLimit = await source('src/lib/rate-limit.ts')
+  const middleware = await source('src/middleware.ts')
+  const headers = await source('public/_headers')
+
+  // IP bounding and headers
+  assert.match(rateLimit, /rawIp\.slice\(0,\s*45\)/)
+  assert.match(rateLimit, /x-real-ip/)
+
+  // LRU positioning on increment
+  assert.match(rateLimit, /buckets\.delete\(options\.key\)/)
+  assert.match(rateLimit, /buckets\.set\(options\.key,\s*current\)/)
+
+  // Edge middleware no-store header on root auth redirect
+  assert.match(middleware, /NextResponse\.redirect\(new URL\('\/session',\s*request\.url\),\s*\{\s*headers:[\s\S]*?['"]Cache-Control['"]:\s*['"]no-store,\s*max-age=0['"]/)
+
+  // Deprecated Supabase removed from CSP
+  assert.doesNotMatch(headers, /supabase\.co/)
+})
+
+
 

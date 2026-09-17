@@ -12,7 +12,11 @@ export async function middleware(request: NextRequest) {
     !request.nextUrl.searchParams.has('error') &&
     !request.nextUrl.searchParams.has('signout')
   ) {
-    return NextResponse.redirect(new URL('/session', request.url))
+    return NextResponse.redirect(new URL('/session', request.url), {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    })
   }
 
   return NextResponse.next()

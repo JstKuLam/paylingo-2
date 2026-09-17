@@ -8,8 +8,13 @@ const buckets = rateLimitGlobal.__payLingoRateLimits ?? new Map<string, RateLimi
 rateLimitGlobal.__payLingoRateLimits = buckets
 
 export function getRequestIp(request: Request): string {
-  const forwarded = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for')
-  return forwarded?.split(',')[0]?.trim() || 'unknown'
+  const forwarded =
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-real-ip') ||
+    request.headers.get('x-forwarded-for')
+  const rawIp = forwarded?.split(',')[0]?.trim()
+  if (!rawIp) return 'unknown'
+  return rawIp.slice(0, 45)
 }
 
 export function checkRateLimit(options: { key: string; limit: number; windowMs: number }) {
@@ -47,6 +52,10 @@ export function checkRateLimit(options: { key: string; limit: number; windowMs: 
   }
 
   current.count += 1
+  // Move key to the end of Map to maintain LRU eviction ordering
+  buckets.delete(options.key)
+  buckets.set(options.key, current)
+
   return { allowed: true, remaining: options.limit - current.count, retryAfterSeconds: 0 }
 }
 
