@@ -272,3 +272,21 @@ test('AI summarize API bounds payload size, entry length, and inserts summaries 
   assert.match(summarizeRoute, /isSessionOwned\s*\?\s*sessionId\s*:\s*null/)
   assert.match(summarizeRoute, /isFolderOwned\s*\?\s*folderId\s*:\s*null/)
 })
+
+test('shared summary route enforces no-store on all responses and error boundaries clear PWA recovery keys', async () => {
+  const sharedRoute = await source('src/app/api/shared/summary/route.ts')
+  const globalError = await source('src/app/global-error.tsx')
+  const appError = await source('src/app/error.tsx')
+
+  // All shared summary responses use noStoreHeader
+  assert.match(sharedRoute, /const noStoreHeader = \{\s*'Cache-Control':\s*'no-store,\s*max-age=0'\s*\}/)
+  assert.match(sharedRoute, /status:\s*401,\s*headers:\s*noStoreHeader/)
+  assert.match(sharedRoute, /status:\s*404,\s*headers:\s*noStoreHeader/)
+  assert.match(sharedRoute, /status:\s*500,\s*headers:\s*noStoreHeader/)
+
+  // Both error boundaries clear recovery throttling keys
+  assert.match(globalError, /sessionStorage\.removeItem\('pwa_chunk_last_recovery'\)/)
+  assert.match(globalError, /sessionStorage\.removeItem\('pwa_last_reload'\)/)
+  assert.match(appError, /sessionStorage\.removeItem\('pwa_chunk_last_recovery'\)/)
+  assert.match(appError, /sessionStorage\.removeItem\('pwa_last_reload'\)/)
+})
