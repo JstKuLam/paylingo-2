@@ -17,6 +17,8 @@ function getLocalD1() {
   const isNew = !fs.existsSync(dbFilePath)
   const sqlite = new DatabaseSync(dbFilePath)
   sqlite.exec('PRAGMA foreign_keys = ON;')
+  sqlite.exec('PRAGMA journal_mode = WAL;')
+  sqlite.exec('PRAGMA synchronous = NORMAL;')
 
   // Initialize schema and seed if new
   if (isNew) {
@@ -41,7 +43,12 @@ function getLocalD1() {
         _sql: query,
         _params: boundParams,
         bind(...values) {
-          boundParams = values.map(v => v === undefined ? null : v)
+          boundParams = values.map(v => {
+            if (typeof v === 'boolean') return v ? 1 : 0
+            if (v instanceof Date) return v.toISOString()
+            if (v === undefined) return null
+            return v
+          })
           stmtObj._params = boundParams
           return stmtObj
         },
@@ -63,7 +70,15 @@ function getLocalD1() {
           try {
             const stmt = sqlite.prepare(query)
             const rows = stmt.all(...boundParams)
-            return { results: rows || [], success: true }
+            const metaInfo = sqlite.prepare('SELECT changes() as changes, last_insert_rowid() as last_row_id').get()
+            return {
+              results: rows || [],
+              success: true,
+              meta: {
+                changes: Number(metaInfo?.changes ?? 0),
+                last_row_id: Number(metaInfo?.last_row_id ?? 0),
+              }
+            }
           } catch (err) {
             return { results: [], success: false, error: err.message }
           }
@@ -87,6 +102,9 @@ function getLocalD1() {
       return stmtObj
     },
     async batch(statements) {
+      if (!Array.isArray(statements) || statements.length === 0) {
+        return []
+      }
       const results = []
       sqlite.exec('BEGIN TRANSACTION;')
       try {

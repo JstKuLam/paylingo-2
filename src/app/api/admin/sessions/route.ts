@@ -68,10 +68,12 @@ export async function DELETE(request: Request) {
     }
 
     const db = getD1()
-    await db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(id).run()
-    await db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(id).run()
-    await db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(id).run()
-    await db.prepare('DELETE FROM sessions WHERE id = ?').bind(id).run()
+    await db.batch([
+      db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(id),
+      db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(id),
+      db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(id),
+      db.prepare('DELETE FROM sessions WHERE id = ?').bind(id),
+    ])
 
     return NextResponse.json({ success: true }, {
       headers: noStoreHeader,

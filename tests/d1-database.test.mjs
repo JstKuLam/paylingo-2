@@ -134,3 +134,49 @@ test('D1 local SQLite enforces foreign key cascade deletion for transcript_entri
   const afterDelete = await db.prepare('SELECT id FROM transcript_entries WHERE id = ?').bind(entryId).first()
   assert.strictEqual(afterDelete, null, 'Foreign key ON DELETE CASCADE must remove transcript entry')
 })
+
+test('D1 parameter binding normalizes boolean, Date, and undefined without throwing', async () => {
+  const db = getD1()
+  const testId = 'param-norm-' + Date.now()
+  const now = new Date()
+
+  // Test binding with Date instance, boolean, and undefined
+  const st = db.prepare(`
+    INSERT INTO sessions (id, owner_id, username, name, partner_language, started_at, duration_seconds)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(testId, 'owner-norm', 'user-norm', 'Norm Session', 'vi', now, 60)
+
+  const res = await st.run()
+  assert.ok(res.success, 'Insert with Date and normalized values should succeed')
+
+  const fetched = await db.prepare('SELECT * FROM sessions WHERE id = ?').bind(testId).first()
+  assert.ok(fetched, 'Row should be inserted')
+  assert.strictEqual(fetched.started_at, now.toISOString())
+
+  // Clean up
+  await db.prepare('DELETE FROM sessions WHERE id = ?').bind(testId).run()
+})
+
+test('D1 batch and all return proper meta with changes and handles empty batch', async () => {
+  const db = getD1()
+  
+  // Empty batch returns empty array
+  const emptyRes = await db.batch([])
+  assert.deepStrictEqual(emptyRes, [])
+
+  const id1 = 'batch-meta-1-' + Date.now()
+  const id2 = 'batch-meta-2-' + Date.now()
+
+  const st1 = db.prepare('INSERT INTO folders (id, name, owner_id, username) VALUES (?, ?, ?, ?)')
+    .bind(id1, 'Meta Folder 1', 'owner1', 'user1')
+  const st2 = db.prepare('INSERT INTO folders (id, name, owner_id, username) VALUES (?, ?, ?, ?)')
+    .bind(id2, 'Meta Folder 2', 'owner1', 'user1')
+
+  const batchResults = await db.batch([st1, st2])
+  assert.strictEqual(batchResults.length, 2)
+  assert.strictEqual(batchResults[0].success, true)
+  assert.strictEqual(batchResults[0].meta.changes, 1)
+
+  // Clean up
+  await db.prepare('DELETE FROM folders WHERE id IN (?, ?)').bind(id1, id2).run()
+})

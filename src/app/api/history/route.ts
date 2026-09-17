@@ -6,10 +6,11 @@ export const runtime = 'edge'
 
 
 export async function GET(request: Request) {
+  const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const user = await getAuthenticatedUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401, headers: noStoreHeader })
     }
 
     const { searchParams } = new URL(request.url)
@@ -17,7 +18,6 @@ export async function GET(request: Request) {
     const single = searchParams.get('single') === '1'
     const id = searchParams.get('id')
     const db = getD1()
-    const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
 
     if (table === 'folders') {
       if (single && id) {
@@ -62,22 +62,23 @@ export async function GET(request: Request) {
     return NextResponse.json({ items: [] }, { headers: noStoreHeader })
   } catch (err: unknown) {
     console.error('Error in history GET API:', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi lấy dữ liệu lịch sử' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi lấy dữ liệu lịch sử' }, { status: 500, headers: noStoreHeader })
   }
 }
 
 export async function PATCH(request: Request) {
+  const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const user = await getAuthenticatedUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401, headers: noStoreHeader })
     }
 
     const { table, field, value, payload } = await request.json()
     const db = getD1()
 
     if (field !== 'id') {
-      return NextResponse.json({ success: false, error: 'Trường không hợp lệ' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Trường không hợp lệ' }, { status: 400, headers: noStoreHeader })
     }
 
     if (table === 'sessions' && value && payload) {
@@ -87,7 +88,7 @@ export async function PATCH(request: Request) {
             .bind(payload.folder_id, user.id)
             .first()
           if (!folder) {
-            return NextResponse.json({ success: false, error: 'Thư mục không tồn tại hoặc không có quyền' }, { status: 400 })
+            return NextResponse.json({ success: false, error: 'Thư mục không tồn tại hoặc không có quyền' }, { status: 400, headers: noStoreHeader })
           }
         }
         await db.prepare('UPDATE sessions SET folder_id = ?, updated_at = datetime(\'now\') WHERE id = ? AND owner_id = ?')
@@ -99,7 +100,7 @@ export async function PATCH(request: Request) {
           .bind(payload.name, value, user.id)
           .run()
       }
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true }, { headers: noStoreHeader })
     }
 
     if (table === 'folders' && value && payload) {
@@ -108,21 +109,22 @@ export async function PATCH(request: Request) {
           .bind(payload.name, value, user.id)
           .run()
       }
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true }, { headers: noStoreHeader })
     }
 
-    return NextResponse.json({ success: false, error: 'Thao tác không hợp lệ' }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'Thao tác không hợp lệ' }, { status: 400, headers: noStoreHeader })
   } catch (err: unknown) {
     console.error('Error in history PATCH API:', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi cập nhật' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi cập nhật' }, { status: 500, headers: noStoreHeader })
   }
 }
 
 export async function DELETE(request: Request) {
+  const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
     const user = await getAuthenticatedUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401 })
+      return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401, headers: noStoreHeader })
     }
 
     const { table, field, value } = await request.json()
@@ -133,13 +135,15 @@ export async function DELETE(request: Request) {
         .bind(value, user.id)
         .first()
       if (!session) {
-        return NextResponse.json({ success: false, error: 'Không tìm thấy phiên hoặc không có quyền' }, { status: 404 })
+        return NextResponse.json({ success: false, error: 'Không tìm thấy phiên hoặc không có quyền' }, { status: 404, headers: noStoreHeader })
       }
-      await db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(value).run()
-      await db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(value).run()
-      await db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(value).run()
-      await db.prepare('DELETE FROM sessions WHERE id = ? AND owner_id = ?').bind(value, user.id).run()
-      return NextResponse.json({ success: true })
+      await db.batch([
+        db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(value),
+        db.prepare('DELETE FROM session_summaries WHERE session_id = ?').bind(value),
+        db.prepare('DELETE FROM shared_summaries WHERE session_id = ?').bind(value),
+        db.prepare('DELETE FROM sessions WHERE id = ? AND owner_id = ?').bind(value, user.id),
+      ])
+      return NextResponse.json({ success: true }, { headers: noStoreHeader })
     }
 
     if (table === 'folders' && field === 'id' && value) {
@@ -147,18 +151,20 @@ export async function DELETE(request: Request) {
         .bind(value, user.id)
         .first()
       if (!folder) {
-        return NextResponse.json({ success: false, error: 'Không tìm thấy thư mục hoặc không có quyền' }, { status: 404 })
+        return NextResponse.json({ success: false, error: 'Không tìm thấy thư mục hoặc không có quyền' }, { status: 404, headers: noStoreHeader })
       }
-      await db.prepare('UPDATE sessions SET folder_id = NULL WHERE folder_id = ? AND owner_id = ?').bind(value, user.id).run()
-      await db.prepare('DELETE FROM session_summaries WHERE folder_id = ?').bind(value).run()
-      await db.prepare('DELETE FROM shared_summaries WHERE folder_id = ?').bind(value).run()
-      await db.prepare('DELETE FROM folders WHERE id = ? AND owner_id = ?').bind(value, user.id).run()
-      return NextResponse.json({ success: true })
+      await db.batch([
+        db.prepare('UPDATE sessions SET folder_id = NULL WHERE folder_id = ? AND owner_id = ?').bind(value, user.id),
+        db.prepare('DELETE FROM session_summaries WHERE folder_id = ?').bind(value),
+        db.prepare('DELETE FROM shared_summaries WHERE folder_id = ?').bind(value),
+        db.prepare('DELETE FROM folders WHERE id = ? AND owner_id = ?').bind(value, user.id),
+      ])
+      return NextResponse.json({ success: true }, { headers: noStoreHeader })
     }
 
-    return NextResponse.json({ success: false, error: 'Thao tác không hợp lệ' }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'Thao tác không hợp lệ' }, { status: 400, headers: noStoreHeader })
   } catch (err: unknown) {
     console.error('Error in history DELETE API:', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi xóa dữ liệu' }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi xóa dữ liệu' }, { status: 500, headers: noStoreHeader })
   }
 }
