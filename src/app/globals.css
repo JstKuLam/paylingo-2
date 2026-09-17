@@ -79,6 +79,24 @@
   --color-accent: var(--surface-muted);
   --color-accent-foreground: var(--foreground);
   --color-destructive: var(--danger);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-strong: var(--surface-strong);
+  --color-text-muted: var(--text-muted);
+  --color-text-soft: var(--text-soft);
+  --color-border-strong: var(--border-strong);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-partner-soft: var(--partner-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-on-primary: var(--on-primary);
+  --color-on-danger: var(--on-danger);
   --color-border: var(--border);
   --color-input: var(--border);
   --color-ring: var(--primary);
@@ -124,6 +142,11 @@ button,
   -webkit-tap-highlight-color: transparent;
 }
 
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
 :focus-visible {
   outline: 3px solid color-mix(in srgb, var(--primary) 55%, transparent);
   outline-offset: 2px;
@@ -155,13 +178,17 @@ button,
 }
 
 .entry-shell {
+  position: relative;
   min-height: 100dvh;
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(420px, 0.92fr);
+  overflow: hidden;
   background: var(--background);
 }
 
 .entry-context {
+  position: relative;
+  z-index: 1;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -184,6 +211,8 @@ button,
   color: #b9c4ce;
   font-size: 13px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .entry-intro {
@@ -242,6 +271,8 @@ button,
 }
 
 .entry-action {
+  position: relative;
+  z-index: 1;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -255,10 +286,17 @@ button,
   min-height: 44px;
 }
 
+.entry-preferences {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .entry-mobile-brand {
   display: none;
   font-size: 14px;
   font-weight: 700;
+  color: var(--primary);
 }
 
 .theme-switch {
@@ -298,7 +336,23 @@ button,
 .entry-form-wrap {
   width: min(100%, 480px);
   margin: auto;
-  padding-block: 48px;
+}
+
+.entry-form-wrap h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.entry-form-wrap [data-slot="card-footer"] a {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.entry-form-wrap [data-slot="card-footer"] a:hover {
+  color: var(--primary);
 }
 
 .entry-heading h2 {
@@ -3736,6 +3790,10 @@ button,
     justify-content: space-between;
   }
 
+  .entry-form-wrap {
+    margin: clamp(32px, 9dvh, 80px) auto 0;
+  }
+
   .entry-mobile-brand {
     display: block;
   }
@@ -4104,7 +4162,7 @@ button,
   }
 
   .entry-form-wrap {
-    padding-block: 36px 24px;
+    margin-top: 28px;
   }
 
   .entry-heading h2 {
@@ -4328,6 +4386,23 @@ button,
 
   .shared-document__content {
     font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .entry-action-top {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .entry-preferences {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .entry-form-wrap {
+    margin-top: 20px;
   }
 }
 
@@ -4800,6 +4875,3 @@ button,
 .transcript-panel.glass-panel-modern .transcript-panel__body {
   background: transparent;
 }
-
-
-

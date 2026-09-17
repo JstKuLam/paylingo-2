@@ -83,20 +83,23 @@ export default function HistoryPage() {
         fetch('/api/history?table=sessions').then(r => r.json()).catch(() => ({ items: [] })),
       ])
 
-      const cloudFolders: LocalFolder[] = (foldersRes.items || []).map((f: any) => ({
+      type CloudFolderRecord = { id: string; owner_id?: string; username?: string; name: string; created_at: string; updated_at?: string }
+      type CloudSessionRecord = { id: string; owner_id?: string; username?: string; folder_id?: string | null; name: string; partner_language: string; started_at: string; ended_at: string; duration_seconds: number; updated_at?: string }
+
+      const cloudFolders: LocalFolder[] = ((foldersRes.items as CloudFolderRecord[]) || []).map((f) => ({
         id: f.id,
         owner_id: f.owner_id || currentOwnerId,
-        username: f.username,
+        username: f.username || name,
         name: f.name,
         created_at: f.created_at,
         updated_at: f.updated_at || new Date().toISOString(),
         sync_status: 'synced',
       }))
 
-      const cloudSessions: LocalSession[] = (sessionsRes.items || []).map((s: any) => ({
+      const cloudSessions: LocalSession[] = ((sessionsRes.items as CloudSessionRecord[]) || []).map((s) => ({
         id: s.id,
         owner_id: s.owner_id || currentOwnerId,
-        username: s.username,
+        username: s.username || name,
         folder_id: s.folder_id,
         name: s.name,
         partner_language: s.partner_language,

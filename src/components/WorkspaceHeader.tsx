@@ -35,7 +35,7 @@ export default function WorkspaceHeader({
         </div>
       </div>
 
-      <nav className="workspace-nav" aria-label="Điều hướng chính">
+      <nav className="workspace-nav" aria-label="Main Navigation">
         <Link href="/session" className={pathname === '/session' ? 'is-active' : ''}>
           <Mic2 aria-hidden="true" />
           {t.navSession}
@@ -47,17 +47,17 @@ export default function WorkspaceHeader({
       </nav>
 
       <div className="workspace-actions">
-        <div className="text-right mr-2 hidden xs:block">
-          <p className="text-[10px] font-bold text-slate-400 leading-none">v3.2.0</p>
-          <p className="text-[9px] text-slate-500 mt-0.5 font-semibold">17/07/2026 15:20 (GMT+7)</p>
+        <div className="text-right mr-2 hidden sm:block">
+          <p className="text-xs font-bold text-muted-foreground leading-none">v3.2.0</p>
+          <p className="text-xs text-muted-foreground/80 mt-0.5 font-medium">17/07/2026 15:20 (GMT+7)</p>
         </div>
         {actions}
         <LanguageSwitcher />
         <button
           type="button"
           onClick={() => changeTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
-          title={theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}
+          aria-label={theme === 'dark' ? t.themeLight : t.themeDark}
+          title={theme === 'dark' ? t.themeLight : t.themeDark}
         >
           {theme === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
         </button>

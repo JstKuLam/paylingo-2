@@ -145,6 +145,84 @@ export interface I18nTranslations {
   selectConversationsHeading: string
   recentConversationsHeading: string
   itemsCount: string
+
+  // History detail pages
+  folderDetailHeaderTitle: string
+  folderDetailBackLink: string
+  folderDetailNotFoundTitle: string
+  folderDetailNotFoundDesc: string
+  folderDetailBackBtn: string
+  folderDetailRenameAria: string
+  folderDetailSaveNameAria: string
+  folderDetailCancelNameAria: string
+  folderDetailCreatedDate: string
+  folderDetailConversationsCount: string
+  folderDetailSummarizeBtn: string
+  folderDetailDeleteBtn: string
+  folderDetailDeleteConfirm: string
+  folderDetailDeleteServerError: string
+  folderDetailSessionsSectionTitle: string
+  folderDetailSessionsSectionDesc: string
+  folderDetailEmptyFolderTitle: string
+  folderDetailEmptyFolderDesc: string
+  folderDetailRemoveSessionAria: string
+  folderDetailRemoveSessionConfirm: string
+  sessionDetailHeaderTitle: string
+  sessionDetailBackLink: string
+  sessionDetailNotFoundTitle: string
+  sessionDetailNotFoundDesc: string
+  sessionDetailBackBtn: string
+  sessionDetailRenameAria: string
+  sessionDetailExportBtn: string
+  sessionDetailExportPdf: string
+  sessionDetailExportTxt: string
+  sessionDetailExportJson: string
+  sessionDetailSummarizeBtn: string
+  sessionDetailDeleteBtn: string
+  sessionDetailDeleteConfirm: string
+  sessionDetailEmptyTranscriptTitle: string
+  sessionDetailEmptyTranscriptDesc: string
+  sessionDetailEditEntryAria: string
+  sessionDetailOriginalLabel: string
+  sessionDetailTranslatedLabel: string
+  sessionDetailSaveEditBtn: string
+  sessionDetailCancelEditBtn: string
+  summaryModalHeaderTitle: string
+  summaryModalAnalyzingTitle: string
+  summaryModalAnalyzingDesc: string
+  summaryModalStyleHeading: string
+  summaryModalShareHeading: string
+  summaryModalShareDesc: string
+  summaryModalPasswordLabel: string
+  summaryModalPasswordPlaceholder: string
+  summaryModalCreateLinkBtn: string
+  summaryModalCopyLinkAria: string
+  summaryModalDownloadHtmlBtn: string
+  summaryModalRetryBtn: string
+  sessionDetailLoadError: string
+  sessionDetailNameLabel: string
+  sessionDetailSaveNameAria: string
+  sessionDetailCancelNameAria: string
+  sessionDetailDeleteServerError: string
+  sessionDetailExportError: string
+  sessionDetailTranscriptHeading: string
+  sessionDetailEntriesCount: string
+  sessionDetailSpeakerYou: string
+  sessionDetailSpeakerPartner: string
+  sessionDetailPreviewHeading: string
+  sessionDetailPreviewDesc: string
+  sessionDetailPreviewFrameTitle: string
+  summaryModalGenerateError: string
+  summaryModalServiceError: string
+  summaryModalCreateLinkError: string
+  summaryStyleDefault: string
+  summaryStyleDefaultDesc: string
+  summaryStyleFormal: string
+  summaryStyleFormalDesc: string
+  summaryStyleCasual: string
+  summaryStyleCasualDesc: string
+  summaryStyleVeryCasual: string
+  summaryStyleVeryCasualDesc: string
 }
 
 export const translations: Record<Language, I18nTranslations> = {
@@ -288,6 +366,84 @@ export const translations: Record<Language, I18nTranslations> = {
     selectConversationsHeading: 'Chọn hội thoại',
     recentConversationsHeading: 'Hội thoại gần đây',
     itemsCount: '{count} mục',
+
+    // History detail pages
+    folderDetailHeaderTitle: 'Thư mục hội thoại',
+    folderDetailBackLink: 'Lịch sử hội thoại',
+    folderDetailNotFoundTitle: 'Không mở được thư mục',
+    folderDetailNotFoundDesc: 'Dữ liệu không tồn tại trên thiết bị này.',
+    folderDetailBackBtn: 'Trở về lịch sử',
+    folderDetailRenameAria: 'Đổi tên thư mục',
+    folderDetailSaveNameAria: 'Lưu tên',
+    folderDetailCancelNameAria: 'Hủy đổi tên',
+    folderDetailCreatedDate: 'Tạo {date}',
+    folderDetailConversationsCount: '{count} hội thoại',
+    folderDetailSummarizeBtn: 'Tóm tắt thư mục',
+    folderDetailDeleteBtn: 'Xóa thư mục',
+    folderDetailDeleteConfirm: 'Xóa thư mục? Các hội thoại bên trong sẽ được chuyển về danh sách chính.',
+    folderDetailDeleteServerError: 'Chưa thể xóa thư mục trên máy chủ. Không có dữ liệu cục bộ nào bị thay đổi.',
+    folderDetailSessionsSectionTitle: 'Hội thoại trong thư mục',
+    folderDetailSessionsSectionDesc: 'Mở từng phiên để xem transcript và xuất tài liệu.',
+    folderDetailEmptyFolderTitle: 'Thư mục đang trống',
+    folderDetailEmptyFolderDesc: 'Chọn nhiều hội thoại từ trang lịch sử để thêm vào thư mục.',
+    folderDetailRemoveSessionAria: 'Chuyển khỏi thư mục',
+    folderDetailRemoveSessionConfirm: 'Chuyển hội thoại này ra khỏi thư mục?',
+    sessionDetailHeaderTitle: 'Chi tiết phiên dịch',
+    sessionDetailBackLink: 'Lịch sử hội thoại',
+    sessionDetailNotFoundTitle: 'Không tìm thấy hội thoại',
+    sessionDetailNotFoundDesc: 'Dữ liệu này không tồn tại trên thiết bị hiện tại.',
+    sessionDetailBackBtn: 'Trở về lịch sử',
+    sessionDetailRenameAria: 'Đổi tên hội thoại',
+    sessionDetailExportBtn: 'Xuất tài liệu',
+    sessionDetailExportPdf: 'Tải tệp PDF (.pdf)',
+    sessionDetailExportTxt: 'Tải tệp văn bản (.txt)',
+    sessionDetailExportJson: 'Tải tệp JSON (.json)',
+    sessionDetailSummarizeBtn: 'Tóm tắt AI',
+    sessionDetailDeleteBtn: 'Xóa hội thoại',
+    sessionDetailDeleteConfirm: 'Xóa vĩnh viễn hội thoại và toàn bộ transcript?',
+    sessionDetailEmptyTranscriptTitle: 'Chưa có bản ghi transcript',
+    sessionDetailEmptyTranscriptDesc: 'Phiên dịch này kết thúc mà không phát sinh nội dung thoại.',
+    sessionDetailEditEntryAria: 'Sửa đoạn hội thoại',
+    sessionDetailOriginalLabel: 'Văn bản gốc',
+    sessionDetailTranslatedLabel: 'Bản dịch',
+    sessionDetailSaveEditBtn: 'Lưu thay đổi',
+    sessionDetailCancelEditBtn: 'Hủy',
+    summaryModalHeaderTitle: 'Bản tóm tắt',
+    summaryModalAnalyzingTitle: 'Đang phân tích các hội thoại',
+    summaryModalAnalyzingDesc: 'Thời gian xử lý phụ thuộc tổng độ dài transcript.',
+    summaryModalStyleHeading: 'Phong cách trình bày',
+    summaryModalShareHeading: 'Chia sẻ bảo mật',
+    summaryModalShareDesc: 'Mật khẩu là tùy chọn và được lưu dưới dạng dẫn xuất một chiều.',
+    summaryModalPasswordLabel: 'Mật khẩu truy cập',
+    summaryModalPasswordPlaceholder: 'Để trống nếu không cần',
+    summaryModalCreateLinkBtn: 'Tạo liên kết',
+    summaryModalCopyLinkAria: 'Sao chép liên kết',
+    summaryModalDownloadHtmlBtn: 'Tải HTML',
+    summaryModalRetryBtn: 'Thử lại',
+    sessionDetailLoadError: 'Không thể tải dữ liệu hội thoại. Hãy kiểm tra kết nối và thử lại.',
+    sessionDetailNameLabel: 'Tên hội thoại',
+    sessionDetailSaveNameAria: 'Lưu tên',
+    sessionDetailCancelNameAria: 'Hủy đổi tên',
+    sessionDetailDeleteServerError: 'Chưa thể xóa hội thoại trên máy chủ. Dữ liệu trên thiết bị vẫn được giữ nguyên.',
+    sessionDetailExportError: 'Không thể tạo tệp xuất. Vui lòng thử lại.',
+    sessionDetailTranscriptHeading: 'Transcript',
+    sessionDetailEntriesCount: '{count} đoạn hội thoại đã lưu',
+    sessionDetailSpeakerYou: 'Bạn nói',
+    sessionDetailSpeakerPartner: '{name} nói',
+    sessionDetailPreviewHeading: 'Bản xem trước',
+    sessionDetailPreviewDesc: 'Báo cáo HTML từ nội dung tóm tắt',
+    sessionDetailPreviewFrameTitle: 'Xem trước báo cáo tóm tắt',
+    summaryModalGenerateError: 'Không thể tạo bản tóm tắt.',
+    summaryModalServiceError: 'Không thể kết nối dịch vụ tóm tắt.',
+    summaryModalCreateLinkError: 'Không thể tạo liên kết chia sẻ.',
+    summaryStyleDefault: 'Mặc định',
+    summaryStyleDefaultDesc: 'Tự nhiên và rõ ràng',
+    summaryStyleFormal: 'Trang trọng',
+    summaryStyleFormalDesc: 'Chuẩn văn bản doanh nghiệp',
+    summaryStyleCasual: 'Thân mật',
+    summaryStyleCasualDesc: 'Gần gũi, dễ đọc',
+    summaryStyleVeryCasual: 'Ghi chú nhanh',
+    summaryStyleVeryCasualDesc: 'Ngắn gọn, trực tiếp',
   },
   en: {
     appName: 'Pay2Pay Interpreter',
@@ -429,6 +585,84 @@ export const translations: Record<Language, I18nTranslations> = {
     selectConversationsHeading: 'Select Conversations',
     recentConversationsHeading: 'Recent Conversations',
     itemsCount: '{count} items',
+
+    // History detail pages
+    folderDetailHeaderTitle: 'Conversation Folder',
+    folderDetailBackLink: 'Conversation History',
+    folderDetailNotFoundTitle: 'Folder Not Found',
+    folderDetailNotFoundDesc: 'Data does not exist on this device.',
+    folderDetailBackBtn: 'Back to History',
+    folderDetailRenameAria: 'Rename folder',
+    folderDetailSaveNameAria: 'Save name',
+    folderDetailCancelNameAria: 'Cancel rename',
+    folderDetailCreatedDate: 'Created {date}',
+    folderDetailConversationsCount: '{count} conversations',
+    folderDetailSummarizeBtn: 'Summarize Folder',
+    folderDetailDeleteBtn: 'Delete Folder',
+    folderDetailDeleteConfirm: 'Delete folder? Conversations inside will be moved back to the main list.',
+    folderDetailDeleteServerError: 'Could not delete folder on server. Local data remains unchanged.',
+    folderDetailSessionsSectionTitle: 'Conversations in Folder',
+    folderDetailSessionsSectionDesc: 'Open each session to view transcripts and export documents.',
+    folderDetailEmptyFolderTitle: 'Folder is empty',
+    folderDetailEmptyFolderDesc: 'Select multiple conversations from the history page to add to this folder.',
+    folderDetailRemoveSessionAria: 'Remove from folder',
+    folderDetailRemoveSessionConfirm: 'Remove this conversation from folder?',
+    sessionDetailHeaderTitle: 'Session Details',
+    sessionDetailBackLink: 'Conversation History',
+    sessionDetailNotFoundTitle: 'Conversation Not Found',
+    sessionDetailNotFoundDesc: 'This conversation does not exist on this device.',
+    sessionDetailBackBtn: 'Back to History',
+    sessionDetailRenameAria: 'Rename conversation',
+    sessionDetailExportBtn: 'Export Document',
+    sessionDetailExportPdf: 'Download PDF (.pdf)',
+    sessionDetailExportTxt: 'Download Text (.txt)',
+    sessionDetailExportJson: 'Download JSON (.json)',
+    sessionDetailSummarizeBtn: 'AI Summary',
+    sessionDetailDeleteBtn: 'Delete Conversation',
+    sessionDetailDeleteConfirm: 'Permanently delete this conversation and all transcripts?',
+    sessionDetailEmptyTranscriptTitle: 'No transcript entries yet',
+    sessionDetailEmptyTranscriptDesc: 'This session ended with no recorded speech.',
+    sessionDetailEditEntryAria: 'Edit message',
+    sessionDetailOriginalLabel: 'Original text',
+    sessionDetailTranslatedLabel: 'Translation',
+    sessionDetailSaveEditBtn: 'Save changes',
+    sessionDetailCancelEditBtn: 'Cancel',
+    summaryModalHeaderTitle: 'Summary Report',
+    summaryModalAnalyzingTitle: 'Analyzing conversations',
+    summaryModalAnalyzingDesc: 'Processing time depends on total transcript length.',
+    summaryModalStyleHeading: 'Summary Style',
+    summaryModalShareHeading: 'Secure Sharing',
+    summaryModalShareDesc: 'Password is optional and stored as a one-way hash.',
+    summaryModalPasswordLabel: 'Access Password',
+    summaryModalPasswordPlaceholder: 'Leave blank if not needed',
+    summaryModalCreateLinkBtn: 'Create Link',
+    summaryModalCopyLinkAria: 'Copy link',
+    summaryModalDownloadHtmlBtn: 'Download HTML',
+    summaryModalRetryBtn: 'Retry',
+    sessionDetailLoadError: 'Failed to load conversation data. Please check your connection and try again.',
+    sessionDetailNameLabel: 'Conversation name',
+    sessionDetailSaveNameAria: 'Save name',
+    sessionDetailCancelNameAria: 'Cancel rename',
+    sessionDetailDeleteServerError: 'Could not delete conversation on server. Local device data is preserved.',
+    sessionDetailExportError: 'Failed to generate export file. Please try again.',
+    sessionDetailTranscriptHeading: 'Transcript',
+    sessionDetailEntriesCount: '{count} saved dialogue entries',
+    sessionDetailSpeakerYou: 'You said',
+    sessionDetailSpeakerPartner: '{name} said',
+    sessionDetailPreviewHeading: 'Preview',
+    sessionDetailPreviewDesc: 'HTML report generated from summary',
+    sessionDetailPreviewFrameTitle: 'Summary Report Preview',
+    summaryModalGenerateError: 'Could not generate summary.',
+    summaryModalServiceError: 'Could not connect to summary service.',
+    summaryModalCreateLinkError: 'Could not create share link.',
+    summaryStyleDefault: 'Default',
+    summaryStyleDefaultDesc: 'Natural and clear',
+    summaryStyleFormal: 'Formal',
+    summaryStyleFormalDesc: 'Standard business style',
+    summaryStyleCasual: 'Casual',
+    summaryStyleCasualDesc: 'Conversational and readable',
+    summaryStyleVeryCasual: 'Quick Notes',
+    summaryStyleVeryCasualDesc: 'Brief and direct',
   },
   zh: {
     appName: 'Pay2Pay 同声传译',
@@ -570,16 +804,95 @@ export const translations: Record<Language, I18nTranslations> = {
     selectConversationsHeading: '选择对话',
     recentConversationsHeading: '最近对话',
     itemsCount: '{count} 项',
+
+    // History detail pages
+    folderDetailHeaderTitle: '对话文件夹',
+    folderDetailBackLink: '对话历史',
+    folderDetailNotFoundTitle: '无法打开文件夹',
+    folderDetailNotFoundDesc: '此设备上不存在该数据。',
+    folderDetailBackBtn: '返回历史记录',
+    folderDetailRenameAria: '重命名文件夹',
+    folderDetailSaveNameAria: '保存名称',
+    folderDetailCancelNameAria: '取消重命名',
+    folderDetailCreatedDate: '创建于 {date}',
+    folderDetailConversationsCount: '{count} 个对话',
+    folderDetailSummarizeBtn: '总结文件夹',
+    folderDetailDeleteBtn: '删除文件夹',
+    folderDetailDeleteConfirm: '删除文件夹？其中的对话将移回主列表。',
+    folderDetailDeleteServerError: '无法在服务器上删除文件夹。本地数据未更改。',
+    folderDetailSessionsSectionTitle: '文件夹内的对话',
+    folderDetailSessionsSectionDesc: '打开每个会话以查看转录并导出文档。',
+    folderDetailEmptyFolderTitle: '文件夹为空',
+    folderDetailEmptyFolderDesc: '从历史记录页面选择多个对话以添加到此文件夹。',
+    folderDetailRemoveSessionAria: '移出文件夹',
+    folderDetailRemoveSessionConfirm: '将此会话移出文件夹？',
+    sessionDetailHeaderTitle: '同传详情',
+    sessionDetailBackLink: '对话历史',
+    sessionDetailNotFoundTitle: '未找到对话',
+    sessionDetailNotFoundDesc: '当前设备上不存在此数据。',
+    sessionDetailBackBtn: '返回历史记录',
+    sessionDetailRenameAria: '重命名对话',
+    sessionDetailExportBtn: '导出文档',
+    sessionDetailExportPdf: '下载 PDF (.pdf)',
+    sessionDetailExportTxt: '下载文本 (.txt)',
+    sessionDetailExportJson: '下载 JSON (.json)',
+    sessionDetailSummarizeBtn: 'AI 总结',
+    sessionDetailDeleteBtn: '删除对话',
+    sessionDetailDeleteConfirm: '永久删除此对话及所有转录内容？',
+    sessionDetailEmptyTranscriptTitle: '暂无转录记录',
+    sessionDetailEmptyTranscriptDesc: '此会话结束时未录制到语音。',
+    sessionDetailEditEntryAria: '编辑消息',
+    sessionDetailOriginalLabel: '原文',
+    sessionDetailTranslatedLabel: '译文',
+    sessionDetailSaveEditBtn: '保存更改',
+    sessionDetailCancelEditBtn: '取消',
+    summaryModalHeaderTitle: '总结报告',
+    summaryModalAnalyzingTitle: '正在分析对话',
+    summaryModalAnalyzingDesc: '处理时间取决于转录总长度。',
+    summaryModalStyleHeading: '呈现风格',
+    summaryModalShareHeading: '安全分享',
+    summaryModalShareDesc: '密码为选填项，并以单向哈希形式存储。',
+    summaryModalPasswordLabel: '访问密码',
+    summaryModalPasswordPlaceholder: '如不需要请留空',
+    summaryModalCreateLinkBtn: '生成链接',
+    summaryModalCopyLinkAria: '复制链接',
+    summaryModalDownloadHtmlBtn: '下载 HTML',
+    summaryModalRetryBtn: '重试',
+    sessionDetailLoadError: '无法加载对话数据。请检查网络连接后重试。',
+    sessionDetailNameLabel: '对话名称',
+    sessionDetailSaveNameAria: '保存名称',
+    sessionDetailCancelNameAria: '取消重命名',
+    sessionDetailDeleteServerError: '无法在服务器上删除对话。本地设备数据已保留。',
+    sessionDetailExportError: '无法生成导出文件。请重试。',
+    sessionDetailTranscriptHeading: '对话记录',
+    sessionDetailEntriesCount: '{count} 条已保存对话',
+    sessionDetailSpeakerYou: '您说',
+    sessionDetailSpeakerPartner: '{name} 说',
+    sessionDetailPreviewHeading: '预览',
+    sessionDetailPreviewDesc: '根据摘要生成的 HTML 报告',
+    sessionDetailPreviewFrameTitle: '摘要报告预览',
+    summaryModalGenerateError: '无法生成摘要。',
+    summaryModalServiceError: '无法连接到摘要服务。',
+    summaryModalCreateLinkError: '无法创建分享链接。',
+    summaryStyleDefault: '默认',
+    summaryStyleDefaultDesc: '自然清晰',
+    summaryStyleFormal: '正式',
+    summaryStyleFormalDesc: '标准商务风格',
+    summaryStyleCasual: '日常',
+    summaryStyleCasualDesc: '亲和易读',
+    summaryStyleVeryCasual: '速记笔记',
+    summaryStyleVeryCasualDesc: '简短直接',
   },
 }
 
 export function detectMachineLanguage(): Language {
   if (typeof window === 'undefined') return 'vi'
 
+  const nav = navigator as unknown as { userLanguage?: string }
   const navLang = (
     navigator.languages?.[0] ||
     navigator.language ||
-    (navigator as any).userLanguage ||
+    nav.userLanguage ||
     ''
   ).toLowerCase()
 

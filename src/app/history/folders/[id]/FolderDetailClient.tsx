@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
+import { useLanguage } from '@/hooks/useLanguage'
 import { claimLegacyLocalData, db, LocalFolder, LocalSession } from '@/lib/db'
 import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage } from '@/lib/languages'
@@ -29,25 +30,21 @@ import { syncPendingData } from '@/lib/sync-manager'
 
 type SummaryStyle = 'default' | 'formal' | 'casual' | 'very_casual'
 
-const SUMMARY_STYLES: Array<{ value: SummaryStyle; label: string; description: string }> = [
-  { value: 'default', label: 'Mặc định', description: 'Tự nhiên và rõ ràng' },
-  { value: 'formal', label: 'Trang trọng', description: 'Chuẩn văn bản doanh nghiệp' },
-  { value: 'casual', label: 'Thân mật', description: 'Gần gũi, dễ đọc' },
-  { value: 'very_casual', label: 'Ghi chú nhanh', description: 'Ngắn gọn, trực tiếp' },
-]
-
 interface PageProps {
   params: Promise<{ id: string }>
 }
 
-function formatDuration(totalSeconds: number) {
+function formatDuration(totalSeconds: number, t: { durationHoursMinutes: string; durationMinutes: string }) {
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
-  return hours > 0 ? `${hours} giờ ${minutes} phút` : `${minutes} phút`
+  return hours > 0
+    ? t.durationHoursMinutes.replace('{hours}', String(hours)).replace('{minutes}', String(minutes))
+    : t.durationMinutes.replace('{minutes}', String(minutes))
 }
 
 export default function FolderDetailPage({ params }: PageProps) {
   const router = useRouter()
+  const { language, t } = useLanguage()
   const rawParams = use(params)
   const id = (typeof rawParams.id === 'string' && rawParams.id !== 'fallback' && rawParams.id !== '')
     ? rawParams.id
@@ -111,10 +108,22 @@ export default function FolderDetailPage({ params }: PageProps) {
         updated_at: cloudFolder.updated_at || new Date().toISOString(),
         sync_status: 'synced',
       }
-      const formattedSessions: LocalSession[] = cloudSessions.map((session: any) => ({
+      type CloudSessionItem = {
+        id: string
+        owner_id?: string
+        username?: string
+        folder_id?: string | null
+        name: string
+        partner_language: string
+        started_at: string
+        ended_at: string
+        duration_seconds: number
+        updated_at?: string
+      }
+      const formattedSessions: LocalSession[] = (cloudSessions as CloudSessionItem[]).map((session) => ({
         id: session.id,
         owner_id: session.owner_id || user.id,
-        username: session.username,
+        username: session.username || username,
         folder_id: session.folder_id,
         name: session.name,
         partner_language: session.partner_language,
@@ -264,70 +273,76 @@ export default function FolderDetailPage({ params }: PageProps) {
   }
 
   if (loading) {
-    return <div className="app-loading" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><span>Đang tải thư mục</span></div>
+    return <div className="app-loading" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><span>{t.historyLoading}</span></div>
   }
 
   if (!folder) {
     return (
       <div className="detail-not-found">
         <FolderOpen aria-hidden="true" />
-        <h1>Không mở được thư mục</h1>
-        <p>{pageError || 'Dữ liệu không tồn tại trên thiết bị này.'}</p>
-        <button type="button" onClick={() => router.replace('/history')}><ArrowLeft aria-hidden="true" /> Trở về lịch sử</button>
+        <h1>{t.folderDetailNotFoundTitle}</h1>
+        <p>{pageError || t.folderDetailNotFoundDesc}</p>
+        <button type="button" onClick={() => router.replace('/history')}><ArrowLeft aria-hidden="true" /> {t.folderDetailBackBtn}</button>
       </div>
     )
   }
 
   const totalDuration = sessions.reduce((total, session) => total + session.duration_seconds, 0)
+  const summaryStyles: Array<{ value: SummaryStyle; label: string; description: string }> = [
+    { value: 'default', label: t.summaryStyleDefault, description: t.summaryStyleDefaultDesc },
+    { value: 'formal', label: t.summaryStyleFormal, description: t.summaryStyleFormalDesc },
+    { value: 'casual', label: t.summaryStyleCasual, description: t.summaryStyleCasualDesc },
+    { value: 'very_casual', label: t.summaryStyleVeryCasual, description: t.summaryStyleVeryCasualDesc },
+  ]
 
   return (
     <div className="workspace-shell">
-      <WorkspaceHeader title="Thư mục hội thoại" subtitle={folder.name} />
+      <WorkspaceHeader title={t.folderDetailHeaderTitle} subtitle={folder.name} />
       <main className="detail-main">
-        <button type="button" className="back-link" onClick={() => router.push('/history')}><ArrowLeft aria-hidden="true" /> Lịch sử hội thoại</button>
+        <button type="button" className="back-link" onClick={() => router.push('/history')}><ArrowLeft aria-hidden="true" /> {t.folderDetailBackLink}</button>
 
-        <section className="detail-titlebar folder-titlebar">
+        <section className="detail-titlebar">
           <div className="detail-title">
             {renaming ? (
               <div className="rename-control">
-                <label htmlFor="folder-title" className="sr-only">Tên thư mục</label>
+                <label htmlFor="folder-title" className="sr-only">{t.folderNameLabel}</label>
                 <input id="folder-title" value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={100} autoFocus />
-                <button type="button" onClick={handleRename} aria-label="Lưu tên"><Check aria-hidden="true" /></button>
-                <button type="button" onClick={() => setRenaming(false)} aria-label="Hủy đổi tên"><X aria-hidden="true" /></button>
+                <button type="button" onClick={handleRename} aria-label={t.folderDetailSaveNameAria}><Check aria-hidden="true" /></button>
+                <button type="button" onClick={() => setRenaming(false)} aria-label={t.folderDetailCancelNameAria}><X aria-hidden="true" /></button>
               </div>
             ) : (
-              <div className="title-with-action"><span className="folder-title-icon"><Folder aria-hidden="true" /></span><h1>{folder.name}</h1><button type="button" onClick={() => setRenaming(true)} aria-label="Đổi tên thư mục"><Edit3 aria-hidden="true" /></button></div>
+              <div className="title-with-action"><span className="folder-title-icon"><Folder aria-hidden="true" /></span><h1>{folder.name}</h1><button type="button" onClick={() => setRenaming(true)} aria-label={t.folderDetailRenameAria}><Edit3 aria-hidden="true" /></button></div>
             )}
             <div className="detail-metadata">
-              <span><CalendarDays aria-hidden="true" />Tạo {new Date(folder.created_at).toLocaleDateString('vi-VN')}</span>
-              <span><Clock3 aria-hidden="true" />{formatDuration(totalDuration)}</span>
-              <span>{sessions.length} hội thoại</span>
+              <span><CalendarDays aria-hidden="true" />{t.folderDetailCreatedDate.replace('{date}', new Date(folder.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN'))}</span>
+              <span><Clock3 aria-hidden="true" />{formatDuration(totalDuration, t)}</span>
+              <span>{t.folderDetailConversationsCount.replace('{count}', String(sessions.length))}</span>
             </div>
           </div>
           <div className="detail-actions">
-            <button type="button" className="ai-command" onClick={() => void handleAiSummarize()} disabled={sessions.length === 0}><Sparkles aria-hidden="true" /> Tóm tắt thư mục</button>
-            <button type="button" className="delete-command" onClick={handleDeleteFolder} aria-label="Xóa thư mục" title="Xóa thư mục"><Trash2 aria-hidden="true" /></button>
+            <button type="button" className="ai-command" onClick={() => void handleAiSummarize()} disabled={sessions.length === 0}><Sparkles aria-hidden="true" /> {t.folderDetailSummarizeBtn}</button>
+            <button type="button" className="delete-command" onClick={handleDeleteFolder} aria-label={t.folderDetailDeleteBtn} title={t.folderDetailDeleteBtn}><Trash2 aria-hidden="true" /></button>
           </div>
         </section>
 
         {pageError && <div className="session-alert session-alert--danger" role="alert"><p>{pageError}</p></div>}
 
         <section className="folder-session-section">
-          <header><div><h2>Hội thoại trong thư mục</h2><p>Mở từng phiên để xem transcript và xuất tài liệu.</p></div><span>{sessions.length} mục</span></header>
+          <header><div><h2>{t.folderDetailSessionsSectionTitle}</h2><p>{t.folderDetailSessionsSectionDesc}</p></div><span>{t.itemsCount.replace('{count}', String(sessions.length))}</span></header>
           {sessions.length === 0 ? (
-            <div className="history-empty"><FolderOpen aria-hidden="true" /><strong>Thư mục đang trống</strong><p>Chọn nhiều hội thoại từ trang lịch sử để thêm vào thư mục.</p></div>
+            <div className="history-empty"><FolderOpen aria-hidden="true" /><strong>{t.folderDetailEmptyFolderTitle}</strong><p>{t.folderDetailEmptyFolderDesc}</p></div>
           ) : (
             <div className="history-list">
               {sessions.map((session) => {
-                const language = getPartnerLanguage(session.partner_language)
+                const partnerLang = getPartnerLanguage(session.partner_language)
                 return (
                   <div className="folder-session-row" key={session.id}>
                     <button type="button" onClick={() => router.push(`/history/sessions/${session.id}`)}>
-                      <span className="history-row__date"><strong>{new Date(session.started_at).toLocaleDateString('vi-VN', { day: '2-digit' })}</strong><small>{new Date(session.started_at).toLocaleDateString('vi-VN', { month: 'short' })}</small></span>
-                      <span className="history-row__main"><strong>{session.name}</strong><small><span className="language-inline"><b>{language?.shortName ?? session.partner_language.toUpperCase()}</b>{language?.name ?? session.partner_language}</span><span><Clock3 aria-hidden="true" />{formatDuration(session.duration_seconds)}</span></small></span>
+                      <span className="history-row__date"><strong>{new Date(session.started_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit' })}</strong><small>{new Date(session.started_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN', { month: 'short' })}</small></span>
+                      <span className="history-row__main"><strong>{session.name}</strong><small><span className="language-inline"><b>{partnerLang?.shortName ?? session.partner_language.toUpperCase()}</b>{partnerLang?.name ?? session.partner_language}</span><span><Clock3 aria-hidden="true" />{formatDuration(session.duration_seconds, t)}</span></small></span>
                       <ChevronRight aria-hidden="true" />
                     </button>
-                    <button type="button" className="unlink-command" onClick={() => void handleRemoveSession(session.id)} aria-label="Chuyển khỏi thư mục" title="Chuyển khỏi thư mục"><Unlink aria-hidden="true" /></button>
+                    <button type="button" className="unlink-command" onClick={() => void handleRemoveSession(session.id)} aria-label={t.folderDetailRemoveSessionAria} title={t.folderDetailRemoveSessionAria}><Unlink aria-hidden="true" /></button>
                   </div>
                 )
               })}
@@ -340,33 +355,33 @@ export default function FolderDetailPage({ params }: PageProps) {
         <div className="dialog-backdrop" role="presentation">
           <section className="report-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-summary-title">
             <header>
-              <div><span className="dialog-icon dialog-icon--ai"><Sparkles aria-hidden="true" /></span><div><h2 id="folder-summary-title">Tóm tắt thư mục</h2><p>{folder.name}</p></div></div>
-              <button type="button" onClick={() => setShowSummaryModal(false)} aria-label="Đóng"><X aria-hidden="true" /></button>
+              <div><span className="dialog-icon dialog-icon--ai"><Sparkles aria-hidden="true" /></span><div><h2 id="folder-summary-title">{t.summaryModalHeaderTitle}</h2><p>{folder.name}</p></div></div>
+              <button type="button" onClick={() => setShowSummaryModal(false)} aria-label={t.closeAria}><X aria-hidden="true" /></button>
             </header>
             {aiLoading && !aiSummary ? (
-              <div className="report-loading" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><strong>Đang phân tích các hội thoại</strong><p>Thời gian xử lý phụ thuộc tổng độ dài transcript.</p></div>
+              <div className="report-loading" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><strong>{t.summaryModalAnalyzingTitle}</strong><p>{t.summaryModalAnalyzingDesc}</p></div>
             ) : (
               <div className="report-layout">
                 <aside className="report-settings">
                   <fieldset>
-                    <legend>Phong cách trình bày</legend>
-                    {SUMMARY_STYLES.map((style) => (
+                    <legend>{t.summaryModalStyleHeading}</legend>
+                    {summaryStyles.map((style) => (
                       <button type="button" key={style.value} className={selectedStyle === style.value ? 'is-active' : ''} onClick={() => void handleAiSummarize(style.value)} disabled={aiLoading}>
                         <span><strong>{style.label}</strong><small>{style.description}</small></span>{selectedStyle === style.value && <Check aria-hidden="true" />}
                       </button>
                     ))}
                   </fieldset>
                   <section className="share-settings">
-                    <h3><LockKeyhole aria-hidden="true" /> Chia sẻ bảo mật</h3><p>Mật khẩu là tùy chọn và được lưu dưới dạng dẫn xuất một chiều.</p>
-                    <label htmlFor="folder-share-password">Mật khẩu truy cập</label>
-                    <input id="folder-share-password" type="password" value={sharePassword} onChange={(event) => setSharePassword(event.target.value)} placeholder="Để trống nếu không cần" maxLength={128} />
-                    <button type="button" onClick={handleCreateShareLink} disabled={!aiSummary || aiLoading}><Link2 aria-hidden="true" /> Tạo liên kết</button>
-                    {shareLink && <div className="share-result"><input value={shareLink} readOnly aria-label="Liên kết chia sẻ" /><button type="button" onClick={handleCopyLink} aria-label="Sao chép liên kết">{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}</button></div>}
+                    <h3><LockKeyhole aria-hidden="true" /> {t.summaryModalShareHeading}</h3><p>{t.summaryModalShareDesc}</p>
+                    <label htmlFor="folder-share-password">{t.summaryModalPasswordLabel}</label>
+                    <input id="folder-share-password" type="password" value={sharePassword} onChange={(event) => setSharePassword(event.target.value)} placeholder={t.summaryModalPasswordPlaceholder} maxLength={128} />
+                    <button type="button" onClick={handleCreateShareLink} disabled={!aiSummary || aiLoading}><Link2 aria-hidden="true" /> {t.summaryModalCreateLinkBtn}</button>
+                    {shareLink && <div className="share-result"><input value={shareLink} readOnly aria-label={t.summaryModalCopyLinkAria} /><button type="button" onClick={handleCopyLink} aria-label={t.summaryModalCopyLinkAria}>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}</button></div>}
                   </section>
                 </aside>
                 <section className="report-preview report-preview--text">
-                  <header><div><h3>Bản tóm tắt</h3><p>Tổng hợp từ {sessions.length} hội thoại</p></div><button type="button" onClick={async () => { const { downloadSummaryHTML } = await import('@/lib/html-generator'); downloadSummaryHTML(folder.name, aiSummary, folder.created_at, 'Nhiều ngôn ngữ') }} disabled={!aiSummary}><Download aria-hidden="true" /> Tải HTML</button></header>
-                  {summaryError ? <div className="report-error" role="alert"><p>{summaryError}</p><button type="button" onClick={() => void handleAiSummarize()}>Thử lại</button></div> : <article>{aiSummary}</article>}
+                  <header><div><h3>{t.summaryModalHeaderTitle}</h3><p>{t.itemsCount.replace('{count}', String(sessions.length))}</p></div><button type="button" onClick={async () => { const { downloadSummaryHTML } = await import('@/lib/html-generator'); downloadSummaryHTML(folder.name, aiSummary, folder.created_at, 'Nhiều ngôn ngữ') }} disabled={!aiSummary}><Download aria-hidden="true" /> {t.summaryModalDownloadHtmlBtn}</button></header>
+                  {summaryError ? <div className="report-error" role="alert"><p>{summaryError}</p><button type="button" onClick={() => void handleAiSummarize()}>{t.summaryModalRetryBtn}</button></div> : <article>{aiSummary}</article>}
                 </section>
               </div>
             )}

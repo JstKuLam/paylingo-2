@@ -7,7 +7,9 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  CircleCheck,
   Clock3,
+  CloudLightning,
   Copy,
   Download,
   Edit3,
@@ -28,22 +30,25 @@ import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage } from '@/lib/languages'
 import { syncPendingData } from '@/lib/sync-manager'
 import { formatTimeline } from '@/lib/utils'
+import { useLanguage } from '@/hooks/useLanguage'
 
 type SummaryStyle = 'default' | 'formal' | 'casual' | 'very_casual'
-
-const SUMMARY_STYLES: Array<{ value: SummaryStyle; label: string; description: string }> = [
-  { value: 'default', label: 'Mặc định', description: 'Tự nhiên và rõ ràng' },
-  { value: 'formal', label: 'Trang trọng', description: 'Chuẩn văn bản doanh nghiệp' },
-  { value: 'casual', label: 'Thân mật', description: 'Gần gũi, dễ đọc' },
-  { value: 'very_casual', label: 'Ghi chú nhanh', description: 'Ngắn gọn, trực tiếp' },
-]
 
 interface PageProps {
   params: Promise<{ id: string }>
 }
 
+function formatDuration(totalSeconds: number, t: { durationHoursMinutes: string; durationMinutes: string }) {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  return hours > 0
+    ? t.durationHoursMinutes.replace('{hours}', String(hours)).replace('{minutes}', String(minutes))
+    : t.durationMinutes.replace('{minutes}', String(minutes))
+}
+
 export default function SessionDetailPage({ params }: PageProps) {
   const router = useRouter()
+  const { language, t } = useLanguage()
   const rawParams = use(params)
   const id = (typeof rawParams.id === 'string' && rawParams.id !== 'fallback' && rawParams.id !== '')
     ? rawParams.id
@@ -109,14 +114,14 @@ export default function SessionDetailPage({ params }: PageProps) {
       const cloudEntries = cloudRes.entries || []
 
       if (!cloudSession) {
-        setPageError('Không tìm thấy hội thoại hoặc bạn không có quyền truy cập.')
+        setPageError(t.sessionDetailNotFoundDesc)
         return
       }
 
       const formattedSession: LocalSession = {
         id: cloudSession.id,
         owner_id: cloudSession.owner_id || user.id,
-        username: cloudSession.username,
+        username: cloudSession.username || username,
         folder_id: cloudSession.folder_id,
         name: cloudSession.name,
         partner_language: cloudSession.partner_language,
@@ -126,7 +131,18 @@ export default function SessionDetailPage({ params }: PageProps) {
         sync_status: 'synced',
         updated_at: cloudSession.updated_at || new Date().toISOString(),
       }
-      const formattedEntries: LocalTranscriptEntry[] = cloudEntries.map((entry: any) => ({
+      interface CloudTranscriptEntry {
+        id: string
+        session_id: string
+        speaker: 'host' | 'partner'
+        original_text: string
+        translated_text: string
+        start_ms: number
+        end_ms: number
+        created_at: string
+        updated_at?: string
+      }
+      const formattedEntries: LocalTranscriptEntry[] = (cloudEntries as CloudTranscriptEntry[]).map((entry) => ({
         id: entry.id,
         session_id: entry.session_id,
         speaker: entry.speaker,
@@ -149,11 +165,11 @@ export default function SessionDetailPage({ params }: PageProps) {
       setEntries(formattedEntries)
     } catch (error) {
       console.error('Error loading session:', error)
-      setPageError('Không thể tải dữ liệu hội thoại. Hãy kiểm tra kết nối và thử lại.')
+      setPageError(t.sessionDetailLoadError)
     } finally {
       setLoading(false)
     }
-  }, [id, router])
+  }, [id, router, t])
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => void loadSessionData(), 0)
@@ -171,7 +187,7 @@ export default function SessionDetailPage({ params }: PageProps) {
   }
 
   const handleDelete = async () => {
-    if (!session || !confirm('Xóa vĩnh viễn hội thoại và toàn bộ transcript?')) return
+    if (!session || !confirm(t.sessionDetailDeleteConfirm)) return
     setPageError('')
     try {
       await fetch('/api/history', {
@@ -187,7 +203,7 @@ export default function SessionDetailPage({ params }: PageProps) {
       router.replace('/history')
     } catch (error) {
       console.error('Failed to delete session:', error)
-      setPageError('Chưa thể xóa hội thoại trên máy chủ. Dữ liệu trên thiết bị vẫn được giữ nguyên.')
+      setPageError(t.sessionDetailDeleteServerError)
     }
   }
 
@@ -230,7 +246,7 @@ export default function SessionDetailPage({ params }: PageProps) {
       }
     } catch (error) {
       console.error('Failed to export session:', error)
-      setPageError('Không thể tạo tệp xuất. Vui lòng thử lại.')
+      setPageError(t.sessionDetailExportError)
     }
   }
 
@@ -249,11 +265,11 @@ export default function SessionDetailPage({ params }: PageProps) {
         body: JSON.stringify({ sessionId: session.id, sessions: [session], entries, style }),
       })
       const data: { summary?: string; error?: string } = await response.json()
-      if (!response.ok || !data.summary) throw new Error(data.error || 'Không thể tạo bản tóm tắt.')
+      if (!response.ok || !data.summary) throw new Error(data.error || t.summaryModalGenerateError)
       setAiSummary(data.summary)
     } catch (error) {
       console.error('Error during AI summarize:', error)
-      setSummaryError(error instanceof Error ? error.message : 'Không thể kết nối dịch vụ tóm tắt.')
+      setSummaryError(error instanceof Error ? error.message : t.summaryModalServiceError)
     } finally {
       setAiLoading(false)
     }
@@ -269,16 +285,16 @@ export default function SessionDetailPage({ params }: PageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: session.id,
-          title: `Tóm tắt: ${session.name}`,
+          title: `${t.summaryModalHeaderTitle}: ${session.name}`,
           summaryContent: aiSummary,
           password: sharePassword,
         }),
       })
       const data: { id?: string; error?: string } = await response.json()
-      if (!response.ok || !data.id) throw new Error(data.error || 'Không thể tạo liên kết.')
+      if (!response.ok || !data.id) throw new Error(data.error || t.summaryModalCreateLinkError)
       setShareLink(`${window.location.origin}/shared/summary/${data.id}`)
     } catch (error) {
-      setSummaryError(error instanceof Error ? error.message : 'Không thể tạo liên kết chia sẻ.')
+      setSummaryError(error instanceof Error ? error.message : t.summaryModalCreateLinkError)
     } finally {
       setAiLoading(false)
     }
@@ -294,7 +310,7 @@ export default function SessionDetailPage({ params }: PageProps) {
     return (
       <div className="app-loading" role="status">
         <Loader2 className="animate-spin" aria-hidden="true" />
-        <span>Đang tải hội thoại</span>
+        <span>{t.historyLoading}</span>
       </div>
     )
   }
@@ -303,10 +319,10 @@ export default function SessionDetailPage({ params }: PageProps) {
     return (
       <div className="detail-not-found">
         <FileText aria-hidden="true" />
-        <h1>Không mở được hội thoại</h1>
-        <p>{pageError || 'Dữ liệu không tồn tại trên thiết bị này.'}</p>
+        <h1>{t.sessionDetailNotFoundTitle}</h1>
+        <p>{pageError || t.sessionDetailNotFoundDesc}</p>
         <button type="button" onClick={() => router.replace('/history')}>
-          <ArrowLeft aria-hidden="true" /> Trở về lịch sử
+          <ArrowLeft aria-hidden="true" /> {t.sessionDetailBackBtn}
         </button>
       </div>
     )
@@ -314,22 +330,29 @@ export default function SessionDetailPage({ params }: PageProps) {
 
   const partnerLanguage = getPartnerLanguage(session.partner_language)
   const firstEntryStart = entries[0]?.start_ms ?? 0
-  const duration = `${Math.floor(session.duration_seconds / 60)} phút ${session.duration_seconds % 60} giây`
+  const duration = formatDuration(session.duration_seconds, t)
+
+  const summaryStyles: Array<{ value: SummaryStyle; label: string; description: string }> = [
+    { value: 'default', label: t.summaryStyleDefault, description: t.summaryStyleDefaultDesc },
+    { value: 'formal', label: t.summaryStyleFormal, description: t.summaryStyleFormalDesc },
+    { value: 'casual', label: t.summaryStyleCasual, description: t.summaryStyleCasualDesc },
+    { value: 'very_casual', label: t.summaryStyleVeryCasual, description: t.summaryStyleVeryCasualDesc },
+  ]
 
   return (
     <div className="workspace-shell">
-      <WorkspaceHeader title="Chi tiết hội thoại" subtitle={session.name} />
+      <WorkspaceHeader title={t.sessionDetailHeaderTitle} subtitle={session.name} />
 
       <main className="detail-main">
         <button type="button" className="back-link" onClick={() => router.push('/history')}>
-          <ArrowLeft aria-hidden="true" /> Lịch sử hội thoại
+          <ArrowLeft aria-hidden="true" /> {t.sessionDetailBackLink}
         </button>
 
         <section className="detail-titlebar">
           <div className="detail-title">
             {renaming ? (
               <div className="rename-control">
-                <label htmlFor="session-name" className="sr-only">Tên hội thoại</label>
+                <label htmlFor="session-name" className="sr-only">{t.sessionDetailNameLabel}</label>
                 <input
                   id="session-name"
                   value={newName}
@@ -337,19 +360,19 @@ export default function SessionDetailPage({ params }: PageProps) {
                   maxLength={180}
                   autoFocus
                 />
-                <button type="button" onClick={handleRename} aria-label="Lưu tên"><Check aria-hidden="true" /></button>
-                <button type="button" onClick={() => setRenaming(false)} aria-label="Hủy đổi tên"><X aria-hidden="true" /></button>
+                <button type="button" onClick={handleRename} aria-label={t.sessionDetailSaveNameAria}><Check aria-hidden="true" /></button>
+                <button type="button" onClick={() => setRenaming(false)} aria-label={t.sessionDetailCancelNameAria}><X aria-hidden="true" /></button>
               </div>
             ) : (
               <div className="title-with-action">
                 <h1>{session.name}</h1>
-                <button type="button" onClick={() => setRenaming(true)} aria-label="Đổi tên hội thoại" title="Đổi tên">
+                <button type="button" onClick={() => setRenaming(true)} aria-label={t.sessionDetailRenameAria} title={t.sessionDetailRenameAria}>
                   <Edit3 aria-hidden="true" />
                 </button>
               </div>
             )}
             <div className="detail-metadata">
-              <span><CalendarDays aria-hidden="true" />{new Date(session.started_at).toLocaleString('vi-VN')}</span>
+              <span><CalendarDays aria-hidden="true" />{new Date(session.started_at).toLocaleString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN')}</span>
               <span><Clock3 aria-hidden="true" />{duration}</span>
               <span className="language-inline"><b>{partnerLanguage?.shortName ?? session.partner_language.toUpperCase()}</b>{partnerLanguage?.name ?? session.partner_language}</span>
             </div>
@@ -357,21 +380,21 @@ export default function SessionDetailPage({ params }: PageProps) {
 
           <div className="detail-actions">
             <button type="button" className="ai-command" onClick={() => void handleAiSummarize()} disabled={entries.length === 0}>
-              <Sparkles aria-hidden="true" /> Tóm tắt AI
+              <Sparkles aria-hidden="true" /> {t.sessionDetailSummarizeBtn}
             </button>
             <div className="export-control">
               <button type="button" onClick={() => setShowExportMenu((current) => !current)} aria-expanded={showExportMenu}>
-                <Download aria-hidden="true" /> Xuất file <ChevronDown aria-hidden="true" />
+                <Download aria-hidden="true" /> {t.sessionDetailExportBtn} <ChevronDown aria-hidden="true" />
               </button>
               {showExportMenu && (
                 <div className="export-menu">
-                  <button type="button" onClick={() => void handleExport('pdf')}><FileText aria-hidden="true" /> PDF</button>
-                  <button type="button" onClick={() => void handleExport('txt')}><FileText aria-hidden="true" /> Văn bản TXT</button>
-                  <button type="button" onClick={() => void handleExport('json')}><FileJson aria-hidden="true" /> Dữ liệu JSON</button>
+                  <button type="button" onClick={() => void handleExport('pdf')}><FileText aria-hidden="true" /> {t.sessionDetailExportPdf}</button>
+                  <button type="button" onClick={() => void handleExport('txt')}><FileText aria-hidden="true" /> {t.sessionDetailExportTxt}</button>
+                  <button type="button" onClick={() => void handleExport('json')}><FileJson aria-hidden="true" /> {t.sessionDetailExportJson}</button>
                 </div>
               )}
             </div>
-            <button type="button" className="delete-command" onClick={handleDelete} aria-label="Xóa hội thoại" title="Xóa vĩnh viễn">
+            <button type="button" className="delete-command" onClick={handleDelete} aria-label={t.sessionDetailDeleteBtn} title={t.sessionDetailDeleteBtn}>
               <Trash2 aria-hidden="true" />
             </button>
           </div>
@@ -384,19 +407,20 @@ export default function SessionDetailPage({ params }: PageProps) {
         <section className="transcript-archive" aria-labelledby="transcript-heading">
           <header>
             <div>
-              <h2 id="transcript-heading">Transcript</h2>
-              <p>{entries.length} đoạn hội thoại đã lưu</p>
+              <h2 id="transcript-heading">{t.sessionDetailTranscriptHeading}</h2>
+              <p>{t.sessionDetailEntriesCount.replace('{count}', String(entries.length))}</p>
             </div>
             <span className={`sync-label sync-label--${session.sync_status}`}>
-              {session.sync_status === 'synced' ? 'Đã đồng bộ' : 'Có thay đổi chưa đồng bộ'}
+              {session.sync_status === 'synced' ? <CircleCheck aria-hidden="true" /> : <CloudLightning aria-hidden="true" />}
+              {session.sync_status === 'synced' ? t.syncStatusSynced : session.sync_status === 'failed' ? t.syncStatusFailed : t.syncStatusPending}
             </span>
           </header>
 
           {entries.length === 0 ? (
             <div className="transcript-archive__empty">
               <Volume2 aria-hidden="true" />
-              <strong>Không có nội dung văn bản</strong>
-              <p>Phiên có thể đã kết thúc trước khi nhận diện được lời nói.</p>
+              <strong>{t.sessionDetailEmptyTranscriptTitle}</strong>
+              <p>{t.sessionDetailEmptyTranscriptDesc}</p>
             </div>
           ) : (
             <ol className="archive-entry-list">
@@ -407,10 +431,10 @@ export default function SessionDetailPage({ params }: PageProps) {
                 return (
                   <li key={entry.id} className={`archive-entry archive-entry--${entry.speaker}`}>
                     <div className="archive-entry__meta">
-                      <span>{entry.speaker === 'host' ? 'Bạn nói' : `${partnerLanguage?.name ?? 'Đối tác'} nói`}</span>
+                      <span>{entry.speaker === 'host' ? t.sessionDetailSpeakerYou : t.sessionDetailSpeakerPartner.replace('{name}', partnerLanguage?.name ?? t.partnerLangLabel)}</span>
                       <time>{formatTimeline(entry.start_ms - firstEntryStart)}</time>
                       {!isEditing && (
-                        <button type="button" onClick={() => startEditing(entry)} aria-label="Sửa đoạn hội thoại" title="Sửa">
+                        <button type="button" onClick={() => startEditing(entry)} aria-label={t.sessionDetailEditEntryAria} title={t.sessionDetailEditEntryAria}>
                           <Edit3 aria-hidden="true" />
                         </button>
                       )}
@@ -419,7 +443,7 @@ export default function SessionDetailPage({ params }: PageProps) {
                     {isEditing ? (
                       <div className="entry-editor">
                         <label>
-                          <span>Tiếng Việt</span>
+                          <span>{t.vietnameseLabel}</span>
                           <textarea
                             rows={3}
                             value={entry.speaker === 'host' ? editOrigText : editTransText}
@@ -427,7 +451,7 @@ export default function SessionDetailPage({ params }: PageProps) {
                           />
                         </label>
                         <label>
-                          <span>{partnerLanguage?.name ?? 'Ngôn ngữ đối tác'}</span>
+                          <span>{partnerLanguage?.name ?? t.partnerLangLabel}</span>
                           <textarea
                             rows={3}
                             value={entry.speaker === 'partner' ? editOrigText : editTransText}
@@ -435,8 +459,8 @@ export default function SessionDetailPage({ params }: PageProps) {
                           />
                         </label>
                         <footer>
-                          <button type="button" className="secondary-command" onClick={() => setEditingEntryId(null)}>Hủy</button>
-                          <button type="button" className="primary-command" onClick={() => void handleSaveEntryEdit(entry.id)}><Check aria-hidden="true" /> Lưu thay đổi</button>
+                          <button type="button" className="secondary-command" onClick={() => setEditingEntryId(null)}>{t.sessionDetailCancelEditBtn}</button>
+                          <button type="button" className="primary-command" onClick={() => void handleSaveEntryEdit(entry.id)}><Check aria-hidden="true" /> {t.sessionDetailSaveEditBtn}</button>
                         </footer>
                       </div>
                     ) : (
@@ -459,23 +483,23 @@ export default function SessionDetailPage({ params }: PageProps) {
             <header>
               <div>
                 <span className="dialog-icon dialog-icon--ai"><Sparkles aria-hidden="true" /></span>
-                <div><h2 id="summary-title">Tóm tắt AI</h2><p>{session.name}</p></div>
+                <div><h2 id="summary-title">{t.summaryModalHeaderTitle}</h2><p>{session.name}</p></div>
               </div>
-              <button type="button" onClick={() => setShowSummaryModal(false)} aria-label="Đóng"><X aria-hidden="true" /></button>
+              <button type="button" onClick={() => setShowSummaryModal(false)} aria-label={t.closeAria}><X aria-hidden="true" /></button>
             </header>
 
             {aiLoading && !aiSummary ? (
               <div className="report-loading" role="status">
                 <Loader2 className="animate-spin" aria-hidden="true" />
-                <strong>Đang phân tích transcript</strong>
-                <p>Thời gian xử lý phụ thuộc độ dài hội thoại và dịch vụ AI đã cấu hình.</p>
+                <strong>{t.summaryModalAnalyzingTitle}</strong>
+                <p>{t.summaryModalAnalyzingDesc}</p>
               </div>
             ) : (
               <div className="report-layout">
                 <aside className="report-settings">
                   <fieldset>
-                    <legend>Phong cách trình bày</legend>
-                    {SUMMARY_STYLES.map((style) => (
+                    <legend>{t.summaryModalStyleHeading}</legend>
+                    {summaryStyles.map((style) => (
                       <button
                         type="button"
                         key={style.value}
@@ -490,24 +514,24 @@ export default function SessionDetailPage({ params }: PageProps) {
                   </fieldset>
 
                   <section className="share-settings">
-                    <h3><LockKeyhole aria-hidden="true" /> Chia sẻ bảo mật</h3>
-                    <p>Mật khẩu là tùy chọn. Người nhận chỉ xem được bản tóm tắt qua liên kết này.</p>
-                    <label htmlFor="share-password">Mật khẩu truy cập</label>
+                    <h3><LockKeyhole aria-hidden="true" /> {t.summaryModalShareHeading}</h3>
+                    <p>{t.summaryModalShareDesc}</p>
+                    <label htmlFor="share-password">{t.summaryModalPasswordLabel}</label>
                     <input
                       id="share-password"
                       type="password"
                       value={sharePassword}
                       onChange={(event) => setSharePassword(event.target.value)}
-                      placeholder="Để trống nếu không cần"
+                      placeholder={t.summaryModalPasswordPlaceholder}
                       maxLength={128}
                     />
                     <button type="button" onClick={handleCreateShareLink} disabled={!aiSummary || aiLoading}>
-                      <Link2 aria-hidden="true" /> Tạo liên kết
+                      <Link2 aria-hidden="true" /> {t.summaryModalCreateLinkBtn}
                     </button>
                     {shareLink && (
                       <div className="share-result">
-                        <input value={shareLink} readOnly aria-label="Liên kết chia sẻ" />
-                        <button type="button" onClick={handleCopyLink} aria-label="Sao chép liên kết">
+                        <input value={shareLink} readOnly aria-label={t.summaryModalCopyLinkAria} />
+                        <button type="button" onClick={handleCopyLink} aria-label={t.summaryModalCopyLinkAria}>
                           {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
                         </button>
                       </div>
@@ -517,7 +541,7 @@ export default function SessionDetailPage({ params }: PageProps) {
 
                 <section className="report-preview">
                   <header>
-                    <div><h3>Bản xem trước</h3><p>Báo cáo HTML từ nội dung tóm tắt</p></div>
+                    <div><h3>{t.sessionDetailPreviewHeading}</h3><p>{t.sessionDetailPreviewDesc}</p></div>
                     <button
                       type="button"
                       onClick={async () => {
@@ -526,14 +550,14 @@ export default function SessionDetailPage({ params }: PageProps) {
                       }}
                       disabled={!aiSummary}
                     >
-                      <Download aria-hidden="true" /> Tải HTML
+                      <Download aria-hidden="true" /> {t.summaryModalDownloadHtmlBtn}
                     </button>
                   </header>
                   {summaryError ? (
-                    <div className="report-error" role="alert"><p>{summaryError}</p><button type="button" onClick={() => void handleAiSummarize()}>Thử lại</button></div>
+                    <div className="report-error" role="alert"><p>{summaryError}</p><button type="button" onClick={() => void handleAiSummarize()}>{t.summaryModalRetryBtn}</button></div>
                   ) : aiSummary ? (
                     <iframe
-                      title="Xem trước báo cáo tóm tắt"
+                      title={t.sessionDetailPreviewFrameTitle}
                       sandbox=""
                       srcDoc={generatePremiumHTMLReport({
                         sessionName: session.name,

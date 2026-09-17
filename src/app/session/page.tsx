@@ -34,7 +34,7 @@ import { useSessionLifecycle } from '@/hooks/useSessionLifecycle'
 import { useTheme } from '@/hooks/useTheme'
 import { useLanguage } from '@/hooks/useLanguage'
 import { authClient } from '@/lib/auth-client'
-import { getPartnerLanguage, PARTNER_LANGUAGES } from '@/lib/languages'
+import { getLocalizedPartnerLanguages, getPartnerLanguage, PARTNER_LANGUAGES } from '@/lib/languages'
 import { parseTokensToMessages, TranscriptMessage } from '@/lib/soniox-parser'
 import { initAutoSync } from '@/lib/sync-manager'
 import { formatTimeline } from '@/lib/utils'
@@ -424,13 +424,11 @@ function SessionActiveArea({
               disabled={isActive || recordingMode === 'one_way'}
               onChange={(event) => setPartnerLang(event.target.value)}
             >
-              {PARTNER_LANGUAGES.filter((langItem) => recordingMode !== 'two_way' || langItem.code !== 'any')
-                .map((langItem) => {
-                  const localizedName = langItem.code === 'any' ? t.autoDetect : langItem.name
-                  return (
-                    <option key={langItem.code} value={langItem.code}>{localizedName}</option>
-                  )
-                })}
+              {getLocalizedPartnerLanguages(language)
+                .filter((langItem) => recordingMode !== 'two_way' || langItem.code !== 'any')
+                .map((langItem) => (
+                  <option key={langItem.code} value={langItem.code}>{langItem.name}</option>
+                ))}
             </select>
             <span aria-hidden="true">→</span>
             <strong>{t.vietnameseLabel}</strong>
@@ -558,7 +556,7 @@ function SessionActiveArea({
         </div>
 
         {canStart ? (
-          <button type="button" className="record-command record-command--start active:scale-[0.98]" onClick={handleStart}>
+          <button type="button" className="record-command record-command--start active:scale-95" onClick={handleStart}>
             <Mic aria-hidden="true" />
             {t.startBtn}
           </button>
@@ -568,7 +566,7 @@ function SessionActiveArea({
             {t.connectingBtn}
           </button>
         ) : (
-          <button type="button" className={`record-command record-command--stop active:scale-[0.98] ${state === 'recording' ? 'is-recording' : ''}`} onClick={handleStop} disabled={state === 'stopping'}>
+          <button type="button" className={`record-command record-command--stop active:scale-95 ${state === 'recording' ? 'is-recording' : ''}`} onClick={handleStop} disabled={state === 'stopping'}>
             {state === 'stopping' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Square aria-hidden="true" />}
             {state === 'stopping' ? t.savingBtn : t.stopBtn}
           </button>
@@ -700,7 +698,7 @@ export default function SessionPage() {
         <div className="liquid-blob liquid-blob-warning" />
       </div>
 
-      <header className="session-header glass-panel-modern border-b border-white/10 shadow-lg relative z-50 bg-opacity-70 dark:bg-opacity-50">
+      <header className="session-header glass-panel-modern border-b border-white/10 shadow-lg relative z-50">
         <div className="session-brand">
           <PayPayLogo width={102} height={32} />
           <div>
