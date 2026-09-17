@@ -257,3 +257,18 @@ test('service worker and PWA updater prevent stale cache lock-in and handle erro
   assert.match(pwaUpdater, /searchParams\.has\('clear_cache'\)/)
   assert.match(pwaUpdater, /window\.history\.replaceState/)
 })
+
+test('AI summarize API bounds payload size, entry length, and inserts summaries safely', async () => {
+  const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
+
+  // Bounded entry lengths to prevent buffer bloat
+  assert.match(summarizeRoute, /original_text:\s*z\.string\(\)\.max\(5000\)/)
+  assert.match(summarizeRoute, /translated_text:\s*z\.string\(\)\.max\(5000\)/)
+
+  // Explicit raw body size check protects against chunked transfer bloat
+  assert.match(summarizeRoute, /rawBody\.length > 300_000/)
+
+  // Foreign key safe bindings avoid SQLite FK constraint crashes on unsynced sessions
+  assert.match(summarizeRoute, /isSessionOwned\s*\?\s*sessionId\s*:\s*null/)
+  assert.match(summarizeRoute, /isFolderOwned\s*\?\s*folderId\s*:\s*null/)
+})

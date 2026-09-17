@@ -27,16 +27,16 @@ interface SummarySession {
 const transcriptEntrySchema = z.object({
   session_id: z.string().optional(),
   speaker: z.enum(['host', 'partner']),
-  original_text: z.string(),
-  translated_text: z.string(),
+  original_text: z.string().max(5000),
+  translated_text: z.string().max(5000),
   start_ms: z.number().nonnegative(),
   end_ms: z.number().nonnegative(),
 })
 
 const summarySessionSchema = z.object({
   id: z.string().uuid(),
-  name: z.string().optional(),
-  started_at: z.string(),
+  name: z.string().max(200).optional(),
+  started_at: z.string().max(50),
 })
 
 const summarizeRequestSchema = z.object({
@@ -54,6 +54,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Yêu cầu quá lớn' }, { status: 413 })
     }
 
+    const rawBody = await req.text()
+    if (rawBody.length > 300_000) {
+      return NextResponse.json({ error: 'Yêu cầu quá lớn' }, { status: 413 })
+    }
+
+    let bodyJson: unknown
+    try {
+      bodyJson = JSON.parse(rawBody)
+    } catch {
+      return NextResponse.json({ error: 'Dữ liệu JSON không hợp lệ' }, { status: 400 })
+    }
+
     const user = await getAuthenticatedUser(req)
 
     if (!user || !isAllowedEmail(user.email) || !user.email_confirmed_at) {
@@ -68,7 +80,7 @@ export async function POST(req: Request) {
     if (!requestLimit.allowed) return rateLimitResponse(requestLimit.retryAfterSeconds)
 
     const username = user.email.split('@')[0]
-    const parsedBody = summarizeRequestSchema.safeParse(await req.json())
+    const parsedBody = summarizeRequestSchema.safeParse(bodyJson)
     if (!parsedBody.success) {
       return NextResponse.json({ error: parsedBody.error.issues[0]?.message || 'Dữ liệu không hợp lệ' }, { status: 400 })
     }
@@ -78,17 +90,26 @@ export async function POST(req: Request) {
     let sessionsToSummarize: SummarySession[] = []
     let allEntries: TranscriptEntry[] = []
 
+    let isSessionOwned = false
+    let isFolderOwned = false
+
     // Verify ownership if sessionId or folderId provided
     if (sessionId) {
       const owned = await db.prepare('SELECT id, owner_id FROM sessions WHERE id = ?').bind(sessionId).first<{ id: string; owner_id: string }>()
-      if (owned && owned.owner_id !== user.id) {
-        return NextResponse.json({ error: 'Bạn không có quyền truy cập cuộc hội thoại này' }, { status: 403 })
+      if (owned) {
+        if (owned.owner_id !== user.id) {
+          return NextResponse.json({ error: 'Bạn không có quyền truy cập cuộc hội thoại này' }, { status: 403 })
+        }
+        isSessionOwned = true
       }
     }
     if (folderId) {
       const owned = await db.prepare('SELECT id, owner_id FROM folders WHERE id = ?').bind(folderId).first<{ id: string; owner_id: string }>()
-      if (owned && owned.owner_id !== user.id) {
-        return NextResponse.json({ error: 'Bạn không có quyền truy cập thư mục này' }, { status: 403 })
+      if (owned) {
+        if (owned.owner_id !== user.id) {
+          return NextResponse.json({ error: 'Bạn không có quyền truy cập thư mục này' }, { status: 403 })
+        }
+        isFolderOwned = true
       }
     }
 
@@ -289,13 +310,13 @@ ${sanitizedTranscript}
       return NextResponse.json({ error: 'AI không trả về kết quả tóm tắt' }, { status: 500 })
     }
 
-    // Save summary to session_summaries table
+    // Save summary to session_summaries table (bind only if session/folder exists in D1 to prevent FK constraint failures)
     const summaryId = crypto.randomUUID()
     await db.prepare(`
       INSERT INTO session_summaries (id, session_id, folder_id, summary_text, style, created_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'))
     `)
-      .bind(summaryId, sessionId || null, folderId || null, cleanSummaryText, style)
+      .bind(summaryId, isSessionOwned ? sessionId : null, isFolderOwned ? folderId : null, cleanSummaryText, style)
       .run()
 
     // Write token usage log to usage_logs
@@ -304,7 +325,7 @@ ${sanitizedTranscript}
       INSERT INTO usage_logs (id, session_id, action, details, created_at)
       VALUES (?, ?, ?, ?, datetime('now'))
     `)
-      .bind(logId, sessionId || folderId || null, 'ai_summarize', JSON.stringify({ username, promptTokens, completionTokens, model, estimatedCost }))
+      .bind(logId, isSessionOwned ? sessionId : (isFolderOwned ? folderId : null), 'ai_summarize', JSON.stringify({ username, promptTokens, completionTokens, model, estimatedCost }))
       .run()
 
     return NextResponse.json({ summary: cleanSummaryText }, {
