@@ -668,5 +668,27 @@ test('shared summary route safely catches invalid JSON, bounds DELETE parameters
   assert.match(sharedClient, /navigator\.clipboard\?\.writeText/)
 })
 
+test('sw.js protects caches.match against errors and PwaUpdater and error boundaries guard sessionStorage', async () => {
+  const sw = await source('public/sw.js')
+  const pwaUpdater = await source('src/components/PwaUpdater.tsx')
+  const errorBoundary = await source('src/app/error.tsx')
+  const globalErrorBoundary = await source('src/app/global-error.tsx')
+
+  // Service worker guards caches.match in cacheFirst and rootNetworkFirst
+  assert.match(sw, /try\s*\{[\s\S]*?caches\.match\(request\)[\s\S]*?\}\s*catch/)
+  assert.match(sw, /try\s*\{[\s\S]*?cachedShell = await caches\.match\('\/'\)[\s\S]*?\}\s*catch/)
+
+  // PwaUpdater uses safe helpers for sessionStorage
+  assert.match(pwaUpdater, /safeSessionGet\('pwa_chunk_last_recovery'\)/)
+  assert.match(pwaUpdater, /safeSessionSet\('pwa_chunk_last_recovery',/)
+  assert.match(pwaUpdater, /safeSessionGet\('pwa_last_reload'\)/)
+  assert.match(pwaUpdater, /safeSessionSet\('pwa_last_reload',/)
+
+  // Error boundaries wrap sessionStorage.removeItem in try/catch
+  assert.match(errorBoundary, /try\s*\{[\s\S]*?sessionStorage\.removeItem\('pwa_chunk_last_recovery'\)[\s\S]*?\}\s*catch/)
+  assert.match(globalErrorBoundary, /try\s*\{[\s\S]*?sessionStorage\.removeItem\('pwa_chunk_last_recovery'\)[\s\S]*?\}\s*catch/)
+})
+
+
 
 

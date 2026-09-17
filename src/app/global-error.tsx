@@ -26,8 +26,12 @@ export default function GlobalError({
           cacheNames.filter((name) => name.startsWith('paylingo-')).map((name) => caches.delete(name))
         )
       }
-      sessionStorage.removeItem('pwa_chunk_last_recovery')
-      sessionStorage.removeItem('pwa_last_reload')
+      try {
+        sessionStorage.removeItem('pwa_chunk_last_recovery')
+        sessionStorage.removeItem('pwa_last_reload')
+      } catch {
+        // Safe fallback if sessionStorage is restricted
+      }
       window.location.reload()
     } catch (recoveryError: unknown) {
       console.error('Failed to clear application cache:', recoveryError)

@@ -38,8 +38,12 @@ self.addEventListener('message', (event) => {
 });
 
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
+  try {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+  } catch (err) {
+    console.warn('[SW] caches.match failed:', err);
+  }
 
   try {
     const response = await fetch(request);
@@ -70,7 +74,12 @@ async function rootNetworkFirst(request) {
     }
     return response;
   } catch {
-    return (await caches.match('/')) || Response.error();
+    try {
+      const cachedShell = await caches.match('/');
+      return cachedShell || Response.error();
+    } catch {
+      return Response.error();
+    }
   }
 }
 

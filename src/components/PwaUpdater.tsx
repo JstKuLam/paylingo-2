@@ -2,6 +2,22 @@
 
 import { useEffect } from 'react'
 
+function safeSessionGet(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeSessionSet(key: string, value: string): void {
+  try {
+    sessionStorage.setItem(key, value)
+  } catch {
+    // Ignore storage restriction errors in private browsing
+  }
+}
+
 export default function PwaUpdater() {
   useEffect(() => {
     // Clean up clear_cache query param from URL if present
@@ -16,13 +32,13 @@ export default function PwaUpdater() {
     }
 
     const recoverFromCacheStaleness = async () => {
-      const lastRecovery = Number(sessionStorage.getItem('pwa_chunk_last_recovery') || 0)
+      const lastRecovery = Number(safeSessionGet('pwa_chunk_last_recovery') || 0)
       const now = Date.now()
       if (now - lastRecovery < 10_000) {
         console.warn('[PWA] Suppressing chunk recovery loop; last attempt was less than 10s ago')
         return
       }
-      sessionStorage.setItem('pwa_chunk_last_recovery', now.toString())
+      safeSessionSet('pwa_chunk_last_recovery', now.toString())
 
       try {
         const registrations = await navigator.serviceWorker.getRegistrations()
@@ -52,10 +68,10 @@ export default function PwaUpdater() {
     }
 
     const handleControllerChange = () => {
-      const lastReload = Number(sessionStorage.getItem('pwa_last_reload') || 0)
+      const lastReload = Number(safeSessionGet('pwa_last_reload') || 0)
       const now = Date.now()
       if (now - lastReload > 5_000) {
-        sessionStorage.setItem('pwa_last_reload', now.toString())
+        safeSessionSet('pwa_last_reload', now.toString())
         window.location.reload()
       }
     }
