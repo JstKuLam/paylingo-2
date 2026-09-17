@@ -4,6 +4,17 @@ import { useEffect } from 'react'
 
 export default function PwaUpdater() {
   useEffect(() => {
+    // Clean up clear_cache query param from URL if present
+    if (typeof window !== 'undefined') {
+      const currentUrl = new URL(window.location.href)
+      if (currentUrl.searchParams.has('clear_cache')) {
+        currentUrl.searchParams.delete('clear_cache')
+        const search = currentUrl.searchParams.toString()
+        const newUrl = currentUrl.pathname + (search ? `?${search}` : '') + currentUrl.hash
+        window.history.replaceState(null, '', newUrl)
+      }
+    }
+
     const recoverFromCacheStaleness = async () => {
       const lastRecovery = Number(sessionStorage.getItem('pwa_chunk_last_recovery') || 0)
       const now = Date.now()

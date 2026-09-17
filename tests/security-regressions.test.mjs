@@ -236,3 +236,24 @@ test('session lifecycle cleans up aborted sessions and finalizes unexpected stop
   assert.match(sessionPage, /error:\s*recordingError/)
   assert.match(sessionPage, /recordingError\?\.message/)
 })
+
+test('service worker and PWA updater prevent stale cache lock-in and handle errors safely', async () => {
+  const sw = await source('public/sw.js')
+  const headers = await source('public/_headers')
+  const nextConfig = await source('next.config.ts')
+  const pwaUpdater = await source('src/components/PwaUpdater.tsx')
+
+  // sw.js installation is resilient with Promise.allSettled and skips cache on install
+  assert.match(sw, /Promise\.allSettled/)
+  assert.match(sw, /cache:\s*'no-cache'/)
+  assert.match(sw, /response\.status === 200/)
+  assert.match(sw, /SKIP_WAITING/)
+
+  // Headers prevent caching of sw.js across Cloudflare Pages and Next.js
+  assert.match(headers, /\/sw\.js[\s\S]*?Cache-Control:\s*no-cache,\s*no-store,\s*must-revalidate/)
+  assert.match(nextConfig, /source:\s*'\/sw\.js'[\s\S]*?Cache-Control[\s\S]*?no-store/)
+
+  // PwaUpdater cleans up clear_cache parameter from browser address bar
+  assert.match(pwaUpdater, /searchParams\.has\('clear_cache'\)/)
+  assert.match(pwaUpdater, /window\.history\.replaceState/)
+})
