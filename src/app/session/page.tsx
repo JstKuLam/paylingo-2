@@ -330,6 +330,26 @@ function SessionActiveArea({
     setIsRecordingActive(isActive)
   }, [isActive, setIsRecordingActive])
 
+  useEffect(() => {
+    if (!isActive) return
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [isActive])
+
+  useEffect(() => {
+    return () => {
+      if (isActive) {
+        void stop().catch(() => {})
+      }
+    }
+  }, [isActive, stop])
+
   const {
     silenceWarning,
     wakeLockError,

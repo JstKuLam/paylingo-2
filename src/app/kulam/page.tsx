@@ -415,6 +415,10 @@ export default function AdminPage() {
   // Custom password change handler
   const handleChangePassword = async (event: FormEvent) => {
     event.preventDefault()
+    if (newPassword.length < 12) {
+      setPwdMessage({ type: 'error', text: 'Mật khẩu mới phải có tối thiểu 12 ký tự' })
+      return
+    }
     if (newPassword !== confirmPassword) {
       setPwdMessage({ type: 'error', text: 'Xác nhận mật khẩu mới không khớp' })
       return
@@ -888,9 +892,9 @@ export default function AdminPage() {
               <div style={{ gridColumn: '2' }}>
                 <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
                   <label htmlFor="new-password">Mật khẩu mới</label>
-                  <input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} placeholder="Tối thiểu 6 ký tự" />
+                  <input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={12} placeholder="Tối thiểu 12 ký tự" />
                   <label htmlFor="confirm-password">Xác nhận mật khẩu mới</label>
-                  <input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} placeholder="Nhập lại mật khẩu mới" />
+                  <input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={12} placeholder="Nhập lại mật khẩu mới (tối thiểu 12 ký tự)" />
                   {pwdMessage && <div className={`session-alert session-alert--${pwdMessage.type === 'success' ? 'success' : 'danger'}`} role="status"><p>{pwdMessage.text}</p></div>}
                   <button type="submit" className="primary-command" disabled={savingPwd}>{savingPwd ? <Loader2 className="animate-spin" aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}{savingPwd ? 'Đang lưu' : 'Cập nhật mật khẩu'}</button>
                 </form>

@@ -39,8 +39,9 @@ interface PageProps {
 }
 
 function formatDuration(totalSeconds: number, t: { durationHoursMinutes: string; durationMinutes: string }) {
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const safeSeconds = Number.isFinite(totalSeconds) ? Math.max(0, Math.floor(totalSeconds)) : 0
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
   return hours > 0
     ? t.durationHoursMinutes.replace('{hours}', String(hours)).replace('{minutes}', String(minutes))
     : t.durationMinutes.replace('{minutes}', String(minutes))

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Home, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 
-export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const [isRecovering, setIsRecovering] = useState(false)
 
   useEffect(() => {

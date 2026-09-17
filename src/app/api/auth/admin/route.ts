@@ -31,10 +31,22 @@ export async function GET() {
       authorized: isAuthorized,
       passkeyEnabled: creds.passkeyEnabled,
       hasPasskeyRegistered: !!creds.passkeySpki
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
     })
   } catch (error: unknown) {
     console.error('Error checking admin auth status:', error)
-    return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Lỗi hệ thống' },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   }
 }
 

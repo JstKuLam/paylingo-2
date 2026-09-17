@@ -35,7 +35,21 @@ export function useLanguage(): {
     window.dispatchEvent(new Event(LANGUAGE_EVENT))
   }
 
-  const t = translations[language] || translations.vi
+  const rawTranslations = translations[language] || translations.vi
+  const t: I18nTranslations = language === 'vi'
+    ? rawTranslations
+    : new Proxy(rawTranslations, {
+        get(target, prop: string | symbol) {
+          if (typeof prop === 'string' && prop in target) {
+            const val = target[prop as keyof I18nTranslations]
+            if (val !== undefined && val !== '') return val
+          }
+          if (typeof prop === 'string' && prop in translations.vi) {
+            return translations.vi[prop as keyof I18nTranslations]
+          }
+          return ''
+        },
+      })
 
   return { language, changeLanguage, t }
 }

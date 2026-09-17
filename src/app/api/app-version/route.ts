@@ -11,5 +11,9 @@ export async function GET() {
     minVersionIos: '1.0.0',
     latestVersionIos: '3.0.0',
     updateUrlIos: 'https://testflight.apple.com/join/mock'
+  }, {
+    headers: {
+      'Cache-Control': 'no-store, max-age=0',
+    }
   })
 }

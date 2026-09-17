@@ -2,11 +2,14 @@ import { claimLegacyLocalData, db } from './db'
 import { authClient } from './auth-client'
 import { stringToUUID } from './soniox-parser'
 
+let isSyncing = false
+let hasQueuedSync = false
+
 /**
  * Sweeps the local IndexedDB and pushes all 'pending' folders, sessions and transcript entries to Cloudflare D1 via /api/sync.
- * Handles network connection checking and error states gracefully.
+ * Handles network connection checking, concurrency locking, and error states gracefully.
  */
-export async function syncPendingData(): Promise<{ success: boolean; syncedFolders?: number; syncedSessions: number; syncedEntries: number; error?: string }> {
+async function performSync(): Promise<{ success: boolean; syncedFolders?: number; syncedSessions: number; syncedEntries: number; error?: string }> {
   if (typeof window !== 'undefined' && !navigator.onLine) {
     return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Offline' }
   }
@@ -30,19 +33,9 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
     // Claim only ownerless legacy records that already match this trusted account name.
     await claimLegacyLocalData(ownerId, legacyUsername)
 
-    const allSessions = await db.sessions.where('owner_id').equals(ownerId).toArray()
-    for (const sessionRecord of allSessions) {
-      if (sessionRecord.sync_status === 'failed') {
-        await db.sessions.update(sessionRecord.id, { sync_status: 'pending' })
-      }
-    }
-
-    const allFolders = await db.folders.where('owner_id').equals(ownerId).toArray()
-    for (const folder of allFolders) {
-      if (folder.sync_status === 'failed') {
-        await db.folders.update(folder.id, { sync_status: 'pending' })
-      }
-    }
+    // Ensure failed records for this owner are retried
+    await db.sessions.where('owner_id').equals(ownerId).filter(s => s.sync_status === 'failed').modify({ sync_status: 'pending' })
+    await db.folders.where('owner_id').equals(ownerId).filter(f => f.sync_status === 'failed').modify({ sync_status: 'pending' })
 
     // 0. Prepare pending/failed folders
     const pendingFolders = await db.folders.where('sync_status').anyOf(['pending', 'failed']).toArray()
@@ -166,6 +159,26 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
       syncedEntries,
       error: error instanceof Error ? error.message : 'Unknown sync error'
     }
+  }
+}
+
+export async function syncPendingData(): Promise<{ success: boolean; syncedFolders?: number; syncedSessions: number; syncedEntries: number; error?: string }> {
+  if (isSyncing) {
+    hasQueuedSync = true
+    return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Sync already in progress' }
+  }
+  isSyncing = true
+  try {
+    const result = await performSync()
+    if (hasQueuedSync) {
+      hasQueuedSync = false
+      if (typeof window !== 'undefined' && navigator.onLine) {
+        window.setTimeout(() => { void syncPendingData() }, 1000)
+      }
+    }
+    return result
+  } finally {
+    isSyncing = false
   }
 }
 

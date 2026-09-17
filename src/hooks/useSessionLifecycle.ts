@@ -104,6 +104,40 @@ export function useSessionLifecycle({
     autoCloseAbandonedSessions()
   }, [])
 
+  // Clean up wakeLock and close session on unmount
+  useEffect(() => {
+    return () => {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {})
+        wakeLockRef.current = null
+      }
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current)
+        silenceTimerRef.current = null
+      }
+      const sid = activeSessionRef.current
+      if (sid) {
+        activeSessionRef.current = null
+        const now = new Date().toISOString()
+        void db.sessions.get(sid).then((session) => {
+          if (session && session.ended_at === null) {
+            const startTime = new Date(session.started_at).getTime()
+            const validStart = Number.isFinite(startTime) ? startTime : Date.now()
+            const duration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+            return db.sessions.update(sid, {
+              ended_at: now,
+              duration_seconds: duration,
+              sync_status: 'pending',
+              updated_at: now,
+            })
+          }
+        }).catch((err) => {
+          console.error('Failed to close session on unmount:', err)
+        })
+      }
+    }
+  }, [])
+
   // 1. Wake Lock API Integration
   const requestWakeLock = useCallback(async () => {
     if (typeof window === 'undefined' || !('wakeLock' in navigator)) {

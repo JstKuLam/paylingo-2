@@ -10,8 +10,20 @@ export async function GET(request: Request) {
     return NextResponse.json({
       user: user || null,
       authenticated: !!user,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
     })
   } catch (err: unknown) {
-    return NextResponse.json({ user: null, authenticated: false, error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 })
+    return NextResponse.json(
+      { user: null, authenticated: false, error: err instanceof Error ? err.message : 'Unknown error' },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, max-age=0',
+        },
+      }
+    )
   }
 }
