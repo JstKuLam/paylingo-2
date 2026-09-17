@@ -117,7 +117,7 @@ export async function syncPendingData(): Promise<{ success: boolean; syncedFolde
       throw new Error(errData.error || `Sync API error ${res.status}`)
     }
 
-    await res.json()
+    await res.json().catch(() => ({}))
 
     // Mark folders as synced
     if (ownedFolders.length > 0) {

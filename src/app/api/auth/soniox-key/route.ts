@@ -117,8 +117,11 @@ export async function DELETE(request: NextRequest) {
 
     const db = getD1()
     await db.prepare('DELETE FROM transcript_entries WHERE session_id IN (SELECT id FROM sessions WHERE owner_id = ?)').bind(user.id).run()
+    await db.prepare('DELETE FROM session_summaries WHERE session_id IN (SELECT id FROM sessions WHERE owner_id = ?) OR folder_id IN (SELECT id FROM folders WHERE owner_id = ?)').bind(user.id, user.id).run()
+    await db.prepare('DELETE FROM shared_summaries WHERE session_id IN (SELECT id FROM sessions WHERE owner_id = ?) OR folder_id IN (SELECT id FROM folders WHERE owner_id = ?)').bind(user.id, user.id).run()
     await db.prepare('DELETE FROM sessions WHERE owner_id = ?').bind(user.id).run()
     await db.prepare('DELETE FROM folders WHERE owner_id = ?').bind(user.id).run()
+    await db.prepare('DELETE FROM auth_tokens WHERE user_id = ?').bind(user.id).run()
     await db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(user.id).run()
     await db.prepare('DELETE FROM auth_users WHERE id = ?').bind(user.id).run()
 

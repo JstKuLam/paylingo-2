@@ -24,6 +24,10 @@ export async function POST(request: Request) {
     if (Array.isArray(folders) && folders.length > 0) {
       for (const folder of folders) {
         if (!folder.id || !folder.name) continue
+        const existingFolder = await db.prepare('SELECT id, owner_id FROM folders WHERE id = ?').bind(folder.id).first<{ id: string; owner_id: string }>()
+        if (existingFolder && existingFolder.owner_id !== user.id) {
+          continue
+        }
         const nowIso = new Date().toISOString()
         const createdAt = folder.created_at || nowIso
         const updatedAt = folder.updated_at || nowIso
@@ -47,6 +51,10 @@ export async function POST(request: Request) {
     if (Array.isArray(sessions) && sessions.length > 0) {
       for (const sess of sessions) {
         if (!sess.id || !sess.name) continue
+        const existingSession = await db.prepare('SELECT id, owner_id FROM sessions WHERE id = ?').bind(sess.id).first<{ id: string; owner_id: string }>()
+        if (existingSession && existingSession.owner_id !== user.id) {
+          continue
+        }
         const nowIso = new Date().toISOString()
         const startedAt = sess.started_at || nowIso
         const endedAt = sess.ended_at || null
@@ -88,8 +96,17 @@ export async function POST(request: Request) {
 
     // 3. Sync Transcript Entries
     if (Array.isArray(entries) && entries.length > 0) {
+      const uniqueSessionIds = Array.from(new Set(entries.map((e: { session_id?: string }) => e.session_id).filter(Boolean))) as string[]
+      const forbiddenSessionIds = new Set<string>()
+      for (const sId of uniqueSessionIds) {
+        const sessOwner = await db.prepare('SELECT id, owner_id FROM sessions WHERE id = ?').bind(sId).first<{ id: string; owner_id: string }>()
+        if (sessOwner && sessOwner.owner_id !== user.id) {
+          forbiddenSessionIds.add(sId)
+        }
+      }
+
       for (const entry of entries) {
-        if (!entry.id || !entry.session_id) continue
+        if (!entry.id || !entry.session_id || forbiddenSessionIds.has(entry.session_id)) continue
         const nowIso = new Date().toISOString()
         const createdAt = entry.created_at || nowIso
         const startMs = typeof entry.start_ms === 'number' ? entry.start_ms : 0

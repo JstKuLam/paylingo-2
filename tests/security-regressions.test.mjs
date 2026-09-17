@@ -76,6 +76,13 @@ test('local synchronization never reassigns records with an existing owner', asy
   assert.match(history, /safeCloudFolders/)
 })
 
+test('sync route enforces multi-tenant ownership on folders, sessions, and entries', async () => {
+  const syncRoute = await source('src/app/api/sync/route.ts')
+  assert.match(syncRoute, /existingFolder\.owner_id !== user\.id/)
+  assert.match(syncRoute, /existingSession\.owner_id !== user\.id/)
+  assert.match(syncRoute, /forbiddenSessionIds/)
+})
+
 test('latest RLS migration authorizes by immutable owner id only', async () => {
   const migration = await source('supabase/migrations/20260803000000_enforce_strict_ownership_rls.sql')
   assert.doesNotMatch(migration, /user_metadata/)
