@@ -28,6 +28,10 @@ test('Next.js edge middleware checks session cookies on incoming requests', asyn
   assert.match(middleware, /export async function middleware/)
   assert.match(middleware, /AUTH_COOKIE_NAME/)
   assert.match(middleware, /searchParams\.has\('error'\)/)
+  assert.match(middleware, /X-Content-Type-Options/)
+  assert.match(middleware, /X-Frame-Options/)
+  assert.ok(middleware.includes('sw\\\\.js'))
+  assert.ok(middleware.includes('manifest\\\\.json'))
 })
 
 test('auth session operations use atomic batch creation, replay-proof token deletion, and purge expired sessions', async () => {
