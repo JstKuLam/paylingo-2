@@ -590,4 +590,20 @@ test('useLanguage, useTheme, and session preferences protect storage operations 
   assert.match(sessionPage, /try\s*\{[\s\S]*?localStorage\.setItem\(key,\s*value\)[\s\S]*?\}\s*catch/)
 })
 
+test('history route enforces D1 result bounds, safe JSON parsing, and token length validation', async () => {
+  const historyRoute = await source('src/app/api/history/route.ts')
+  const sessionAuth = await source('src/lib/auth/session.ts')
+
+  // History route limits prevent unbounded D1 result sets
+  assert.match(historyRoute, /ORDER BY started_at DESC LIMIT 1000/)
+  assert.match(historyRoute, /ORDER BY created_at DESC LIMIT 1000/)
+  assert.match(historyRoute, /ORDER BY start_ms ASC LIMIT 2000/)
+
+  // History PATCH and DELETE catch invalid JSON
+  assert.match(historyRoute, /body = await request\.json\(\)[\s\S]*?Dữ liệu JSON không hợp lệ/)
+
+  // Session auth validates token length bounds
+  assert.match(sessionAuth, /cleanToken\.length < 10 \|\| cleanToken\.length > 256/)
+})
+
 

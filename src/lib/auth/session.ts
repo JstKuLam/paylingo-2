@@ -176,7 +176,9 @@ export async function getAuthenticatedUser(
     }
   }
 
-  if (!token) return null
+  if (!token || typeof token !== 'string') return null
+  const cleanToken = token.trim()
+  if (cleanToken.length < 10 || cleanToken.length > 256) return null
 
   const row = await db.prepare(`
     SELECT u.id, u.email, u.email_confirmed_at, u.created_at
@@ -184,7 +186,7 @@ export async function getAuthenticatedUser(
     JOIN auth_users u ON s.user_id = u.id
     WHERE s.token = ? AND datetime(s.expires_at) > datetime('now')
   `)
-    .bind(token)
+    .bind(cleanToken)
     .first<AuthUser>()
 
   return row || null
@@ -194,7 +196,11 @@ export async function getAuthenticatedUser(
  * Destroys an active session and purges expired sessions.
  */
 export async function destroySession(token: string): Promise<boolean> {
+  if (!token || typeof token !== 'string') return false
+  const cleanToken = token.trim()
+  if (!cleanToken) return false
+
   const db = getD1()
-  const res = await db.prepare('DELETE FROM auth_sessions WHERE token = ? OR datetime(expires_at) < datetime(\'now\')').bind(token).run()
+  const res = await db.prepare('DELETE FROM auth_sessions WHERE token = ? OR datetime(expires_at) < datetime(\'now\')').bind(cleanToken).run()
   return res.success
 }
