@@ -3,11 +3,15 @@ import {
   AUTH_COOKIE_MAX_AGE,
   AUTH_COOKIE_NAME,
   createOrUpdateOAuthSession,
+  getAuthenticatedUser,
 } from '@/lib/auth/session'
 import {
   GOOGLE_OAUTH_COOKIE,
   GOOGLE_PROFILE_COOKIE,
   getGoogleOAuthConfig,
+  isAllowedOAuthReturnOrigin,
+  signOAuthHandoff,
+  verifyOAuthHandoff,
 } from '@/lib/auth/google-oauth'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
@@ -41,19 +45,51 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const origin = requestUrl.origin
 
-  const oauthError = requestUrl.searchParams.get('error')
-  if (oauthError) {
-    return NextResponse.redirect(`${origin}/?error=google_cancelled`, {
+  const config = await getGoogleOAuthConfig()
+  if (!config) {
+    return NextResponse.redirect(`${origin}/?error=google_not_configured`, {
       headers: redirectSecurityHeaders,
     })
   }
 
-  const code = (requestUrl.searchParams.get('code') || '').trim()
-  const state = (requestUrl.searchParams.get('state') || '').trim()
-  if (!code || !state || code.length > 512 || state.length < 16 || state.length > 128) {
-    return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+  // Handle cross-domain OAuth handoff from canonical paylingo.pages.dev to custom domain (e.g. noidi.9phut.org)
+  const handoffToken = (requestUrl.searchParams.get('handoff') || '').trim()
+  if (handoffToken) {
+    const handoffPayload = await verifyOAuthHandoff(handoffToken, config.clientSecret)
+    if (!handoffPayload) {
+      return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+        headers: redirectSecurityHeaders,
+      })
+    }
+    const verifiedUser = await getAuthenticatedUser(handoffPayload.sessionToken)
+    if (!verifiedUser) {
+      return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+        headers: redirectSecurityHeaders,
+      })
+    }
+
+    const handoffResponse = NextResponse.redirect(`${origin}/session`, {
       headers: redirectSecurityHeaders,
     })
+    handoffResponse.cookies.set({
+      name: AUTH_COOKIE_NAME,
+      value: handoffPayload.sessionToken,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: AUTH_COOKIE_MAX_AGE,
+    })
+    handoffResponse.cookies.set({
+      name: GOOGLE_PROFILE_COOKIE,
+      value: handoffPayload.displayName,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: AUTH_COOKIE_MAX_AGE,
+    })
+    return handoffResponse
   }
 
   const cookieHeader = request.headers.get('cookie') || ''
@@ -61,17 +97,30 @@ export async function GET(request: Request) {
     new RegExp(`(?:^|;\\s*)${GOOGLE_OAUTH_COOKIE}=([^;]+)`)
   )
   const rawOAuthCookie = cookieMatch ? safeDecodeCookie(cookieMatch[1].trim()) : ''
-  const [savedState = '', codeVerifier = ''] = rawOAuthCookie.split('.')
+  const [savedState = '', codeVerifier = '', , rawReturnOrigin = ''] = rawOAuthCookie.split('.')
+  const decodedReturnOrigin = safeDecodeCookie(rawReturnOrigin)
+  const targetOrigin =
+    isAllowedOAuthReturnOrigin(decodedReturnOrigin) && decodedReturnOrigin !== origin
+      ? decodedReturnOrigin
+      : origin
 
-  if (!savedState || !codeVerifier || savedState !== state) {
-    return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+  const oauthError = requestUrl.searchParams.get('error')
+  if (oauthError) {
+    return NextResponse.redirect(`${targetOrigin}/?error=google_cancelled`, {
       headers: redirectSecurityHeaders,
     })
   }
 
-  const config = await getGoogleOAuthConfig()
-  if (!config) {
-    return NextResponse.redirect(`${origin}/?error=google_not_configured`, {
+  const code = (requestUrl.searchParams.get('code') || '').trim()
+  const state = (requestUrl.searchParams.get('state') || '').trim()
+  if (!code || !state || code.length > 512 || state.length < 16 || state.length > 128) {
+    return NextResponse.redirect(`${targetOrigin}/?error=google_auth_failed`, {
+      headers: redirectSecurityHeaders,
+    })
+  }
+
+  if (!savedState || !codeVerifier || savedState !== state) {
+    return NextResponse.redirect(`${targetOrigin}/?error=google_auth_failed`, {
       headers: redirectSecurityHeaders,
     })
   }
@@ -98,7 +147,7 @@ export async function GET(request: Request) {
     })
 
     if (!tokenRes.ok) {
-      return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+      return NextResponse.redirect(`${targetOrigin}/?error=google_auth_failed`, {
         headers: redirectSecurityHeaders,
       })
     }
@@ -108,7 +157,7 @@ export async function GET(request: Request) {
     }
     const accessToken = typeof tokenData.access_token === 'string' ? tokenData.access_token.trim() : ''
     if (!accessToken) {
-      return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+      return NextResponse.redirect(`${targetOrigin}/?error=google_auth_failed`, {
         headers: redirectSecurityHeaders,
       })
     }
@@ -122,7 +171,7 @@ export async function GET(request: Request) {
     })
 
     if (!profileRes.ok) {
-      return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+      return NextResponse.redirect(`${targetOrigin}/?error=google_auth_failed`, {
         headers: redirectSecurityHeaders,
       })
     }
@@ -136,14 +185,14 @@ export async function GET(request: Request) {
 
     const email = typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : ''
     if (!email || profile.email_verified === false) {
-      return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+      return NextResponse.redirect(`${targetOrigin}/?error=google_auth_failed`, {
         headers: redirectSecurityHeaders,
       })
     }
 
     const sessionRes = await createOrUpdateOAuthSession(email)
     if (!sessionRes) {
-      return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+      return NextResponse.redirect(`${targetOrigin}/?error=google_auth_failed`, {
         headers: redirectSecurityHeaders,
       })
     }
@@ -157,7 +206,20 @@ export async function GET(request: Request) {
       .trim()
       .slice(0, 80)
 
-    const response = NextResponse.redirect(`${origin}/session`, {
+    let destinationUrl = `${origin}/session`
+    if (targetOrigin !== origin) {
+      const signedHandoff = await signOAuthHandoff(
+        {
+          sessionToken: sessionRes.sessionToken,
+          displayName,
+          exp: Date.now() + 30_000,
+        },
+        config.clientSecret
+      )
+      destinationUrl = `${targetOrigin}/api/auth/google/callback?handoff=${encodeURIComponent(signedHandoff)}`
+    }
+
+    const response = NextResponse.redirect(destinationUrl, {
       headers: redirectSecurityHeaders,
     })
 
@@ -193,7 +255,7 @@ export async function GET(request: Request) {
 
     return response
   } catch {
-    return NextResponse.redirect(`${origin}/?error=google_auth_failed`, {
+    return NextResponse.redirect(`${targetOrigin}/?error=google_auth_failed`, {
       headers: redirectSecurityHeaders,
     })
   }
