@@ -29,6 +29,7 @@ import {
   Clock,
   Columns2,
   FileText,
+  GripVertical,
   History,
   Link2,
   Loader2,
@@ -1053,7 +1054,7 @@ export default function SessionPage() {
     setHighlightedTurnId(null)
     setMobileChromeVisible(false)
     if (typeof window !== 'undefined' && window.innerWidth <= 760) {
-      setLayoutMode('flipped')
+      setLayoutMode(recordingMode === 'scribe' ? 'stacked' : 'flipped')
     }
     lastScrollTopRef.current = { partner: 0, host: 0 }
     const hadPreviousTranscript = messages.length > 0
@@ -1129,6 +1130,8 @@ export default function SessionPage() {
     setRecordingMode(mode)
     if (mode === 'scribe') {
       setPartnerLang('vi')
+      const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 760
+      setLayoutMode(isMobileViewport ? 'stacked' : 'split')
     } else if (mode === 'two_way' && (partnerLang === 'any' || partnerLang === 'vi')) {
       setPartnerLang('en')
     }
@@ -1545,7 +1548,9 @@ export default function SessionPage() {
             }
           }}
         >
-          <span className="seam__grip" />
+          <span className="seam__grip" aria-hidden="true">
+            <GripVertical className="seam__icon" />
+          </span>
         </div>
 
         <TranscriptPane

@@ -3843,18 +3843,38 @@ body {
 }
 .seam__grip {
   position: relative;
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: var(--r-pill);
-  background: var(--border-strong);
-  transition: background-color 0.15s, transform 0.15s;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-3);
+  box-shadow: var(--shadow-1);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    transform 0.15s,
+    box-shadow 0.15s;
 }
 .app[data-layout="split"] .seam__grip {
-  width: 4px;
-  height: 36px;
+  width: 16px;
+  height: 30px;
 }
 .app:not([data-layout="split"]) .seam__grip {
-  width: 36px;
-  height: 4px;
+  width: 30px;
+  height: 16px;
+}
+.seam__icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.85;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.app:not([data-layout="split"]) .seam__icon {
+  transform: rotate(90deg);
 }
 .seam:hover::before,
 .seam.is-active::before {
@@ -3863,7 +3883,16 @@ body {
 .seam:hover .seam__grip,
 .seam.is-active .seam__grip,
 .seam:focus-visible .seam__grip {
-  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--brand-soft), var(--shadow-1);
+  transform: scale(1.06);
+}
+.seam:hover .seam__icon,
+.seam.is-active .seam__icon,
+.seam:focus-visible .seam__icon {
+  opacity: 1;
 }
 
 /* Live Pill (Ultra-compact chrome on mobile recording) */
