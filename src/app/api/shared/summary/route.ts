@@ -211,8 +211,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Thiếu ID chia sẻ' }, { status: 400, headers: noStoreHeader })
       }
 
+      const requestIp = getRequestIp(req)
       const verifyLimit = checkRateLimit({
-        key: `shared-summary:${getRequestIp(req)}:${id}`,
+        key: `shared-summary:${requestIp}:${id}`,
         limit: 5,
         windowMs: 15 * 60_000,
       })
@@ -228,10 +229,31 @@ export async function POST(req: Request) {
 
       const hasPassword = !!summary.password_hash
       if (hasPassword && summary.password_hash) {
+        const shareRateUserKey = `share_pwd:${id}`
+        const attemptId = crypto.randomUUID()
+        const attemptRes = await db
+          .prepare(`
+            INSERT INTO ai_rate_limits (id, ip, user_id, created_at)
+            SELECT ?1, ?2, ?3, datetime('now')
+            WHERE (SELECT COUNT(*) FROM ai_rate_limits WHERE user_id = ?3 AND ip = ?2 AND created_at >= datetime('now', '-15 minutes')) < 5
+              AND (SELECT COUNT(*) FROM ai_rate_limits WHERE user_id = ?3 AND created_at >= datetime('now', '-15 minutes')) < 20
+          `)
+          .bind(attemptId, requestIp, shareRateUserKey)
+          .run()
+        if (!attemptRes.meta || attemptRes.meta.changes === 0) {
+          return rateLimitResponse(900)
+        }
+
         const isValid = await verifySharedPassword(password, summary.password_hash)
         if (!isValid) {
           return NextResponse.json({ error: 'Mật khẩu không chính xác', isLocked: true }, { status: 401, headers: noStoreHeader })
         }
+
+        await db
+          .prepare('DELETE FROM ai_rate_limits WHERE id = ?')
+          .bind(attemptId)
+          .run()
+          .catch(() => {})
 
         if (isLegacySharedPasswordHash(summary.password_hash)) {
           const upgradedHash = await hashSharedPassword(password)
@@ -310,18 +332,32 @@ export async function POST(req: Request) {
     } else if (visibility === 'public') {
       passHash = null
     } else if (visibility === 'private') {
-      if (password && password.trim()) {
-        passHash = await hashSharedPassword(password)
+      const cleanPass = (password || '').trim()
+      if (cleanPass) {
+        if (cleanPass.length < 6) {
+          return NextResponse.json(
+            { error: 'Mật khẩu chia sẻ phải có ít nhất 6 ký tự' },
+            { status: 400, headers: noStoreHeader }
+          )
+        }
+        passHash = await hashSharedPassword(cleanPass)
       } else if (existing?.password_hash) {
         passHash = existing.password_hash
       } else {
         return NextResponse.json(
-          { error: 'Vui lòng nhập mật khẩu để đặt chế độ Riêng tư' },
+          { error: 'Vui lòng nhập mật khẩu (tối thiểu 6 ký tự) để đặt chế độ Riêng tư' },
           { status: 400, headers: noStoreHeader }
         )
       }
     } else {
-      passHash = await hashSharedPassword(password)
+      const cleanPass = (password || '').trim()
+      if (cleanPass && cleanPass.length < 6) {
+        return NextResponse.json(
+          { error: 'Mật khẩu chia sẻ phải có ít nhất 6 ký tự' },
+          { status: 400, headers: noStoreHeader }
+        )
+      }
+      passHash = await hashSharedPassword(cleanPass)
     }
 
     let resultId = ''

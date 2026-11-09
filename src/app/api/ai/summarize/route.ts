@@ -51,6 +51,7 @@ const summarizeRequestSchema = z.object({
 
 export async function POST(req: Request) {
   const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
+  let releaseReservation: () => Promise<void> = async () => {}
   try {
     if (req.headers.get('sec-fetch-site') === 'cross-site') {
       return NextResponse.json({ error: 'Cross-site request blocked' }, { status: 403, headers: noStoreHeader })
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
     if (!reservationRes.meta || reservationRes.meta.changes === 0) {
       return rateLimitResponse(3600)
     }
-    const releaseReservation = async () => {
+    releaseReservation = async () => {
       await db.prepare('DELETE FROM ai_rate_limits WHERE id = ?').bind(rateReservationId).run().catch(() => {})
     }
     await db
@@ -180,13 +181,14 @@ export async function POST(req: Request) {
           .bind(folderId, user.id)
           .all<SummarySession>()
         sessionsToSummarize = folderSessions.results || []
-        for (const sess of sessionsToSummarize) {
-          const dbEntries = await db.prepare('SELECT session_id, speaker, speaker_label, original_text, translated_text, start_ms, end_ms FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC LIMIT 800')
-            .bind(sess.id)
+        if (sessionsToSummarize.length > 0) {
+          const dbEntries = await db
+            .prepare(
+              'SELECT session_id, speaker, speaker_label, original_text, translated_text, start_ms, end_ms FROM transcript_entries WHERE session_id IN (SELECT id FROM sessions WHERE folder_id = ? AND owner_id = ?) ORDER BY session_id ASC, start_ms ASC LIMIT 2000'
+            )
+            .bind(folderId, user.id)
             .all<TranscriptEntry>()
-          if (dbEntries.results) {
-            allEntries.push(...dbEntries.results)
-          }
+          allEntries = dbEntries.results || []
         }
       }
     }
@@ -509,6 +511,7 @@ ${cleanTranscript}
       headers: noStoreHeader,
     })
   } catch (error: unknown) {
+    await releaseReservation()
     console.error('Error in summarize API:', error)
     if (error instanceof Error && (error.name === 'TimeoutError' || error.message.toLowerCase().includes('timeout') || error.message.toLowerCase().includes('aborted'))) {
       return NextResponse.json({ error: 'Quá thời gian xử lý yêu cầu AI (Timeout). Vui lòng thử lại sau.' }, { status: 504, headers: noStoreHeader })

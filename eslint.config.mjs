@@ -17,13 +17,6 @@ const eslintConfig = defineConfig([
       "shadcn/no-unknown-classes": "warn",
     },
   },
-  // Allow UI component implementations to style themselves
-  {
-    files: ["src/components/ui/**"],
-    rules: {
-      "shadcn/no-restyle": "off",
-    },
-  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

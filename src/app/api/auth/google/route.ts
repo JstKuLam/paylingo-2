@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server'
 import {
-  CANONICAL_OAUTH_ORIGIN,
   GOOGLE_OAUTH_COOKIE,
   generateOAuthState,
   generatePkcePair,
   getGoogleOAuthConfig,
-  isAllowedOAuthReturnOrigin,
 } from '@/lib/auth/google-oauth'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
@@ -29,30 +27,22 @@ export async function GET(request: Request) {
   }
 
   const requestUrl = new URL(request.url)
-  const isPreviewPagesDomain =
+  if (
     requestUrl.hostname.endsWith('.paylingo.pages.dev') &&
     requestUrl.hostname !== 'paylingo.pages.dev'
-  const isCustomProductionDomain = requestUrl.origin === 'https://noidi.9phut.org'
-
-  if (isPreviewPagesDomain || isCustomProductionDomain) {
-    const bounceUrl = new URL(`${CANONICAL_OAUTH_ORIGIN}/api/auth/google`)
-    if (isCustomProductionDomain) {
-      bounceUrl.searchParams.set('return_origin', requestUrl.origin)
-    }
-    return NextResponse.redirect(bounceUrl.toString(), {
-      headers: redirectSecurityHeaders,
-    })
+  ) {
+    return NextResponse.redirect(
+      `https://paylingo.pages.dev/api/auth/google${requestUrl.search}`,
+      { headers: redirectSecurityHeaders }
+    )
   }
 
   const origin = requestUrl.origin
   const mode = requestUrl.searchParams.get('mode') === 'signup' ? 'signup' : 'signin'
-  const rawReturnOrigin = requestUrl.searchParams.get('return_origin')
-  const returnOrigin = isAllowedOAuthReturnOrigin(rawReturnOrigin) ? rawReturnOrigin : ''
 
   const config = await getGoogleOAuthConfig()
   if (!config) {
-    const errorTargetOrigin = returnOrigin || origin
-    return NextResponse.redirect(`${errorTargetOrigin}/?error=google_not_configured`, {
+    return NextResponse.redirect(`${origin}/?error=google_not_configured`, {
       headers: redirectSecurityHeaders,
     })
   }
@@ -77,7 +67,7 @@ export async function GET(request: Request) {
 
   response.cookies.set({
     name: GOOGLE_OAUTH_COOKIE,
-    value: `${state}.${codeVerifier}.${mode}.${encodeURIComponent(returnOrigin)}`,
+    value: `${state}.${codeVerifier}.${mode}`,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',

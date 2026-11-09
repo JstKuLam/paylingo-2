@@ -405,7 +405,7 @@ export async function POST(request: Request) {
   } catch (err: unknown) {
     console.error('Error in sync API:', err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Lỗi hệ thống khi đồng bộ dữ liệu.' },
+      { error: 'Lỗi hệ thống khi đồng bộ dữ liệu.' },
       { status: 500, headers: noStoreHeader }
     )
   }

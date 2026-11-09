@@ -90,7 +90,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ items: [] }, { headers: noStoreHeader })
   } catch (err: unknown) {
     console.error('Error in history GET API:', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi lấy dữ liệu lịch sử' }, { status: 500, headers: noStoreHeader })
+    return NextResponse.json({ error: 'Lỗi lấy dữ liệu lịch sử' }, { status: 500, headers: noStoreHeader })
   }
 }
 
@@ -166,7 +166,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: false, error: 'Thao tác không hợp lệ' }, { status: 400, headers: noStoreHeader })
   } catch (err: unknown) {
     console.error('Error in history PATCH API:', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi cập nhật' }, { status: 500, headers: noStoreHeader })
+    return NextResponse.json({ error: 'Lỗi cập nhật dữ liệu' }, { status: 500, headers: noStoreHeader })
   }
 }
 
@@ -242,6 +242,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: false, error: 'Thao tác không hợp lệ' }, { status: 400, headers: noStoreHeader })
   } catch (err: unknown) {
     console.error('Error in history DELETE API:', err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Lỗi xóa dữ liệu' }, { status: 500, headers: noStoreHeader })
+    return NextResponse.json({ error: 'Lỗi xóa dữ liệu' }, { status: 500, headers: noStoreHeader })
   }
 }

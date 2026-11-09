@@ -759,10 +759,10 @@ test('admin auth enforces D1-backed persistent brute-force rate limiting across 
   const adminRoute = await source('src/app/api/auth/admin/route.ts')
   const googleCallback = await source('src/app/api/auth/google/callback/route.ts')
 
-  // D1-backed rate limiting on admin login attempts
-  assert.match(adminRoute, /SELECT COUNT\(\*\) AS cnt FROM ai_rate_limits WHERE user_id = 'admin_login'/)
+  // D1-backed rate limiting on admin login attempts (atomic per-IP + global cap)
   assert.match(adminRoute, /INSERT INTO ai_rate_limits \(id, ip, user_id, created_at\)/)
-  assert.match(adminRoute, /DELETE FROM ai_rate_limits WHERE user_id = 'admin_login'/)
+  assert.match(adminRoute, /WHERE user_id = 'admin_login' AND ip = \?2/)
+  assert.match(adminRoute, /DELETE FROM ai_rate_limits WHERE user_id = 'admin_login' AND ip = \?/)
 
   // Security headers on OAuth callback redirects
   assert.match(googleCallback, /redirectSecurityHeaders/)
@@ -850,9 +850,9 @@ test('AI summarize releases rate-limit reservations on upstream errors and passe
   assert.match(summarizeRoute, /'x-goog-api-key':\s*apiKey/)
   assert.doesNotMatch(summarizeRoute, /\?key=/)
 
-  // Releases D1 rate-limit reservation on upstream error
-  assert.match(summarizeRoute, /const releaseReservation = async \(\) =>/)
-  assert.match(summarizeRoute, /await releaseReservation\(\)/)
+  // Releases D1 rate-limit reservation on upstream error and catch block
+  assert.match(summarizeRoute, /releaseReservation = async \(\) =>/)
+  assert.match(summarizeRoute, /catch \(error: unknown\) \{\s*await releaseReservation\(\)/)
 
   // WS proxy script matches any minified export variable name
   assert.match(wsProxyScript, /var \(\[A-Za-z0-9_\$\]\+\)=\\\{async fetch\\\(e,t,r\\\)\\\{/)

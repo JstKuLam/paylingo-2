@@ -89,33 +89,34 @@ export async function POST(req: Request) {
         .prepare("DELETE FROM ai_rate_limits WHERE user_id = 'admin_login' AND created_at < datetime('now', '-15 minutes')")
         .run()
         .catch(() => {})
-      const failedAttemptsRow = await db
-        .prepare(
-          "SELECT COUNT(*) AS cnt FROM ai_rate_limits WHERE user_id = 'admin_login' AND created_at >= datetime('now', '-15 minutes')"
-        )
-        .first<{ cnt: number }>()
+
+      const attemptId = crypto.randomUUID()
+      const attemptRes = await db
+        .prepare(`
+          INSERT INTO ai_rate_limits (id, ip, user_id, created_at)
+          SELECT ?1, ?2, 'admin_login', datetime('now')
+          WHERE (SELECT COUNT(*) FROM ai_rate_limits WHERE user_id = 'admin_login' AND ip = ?2 AND created_at >= datetime('now', '-15 minutes')) < 5
+            AND (SELECT COUNT(*) FROM ai_rate_limits WHERE user_id = 'admin_login' AND created_at >= datetime('now', '-15 minutes')) < 50
+        `)
+        .bind(attemptId, requestIp)
+        .run()
         .catch(() => null)
-      if ((failedAttemptsRow?.cnt ?? 0) >= 5) {
+      if (!attemptRes?.meta || attemptRes.meta.changes === 0) {
         return rateLimitResponse(900)
       }
 
       if (!creds.configured) {
+        await db.prepare('DELETE FROM ai_rate_limits WHERE id = ?').bind(attemptId).run().catch(() => {})
         return NextResponse.json({ error: 'Admin chưa được cấu hình an toàn' }, { status: 503, headers: noStoreHeader })
       }
 
       if (!(await verifyPassword(password, creds.passwordHash))) {
-        await db
-          .prepare(
-            "INSERT INTO ai_rate_limits (id, ip, user_id, created_at) VALUES (?, ?, 'admin_login', datetime('now'))"
-          )
-          .bind(crypto.randomUUID(), requestIp)
-          .run()
-          .catch(() => {})
         return NextResponse.json({ error: 'Sai mật khẩu' }, { status: 400, headers: noStoreHeader })
       }
 
       await db
-        .prepare("DELETE FROM ai_rate_limits WHERE user_id = 'admin_login'")
+        .prepare("DELETE FROM ai_rate_limits WHERE user_id = 'admin_login' AND ip = ?")
+        .bind(requestIp)
         .run()
         .catch(() => {})
 

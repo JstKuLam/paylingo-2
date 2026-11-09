@@ -35,7 +35,7 @@ test('account deletion is authenticated and removes owned data before auth user'
   assert.match(source, /DELETE FROM shared_summaries/)
   assert.match(source, /DELETE FROM sessions/)
   assert.match(source, /DELETE FROM folders/)
-  assert.match(source, /DELETE FROM auth_tokens/)
+  assert.doesNotMatch(source, /DELETE FROM auth_tokens/)
   assert.match(source, /DELETE FROM auth_sessions/)
   assert.match(source, /DELETE FROM auth_users/)
   assert.ok(

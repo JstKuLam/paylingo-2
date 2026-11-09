@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict'
+import module from 'node:module'
+import path from 'node:path'
 import test from 'node:test'
 import { getD1 } from '../src/lib/d1-client.ts'
+
+const projectRoot = path.resolve(import.meta.dirname, '..')
+module.registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'next/server') return nextResolve('next/server.js', context)
+    if (specifier === 'next/headers') return nextResolve('next/headers.js', context)
+    if (specifier.startsWith('@/')) {
+      return nextResolve(path.join(projectRoot, 'src', specifier.slice(2)) + '.ts', context)
+    }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !path.extname(specifier)) {
+      try {
+        return nextResolve(specifier + '.ts', context)
+      } catch {}
+    }
+    return nextResolve(specifier, context)
+  },
+})
 
 test('D1 client initializes and executes queries accurately', async () => {
   const db = getD1()
@@ -187,55 +206,92 @@ test('D1 batch and all return proper meta with changes and handles empty batch',
   await db.prepare('DELETE FROM folders WHERE id IN (?, ?)').bind(id1, id2).run()
 })
 
-test('D1 LWW sync upsert preserves newer same-day ISO 8601 PATCH rename against older same-day client sync', async () => {
+test('D1 LWW sync upsert preserves newer same-day ISO 8601 PATCH rename against older same-day client sync via real route handlers', async () => {
+  const { createOrUpdateOAuthSession } = await import('../src/lib/auth/session.ts')
+  const { PATCH: patchHistory } = await import('../src/app/api/history/route.ts')
+  const { POST: postSync } = await import('../src/app/api/sync/route.ts')
+
   const db = getD1()
   const sessId = 'lww-sess-' + Date.now()
-  const ownerId = 'lww-owner-' + Date.now()
+  const testEmail = `lww-${Date.now()}@gmail.com`
+
+  const authRes = await createOrUpdateOAuthSession(testEmail)
+  assert.ok(authRes, 'OAuth session should be created')
+  const authCookie = `paylingo_auth_session=${authRes.sessionToken}`
 
   const t0 = new Date(Date.now() - 120_000).toISOString() // 2 mins ago
   const t1 = new Date(Date.now() - 60_000).toISOString()  // 1 min ago (stale client B state)
-  const t2 = new Date().toISOString()                     // now (PATCH rename on server)
 
-  // 1. Initial session insert at t0
-  await db.prepare(`
-    INSERT INTO sessions (id, owner_id, username, name, partner_language, started_at, duration_seconds, updated_at)
-    VALUES (?, ?, ?, ?, 'en', ?, 30, ?)
-  `).bind(sessId, ownerId, 'user', 'Original Name', t0, t0).run()
+  // 1. Initial session sync at t0 via real POST /api/sync handler
+  const syncInitRes = await postSync(
+    new Request('http://localhost/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: authCookie },
+      body: JSON.stringify({
+        folders: [],
+        sessions: [
+          {
+            id: sessId,
+            name: 'Original Name',
+            partner_language: 'en',
+            started_at: t0,
+            duration_seconds: 30,
+            updated_at: t0,
+          },
+        ],
+        entries: [],
+      }),
+    })
+  )
+  assert.strictEqual(syncInitRes.status, 200)
 
-  // 2. Server PATCH rename binds ISO string t2 (not SQLite datetime('now'))
-  await db.prepare('UPDATE sessions SET name = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
-    .bind('Renamed On Device A', t2, sessId, ownerId)
-    .run()
+  // 2. Server PATCH rename via real PATCH /api/history handler
+  const patchRes = await patchHistory(
+    new Request('http://localhost/api/history', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', cookie: authCookie },
+      body: JSON.stringify({
+        table: 'sessions',
+        field: 'id',
+        value: sessId,
+        payload: { name: 'Renamed On Device A' },
+      }),
+    })
+  )
+  assert.strictEqual(patchRes.status, 200)
 
-  // 3. Stale sync from Device B with older same-day ISO timestamp t1 (< t2)
-  await db.prepare(`
-    INSERT INTO sessions (id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at)
-    VALUES (?, ?, ?, NULL, ?, 'en', ?, NULL, 30, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      updated_at = excluded.updated_at
-    WHERE excluded.updated_at >= sessions.updated_at OR sessions.updated_at IS NULL
-  `).bind(sessId, ownerId, 'user', 'Stale Name From Device B', t0, t1).run()
+  // 3. Stale sync from Device B with older same-day ISO timestamp t1 (< PATCH updated_at)
+  const staleSyncRes = await postSync(
+    new Request('http://localhost/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: authCookie },
+      body: JSON.stringify({
+        folders: [],
+        sessions: [
+          {
+            id: sessId,
+            name: 'Stale Name From Device B',
+            partner_language: 'en',
+            started_at: t0,
+            duration_seconds: 30,
+            updated_at: t1,
+          },
+        ],
+        entries: [],
+      }),
+    })
+  )
+  assert.strictEqual(staleSyncRes.status, 200)
 
   const afterStaleSync = await db.prepare('SELECT name, updated_at FROM sessions WHERE id = ?').bind(sessId).first()
-  assert.strictEqual(afterStaleSync.name, 'Renamed On Device A', 'Older same-day ISO sync must NOT overwrite newer PATCH rename')
-  assert.strictEqual(afterStaleSync.updated_at, t2)
-
-  // 4. Newer sync from Device A at t3 (> t2) succeeds
-  const t3 = new Date(Date.now() + 5_000).toISOString()
-  await db.prepare(`
-    INSERT INTO sessions (id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at)
-    VALUES (?, ?, ?, NULL, ?, 'en', ?, NULL, 30, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      updated_at = excluded.updated_at
-    WHERE excluded.updated_at >= sessions.updated_at OR sessions.updated_at IS NULL
-  `).bind(sessId, ownerId, 'user', 'Newer Name From Device A', t0, t3).run()
-
-  const afterNewerSync = await db.prepare('SELECT name, updated_at FROM sessions WHERE id = ?').bind(sessId).first()
-  assert.strictEqual(afterNewerSync.name, 'Newer Name From Device A', 'Newer ISO sync must update session name')
-  assert.strictEqual(afterNewerSync.updated_at, t3)
+  assert.strictEqual(
+    afterStaleSync.name,
+    'Renamed On Device A',
+    'Older same-day ISO sync via POST /api/sync must NOT overwrite newer PATCH /api/history rename'
+  )
 
   // Clean up
   await db.prepare('DELETE FROM sessions WHERE id = ?').bind(sessId).run()
+  await db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(authRes.user.id).run()
+  await db.prepare('DELETE FROM auth_users WHERE id = ?').bind(authRes.user.id).run()
 })

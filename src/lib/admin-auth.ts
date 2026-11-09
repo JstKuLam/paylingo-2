@@ -68,7 +68,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
 }
 
 function getSigningSecret(): string {
-  const secret = process.env.ADMIN_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  const secret = process.env.ADMIN_SESSION_SECRET
   if (!secret || secret.length < 32) throw new Error('ADMIN_SESSION_SECRET chưa được cấu hình an toàn')
   return secret
 }

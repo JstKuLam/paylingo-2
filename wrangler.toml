@@ -9,9 +9,4 @@ database_name = "paylingo-database"
 database_id = "fb9a4028-506d-4307-b431-27e51fd93112"
 
 [vars]
-SMTP_HOST = "smtp.maileroo.com"
-SMTP_PORT = "465"
-SMTP_USER = "no-reply@pay2pay.vn"
-# SMTP_PASS & OPENAI_API_KEY are stored securely via Cloudflare Secrets
-MAIL_FROM = "Paypay - Pay Linggo <no-reply@pay2pay.vn>"
 AI_BASE_URL = "https://9r.9phut.org/v1"
