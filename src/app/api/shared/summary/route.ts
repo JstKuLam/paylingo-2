@@ -12,17 +12,124 @@ import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limi
 export const runtime = 'edge'
 
 
+const BASE62_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+
+function generateEncodedShareId(length = 22): string {
+  const bytes = new Uint8Array(length)
+  crypto.getRandomValues(bytes)
+  let out = 's_'
+  for (let i = 0; i < length; i++) {
+    out += BASE62_ALPHABET[bytes[i] % BASE62_ALPHABET.length]
+  }
+  return out
+}
+
 const shareRequestSchema = z.object({
-  action: z.enum(['verify']).optional(),
-  id: z.string().uuid().optional(),
+  action: z.enum(['verify', 'init']).optional(),
+  id: z.string().trim().min(4).max(64).optional(),
   password: z.string().max(200).optional().default(''),
+  visibility: z.enum(['public', 'private']).optional(),
   sessionId: z.string().uuid().optional(),
   folderId: z.string().uuid().optional(),
-  title: z.string().trim().min(1).max(200).optional(),
-  summaryContent: z.string().min(1).max(500_000).optional(),
+  title: z.string().trim().max(200).optional(),
+  summaryContent: z.string().max(500_000).optional(),
 })
 
 const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
+
+interface SharedSummaryRow {
+  id: string
+  session_id?: string | null
+  folder_id?: string | null
+  title: string
+  summary_content: string
+  password_hash?: string | null
+  created_at: string
+}
+
+async function buildUnlockedSharePayload(
+  db: ReturnType<typeof getD1>,
+  summary: SharedSummaryRow
+) {
+  let resolvedSummaryContent = summary.summary_content || ''
+  let sessionMeta: {
+    name: string
+    partner_language: string
+    started_at: string
+    duration_seconds: number
+  } | null = null
+  let entries: Array<{
+    id: string
+    speaker: 'host' | 'partner'
+    speaker_label?: string | null
+    original_text: string
+    translated_text: string
+    start_ms: number
+    end_ms: number
+  }> = []
+
+  if (summary.session_id) {
+    const [sessRow, entriesRes, latestAiRow] = await Promise.all([
+      db
+        .prepare(
+          'SELECT name, partner_language, started_at, duration_seconds FROM sessions WHERE id = ?'
+        )
+        .bind(summary.session_id)
+        .first<{
+          name: string
+          partner_language: string
+          started_at: string
+          duration_seconds: number
+        }>()
+        .catch(() => null),
+      db
+        .prepare(
+          'SELECT id, speaker, speaker_label, original_text, translated_text, start_ms, end_ms FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC LIMIT 2000'
+        )
+        .bind(summary.session_id)
+        .all<{
+          id: string
+          speaker: 'host' | 'partner'
+          speaker_label?: string | null
+          original_text: string
+          translated_text: string
+          start_ms: number
+          end_ms: number
+        }>()
+        .catch(() => ({ results: [] })),
+      !resolvedSummaryContent.trim()
+        ? db
+            .prepare(
+              'SELECT summary_text FROM session_summaries WHERE session_id = ? ORDER BY created_at DESC LIMIT 1'
+            )
+            .bind(summary.session_id)
+            .first<{ summary_text: string }>()
+            .catch(() => null)
+        : Promise.resolve(null),
+    ])
+
+    if (sessRow) {
+      sessionMeta = sessRow
+    }
+    if (Array.isArray(entriesRes?.results)) {
+      entries = entriesRes.results
+    }
+    if (!resolvedSummaryContent.trim() && latestAiRow?.summary_text) {
+      resolvedSummaryContent = latestAiRow.summary_text
+    }
+  }
+
+  return {
+    id: summary.id,
+    title: sessionMeta?.name || summary.title,
+    summary_content: resolvedSummaryContent,
+    session: sessionMeta,
+    entries,
+    hasPassword: Boolean(summary.password_hash),
+    isLocked: false,
+    created_at: summary.created_at,
+  }
+}
 
 /**
  * GET handler: Fetch info about a shared summary.
@@ -46,7 +153,7 @@ export async function GET(req: Request) {
     const db = getD1()
     const summary = await db.prepare('SELECT * FROM shared_summaries WHERE id = ?')
       .bind(id)
-      .first<{ id: string; title: string; summary_content: string; password_hash?: string; created_at: string }>()
+      .first<SharedSummaryRow>()
 
     if (!summary) {
       return NextResponse.json({ error: 'Không tìm thấy liên kết chia sẻ' }, { status: 404, headers: noStoreHeader })
@@ -55,20 +162,14 @@ export async function GET(req: Request) {
     const hasPassword = !!summary.password_hash
 
     if (hasPassword) {
-      return NextResponse.json({ id: summary.id, hasPassword: true, isLocked: true }, {
+      return NextResponse.json({ id: summary.id, title: summary.title, hasPassword: true, isLocked: true }, {
         headers: noStoreHeader,
       })
     }
 
-    // Return full content if no password
-    return NextResponse.json({
-      id: summary.id,
-      title: summary.title,
-      summary_content: summary.summary_content,
-      hasPassword,
-      isLocked: false,
-      created_at: summary.created_at
-    }, {
+    // Return full conversation & summary content if public (no password)
+    const unlockedPayload = await buildUnlockedSharePayload(db, summary)
+    return NextResponse.json(unlockedPayload, {
       headers: noStoreHeader,
     })
   } catch (error: unknown) {
@@ -85,7 +186,7 @@ export async function GET(req: Request) {
 
 /**
  * POST handler:
- * - Case 1: Create a new shared summary (if authenticated user)
+ * - Case 1: Create or update a shared conversation/summary link (if authenticated user)
  * - Case 2: Verify password and fetch content
  */
 export async function POST(req: Request) {
@@ -101,7 +202,7 @@ export async function POST(req: Request) {
     if (!parsedBody.success) {
       return NextResponse.json({ error: 'Dữ liệu chia sẻ không hợp lệ' }, { status: 400, headers: noStoreHeader })
     }
-    const { action, id, password, sessionId, folderId, title, summaryContent } = parsedBody.data
+    const { action, id, password, visibility, sessionId, folderId, title, summaryContent } = parsedBody.data
     const db = getD1()
 
     // Case 2: Verify password of existing shared summary
@@ -119,7 +220,7 @@ export async function POST(req: Request) {
 
       const summary = await db.prepare('SELECT * FROM shared_summaries WHERE id = ?')
         .bind(id)
-        .first<{ id: string; title: string; summary_content: string; password_hash?: string; created_at: string }>()
+        .first<SharedSummaryRow>()
 
       if (!summary) {
         return NextResponse.json({ error: 'Không tìm thấy liên kết chia sẻ' }, { status: 404, headers: noStoreHeader })
@@ -140,26 +241,16 @@ export async function POST(req: Request) {
         }
       }
 
-      return NextResponse.json({
-        id: summary.id,
-        title: summary.title,
-        summary_content: summary.summary_content,
-        hasPassword,
-        isLocked: false,
-        created_at: summary.created_at
-      }, {
+      const unlockedPayload = await buildUnlockedSharePayload(db, summary)
+      return NextResponse.json(unlockedPayload, {
         headers: noStoreHeader,
       })
     }
 
-    // Case 1: Create a new shared summary
+    // Case 1: Create or update a shared link
     const user = await getAuthenticatedUser(req)
     if (!user) {
       return NextResponse.json({ error: 'Chưa đăng nhập' }, { status: 401, headers: noStoreHeader })
-    }
-
-    if (!title || !summaryContent) {
-      return NextResponse.json({ error: 'Thiếu tiêu đề hoặc nội dung tóm tắt' }, { status: 400, headers: noStoreHeader })
     }
 
     if (!sessionId && !folderId) {
@@ -170,45 +261,101 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Chỉ được chia sẻ một cuộc hội thoại hoặc một thư mục' }, { status: 400, headers: noStoreHeader })
     }
 
-    // Verify ownership
+    let resolvedTitle = (title || '').trim()
+    let resolvedSummary = summaryContent ?? ''
+
+    // Verify ownership & fallback title/summary from session if omitted
     if (sessionId) {
-      const owned = await db.prepare('SELECT id FROM sessions WHERE id = ? AND owner_id = ?').bind(sessionId, user.id).first()
+      const owned = await db
+        .prepare('SELECT id, name FROM sessions WHERE id = ? AND owner_id = ?')
+        .bind(sessionId, user.id)
+        .first<{ id: string; name: string }>()
       if (!owned) return NextResponse.json({ error: 'Bạn không có quyền chia sẻ nội dung này' }, { status: 403, headers: noStoreHeader })
+      if (!resolvedTitle) resolvedTitle = owned.name || 'Hội thoại PayLingo'
+      if (!resolvedSummary.trim()) {
+        const latestSaved = await db
+          .prepare('SELECT summary_text FROM session_summaries WHERE session_id = ? AND owner_id = ? ORDER BY created_at DESC LIMIT 1')
+          .bind(sessionId, user.id)
+          .first<{ summary_text: string }>()
+          .catch(() => null)
+        if (latestSaved?.summary_text) {
+          resolvedSummary = latestSaved.summary_text
+        }
+      }
     } else {
-      const owned = await db.prepare('SELECT id FROM folders WHERE id = ? AND owner_id = ?').bind(folderId, user.id).first()
+      const owned = await db
+        .prepare('SELECT id, name FROM folders WHERE id = ? AND owner_id = ?')
+        .bind(folderId, user.id)
+        .first<{ id: string; name: string }>()
       if (!owned) return NextResponse.json({ error: 'Bạn không có quyền chia sẻ nội dung này' }, { status: 403, headers: noStoreHeader })
+      if (!resolvedTitle) resolvedTitle = owned.name || 'Thư mục PayLingo'
     }
 
-    const passHash = await hashSharedPassword(password)
-    
-    // Check if summary already exists for this session or folder
+    // Check if share record already exists for this session or folder
     const existing = sessionId
-      ? await db.prepare('SELECT id FROM shared_summaries WHERE session_id = ?').bind(sessionId).first<{ id: string }>()
-      : await db.prepare('SELECT id FROM shared_summaries WHERE folder_id = ?').bind(folderId).first<{ id: string }>()
+      ? await db
+          .prepare('SELECT id, summary_content, password_hash FROM shared_summaries WHERE session_id = ?')
+          .bind(sessionId)
+          .first<{ id: string; summary_content: string; password_hash?: string | null }>()
+      : await db
+          .prepare('SELECT id, summary_content, password_hash FROM shared_summaries WHERE folder_id = ?')
+          .bind(folderId)
+          .first<{ id: string; summary_content: string; password_hash?: string | null }>()
+
+    const finalSummaryContent = resolvedSummary.trim() || existing?.summary_content || ''
+
+    let passHash: string | null = null
+    if (action === 'init') {
+      passHash = existing?.password_hash ?? null
+    } else if (visibility === 'public') {
+      passHash = null
+    } else if (visibility === 'private') {
+      if (password && password.trim()) {
+        passHash = await hashSharedPassword(password)
+      } else if (existing?.password_hash) {
+        passHash = existing.password_hash
+      } else {
+        return NextResponse.json(
+          { error: 'Vui lòng nhập mật khẩu để đặt chế độ Riêng tư' },
+          { status: 400, headers: noStoreHeader }
+        )
+      }
+    } else {
+      passHash = await hashSharedPassword(password)
+    }
 
     let resultId = ''
     if (existing) {
+      // Upgrade legacy UUIDs (with hyphens) to encoded share IDs
+      resultId = existing.id.includes('-') ? generateEncodedShareId() : existing.id
       await db.prepare(`
         UPDATE shared_summaries
-        SET title = ?, summary_content = ?, password_hash = ?
+        SET id = ?, title = ?, summary_content = ?, password_hash = ?
         WHERE id = ?
       `)
-        .bind(title, summaryContent, passHash, existing.id)
+        .bind(resultId, resolvedTitle, finalSummaryContent, passHash, existing.id)
         .run()
-      resultId = existing.id
     } else {
-      resultId = crypto.randomUUID()
+      resultId = generateEncodedShareId()
       await db.prepare(`
         INSERT INTO shared_summaries (id, session_id, folder_id, title, summary_content, password_hash, created_at)
         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
       `)
-        .bind(resultId, sessionId || null, folderId || null, title, summaryContent, passHash)
+        .bind(resultId, sessionId || null, folderId || null, resolvedTitle, finalSummaryContent, passHash)
         .run()
     }
 
-    return NextResponse.json({ success: true, id: resultId }, {
-      headers: noStoreHeader,
-    })
+    return NextResponse.json(
+      {
+        success: true,
+        id: resultId,
+        hasPassword: Boolean(passHash),
+        visibility: passHash ? 'private' : 'public',
+      },
+      {
+        headers: noStoreHeader,
+      }
+    )
   } catch (error: unknown) {
     console.error('Error creating/verifying shared summary:', error)
     return NextResponse.json({ error: 'Lỗi hệ thống' }, { status: 500, headers: noStoreHeader })

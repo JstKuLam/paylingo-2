@@ -233,12 +233,6 @@ export default function AiSummaryProgress({
         })}
       </ol>
 
-      <div className="ai-prog__skeleton" aria-hidden="true">
-        <div className="ai-prog__skel-line ai-prog__skel-line--w75" />
-        <div className="ai-prog__skel-line ai-prog__skel-line--w92" />
-        <div className="ai-prog__skel-line ai-prog__skel-line--w60" />
-      </div>
-
       <p className="ai-prog__hint">{footerHint}</p>
     </div>
   )

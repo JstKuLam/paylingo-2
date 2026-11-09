@@ -6,16 +6,24 @@ import {
   ArrowLeft,
   Check,
   CloudLightning,
+  Copy,
   CornerDownRight,
   Download,
   Edit3,
+  Eye,
+  EyeOff,
   FileText,
   FolderOpen,
+  Globe,
+  Link2,
   Loader2,
+  LockKeyhole,
   RotateCcw,
   Search,
+  Share2,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import AiSummaryProgress from '@/components/AiSummaryProgress'
@@ -114,6 +122,18 @@ export default function HistoryPage() {
   const [aiSummary, setAiSummary] = useState('')
   const [summaryError, setSummaryError] = useState('')
   const [, setSummaryStoreTick] = useState(0)
+
+  // Share Conversation modal states
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareLink, setShareLink] = useState('')
+  const [shareVisibility, setShareVisibility] = useState<'public' | 'private'>('public')
+  const [shareHasActivePassword, setShareHasActivePassword] = useState(false)
+  const [sharePassword, setSharePassword] = useState('')
+  const [showSharePassword, setShowSharePassword] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
+  const [shareError, setShareError] = useState('')
+  const [shareFeedback, setShareFeedback] = useState('')
 
   useEffect(() => {
     return subscribeSummaryStore(() => {
@@ -624,6 +644,152 @@ export default function HistoryPage() {
     }
   }
 
+  const handleOpenShareModal = async () => {
+    if (!activeSession) return
+    setShowShareModal(true)
+    setShareLoading(true)
+    setShareError('')
+    setShareFeedback('')
+    setSharePassword('')
+    setShareCopied(false)
+
+    try {
+      await syncPendingData().catch(() => {})
+      const saved = getSavedSummary({ sessionId: activeSession.id })
+      const response = await fetch('/api/shared/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'init',
+          sessionId: activeSession.id,
+          title: activeSession.name,
+          summaryContent: aiSummary || saved?.summary || '',
+        }),
+      })
+      const data: { id?: string; hasPassword?: boolean; error?: string } = await response
+        .json()
+        .catch(() => ({}))
+      if (!response.ok || !data.id) {
+        throw new Error(data.error || t.summaryModalCreateLinkError)
+      }
+      setShareLink(`${window.location.origin}/shared/summary/${data.id}`)
+      const isPriv = Boolean(data.hasPassword)
+      setShareHasActivePassword(isPriv)
+      setShareVisibility(isPriv ? 'private' : 'public')
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : t.summaryModalCreateLinkError)
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  const handleSwitchShareVisibility = async (mode: 'public' | 'private') => {
+    setShareVisibility(mode)
+    setShareError('')
+    setShareFeedback('')
+    if (!activeSession) return
+
+    if (mode === 'public' && shareHasActivePassword) {
+      setShareLoading(true)
+      try {
+        const saved = getSavedSummary({ sessionId: activeSession.id })
+        const response = await fetch('/api/shared/summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: activeSession.id,
+            title: activeSession.name,
+            summaryContent: aiSummary || saved?.summary || '',
+            visibility: 'public',
+            password: '',
+          }),
+        })
+        const data: { id?: string; error?: string } = await response.json().catch(() => ({}))
+        if (!response.ok || !data.id) {
+          throw new Error(data.error || t.summaryModalCreateLinkError)
+        }
+        setShareLink(`${window.location.origin}/shared/summary/${data.id}`)
+        setShareHasActivePassword(false)
+        setSharePassword('')
+        setShareFeedback(
+          language === 'en'
+            ? 'Switched to public link (anyone with link can view).'
+            : language === 'zh'
+              ? '已切换为公开链接（知道链接的任何人均可查看）。'
+              : 'Đã chuyển sang chế độ Công khai (ai có liên kết đều xem được).'
+        )
+      } catch (error) {
+        setShareError(error instanceof Error ? error.message : t.summaryModalCreateLinkError)
+      } finally {
+        setShareLoading(false)
+      }
+    }
+  }
+
+  const handleSaveSharePassword = async () => {
+    if (!activeSession) return
+    const cleanPass = sharePassword.trim()
+    if (!cleanPass) {
+      setShareError(
+        language === 'en'
+          ? 'Please enter a password to protect this link.'
+          : language === 'zh'
+            ? '请输入密码以保护此链接。'
+            : 'Vui lòng nhập mật khẩu để đặt chế độ Riêng tư.'
+      )
+      return
+    }
+    setShareLoading(true)
+    setShareError('')
+    setShareFeedback('')
+    try {
+      await syncPendingData().catch(() => {})
+      const saved = getSavedSummary({ sessionId: activeSession.id })
+      const response = await fetch('/api/shared/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: activeSession.id,
+          title: activeSession.name,
+          summaryContent: aiSummary || saved?.summary || '',
+          visibility: 'private',
+          password: cleanPass,
+        }),
+      })
+      const data: { id?: string; error?: string } = await response.json().catch(() => ({}))
+      if (!response.ok || !data.id) {
+        throw new Error(data.error || t.summaryModalCreateLinkError)
+      }
+      setShareLink(`${window.location.origin}/shared/summary/${data.id}`)
+      setShareHasActivePassword(true)
+      setSharePassword('')
+      setShareFeedback(
+        language === 'en'
+          ? 'Password saved! Viewers must enter this password to open the link.'
+          : language === 'zh'
+            ? '密码已保存！访问者必须输入密码才能查看。'
+            : 'Đã lưu mật khẩu! Người xem phải nhập mật khẩu mới vào xem được.'
+      )
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : t.summaryModalCreateLinkError)
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  const handleCopyShareLink = async () => {
+    if (!shareLink) return
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareLink)
+        setShareCopied(true)
+        window.setTimeout(() => setShareCopied(false), 1800)
+      }
+    } catch {
+      // Ignore clipboard write restrictions
+    }
+  }
+
   if (loading) {
     return (
       <div className="app-loading" role="status">
@@ -808,6 +974,23 @@ export default function HistoryPage() {
                   <div className="h-feed__search-row">
                     <button
                       type="button"
+                      className="btn btn--sm btn--primary"
+                      onClick={() => void handleOpenShareModal()}
+                      title={
+                        language === 'en'
+                          ? 'Share conversation link'
+                          : language === 'zh'
+                            ? '分享对话链接'
+                            : 'Chia sẻ liên kết hội thoại'
+                      }
+                    >
+                      <Share2 className="i" aria-hidden="true" />
+                      <span>
+                        {language === 'en' ? 'Share' : language === 'zh' ? '分享' : 'Chia sẻ'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
                       className="btn btn--sm btn--outline"
                       onClick={() => void handleExportSession('txt')}
                       title={t.sessionDetailExportTxt}
@@ -918,6 +1101,27 @@ export default function HistoryPage() {
                   </div>
 
                   <div className="h-feed__search-row h-detail__desk-actions">
+                    <button
+                      type="button"
+                      className="btn btn--sm btn--primary"
+                      onClick={() => void handleOpenShareModal()}
+                      title={
+                        language === 'en'
+                          ? 'Share conversation link'
+                          : language === 'zh'
+                            ? '分享对话链接'
+                            : 'Chia sẻ liên kết hội thoại'
+                      }
+                    >
+                      <Share2 className="i" aria-hidden="true" />
+                      <span>
+                        {language === 'en'
+                          ? 'Share link'
+                          : language === 'zh'
+                            ? '分享链接'
+                            : 'Chia sẻ Link'}
+                      </span>
+                    </button>
                     <button
                       type="button"
                       className="btn btn--sm btn--outline"
@@ -1335,6 +1539,254 @@ export default function HistoryPage() {
           )}
         </section>
       </div>
+
+      {showShareModal && activeSession && (
+        <div
+          className="share-modal-backdrop"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowShareModal(false)
+          }}
+        >
+          <section
+            className="share-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-modal-title"
+          >
+            <header className="share-modal__head">
+              <div className="share-modal__title-wrap">
+                <h2 id="share-modal-title" className="share-modal__title">
+                  <Link2 className="i" aria-hidden="true" />
+                  <span>
+                    {language === 'en'
+                      ? 'Share Conversation Link'
+                      : language === 'zh'
+                        ? '分享对话链接'
+                        : 'Chia sẻ liên kết hội thoại'}
+                  </span>
+                </h2>
+                <p className="share-modal__sub">{activeSession.name}</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn--icon btn--sm btn--outline"
+                onClick={() => setShowShareModal(false)}
+                aria-label={t.closeAria}
+              >
+                <X className="i" aria-hidden="true" />
+              </button>
+            </header>
+
+            <div className="share-modal__section">
+              <label htmlFor="share-encoded-url" className="share-modal__label">
+                {language === 'en'
+                  ? 'Share URL (Encrypted ID)'
+                  : language === 'zh'
+                    ? '分享链接（加密 ID）'
+                    : 'Đường dẫn chia sẻ (ID mã hoá)'}
+              </label>
+              <div className="share-modal__url-row">
+                <input
+                  id="share-encoded-url"
+                  type="text"
+                  readOnly
+                  className="share-modal__url-input"
+                  value={
+                    shareLink ||
+                    (shareLoading
+                      ? language === 'en'
+                        ? 'Generating encoded link...'
+                        : language === 'zh'
+                          ? '正在生成加密链接...'
+                          : 'Đang tạo liên kết mã hoá...'
+                      : '')
+                  }
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <button
+                  type="button"
+                  className="btn btn--sm btn--primary"
+                  disabled={!shareLink || shareLoading}
+                  onClick={() => void handleCopyShareLink()}
+                >
+                  {shareCopied ? (
+                    <Check className="i" aria-hidden="true" />
+                  ) : (
+                    <Copy className="i" aria-hidden="true" />
+                  )}
+                  <span>
+                    {shareCopied
+                      ? language === 'en'
+                        ? 'Copied'
+                        : language === 'zh'
+                          ? '已复制'
+                          : 'Đã chép'
+                      : language === 'en'
+                        ? 'Copy'
+                        : language === 'zh'
+                          ? '复制'
+                          : 'Sao chép'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div className="share-modal__section">
+              <span className="share-modal__label">
+                {language === 'en'
+                  ? 'Access Permission'
+                  : language === 'zh'
+                    ? '访问权限'
+                    : 'Quyền truy cập liên kết'}
+              </span>
+              <div className="share-modal__modes" role="radiogroup" aria-label="Quyền truy cập">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={shareVisibility === 'public'}
+                  className={`share-mode-btn ${shareVisibility === 'public' ? 'is-active' : ''}`}
+                  disabled={shareLoading}
+                  onClick={() => void handleSwitchShareVisibility('public')}
+                >
+                  <span className="share-mode-btn__top">
+                    <Globe className="i" aria-hidden="true" />
+                    <span>
+                      {language === 'en'
+                        ? 'Public'
+                        : language === 'zh'
+                          ? '公开 (Public)'
+                          : 'Công khai (Public)'}
+                    </span>
+                  </span>
+                  <span className="share-mode-btn__desc">
+                    {language === 'en'
+                      ? 'Anyone with the link can view immediately'
+                      : language === 'zh'
+                        ? '拥有链接的任何人均可直接查看'
+                        : 'Ai có liên kết đều vào xem được ngay'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={shareVisibility === 'private'}
+                  className={`share-mode-btn ${shareVisibility === 'private' ? 'is-active' : ''}`}
+                  disabled={shareLoading}
+                  onClick={() => void handleSwitchShareVisibility('private')}
+                >
+                  <span className="share-mode-btn__top">
+                    <LockKeyhole className="i" aria-hidden="true" />
+                    <span>
+                      {language === 'en'
+                        ? 'Private'
+                        : language === 'zh'
+                          ? '私密 (Private)'
+                          : 'Riêng tư (Private)'}
+                    </span>
+                  </span>
+                  <span className="share-mode-btn__desc">
+                    {language === 'en'
+                      ? 'Requires password to unlock and view'
+                      : language === 'zh'
+                        ? '需要输入密码才能解锁查看'
+                        : 'Phải nhập mật khẩu mới vào xem được'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {shareVisibility === 'private' && (
+              <div className="share-modal__pass-box">
+                {shareHasActivePassword && (
+                  <div className="share-modal__pass-status">
+                    <LockKeyhole className="i" aria-hidden="true" />
+                    <span>
+                      {language === 'en'
+                        ? 'Password protection is active · Enter below to change'
+                        : language === 'zh'
+                          ? '密码保护已启用 · 在下方输入可修改密码'
+                          : 'Đã bật mật khẩu bảo vệ · Nhập bên dưới nếu muốn đổi mật khẩu'}
+                    </span>
+                  </div>
+                )}
+                <div className="share-modal__pass-row">
+                  <div className="share-modal__pass-input-wrap">
+                    <input
+                      type={showSharePassword ? 'text' : 'password'}
+                      className="share-modal__pass-input"
+                      value={sharePassword}
+                      onChange={(e) => setSharePassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                          void handleSaveSharePassword()
+                        }
+                      }}
+                      placeholder={
+                        shareHasActivePassword
+                          ? language === 'en'
+                            ? 'Enter new password...'
+                            : language === 'zh'
+                              ? '输入新密码...'
+                              : 'Nhập mật khẩu mới...'
+                          : language === 'en'
+                            ? 'Set a password to lock this link...'
+                            : language === 'zh'
+                              ? '设置访问密码...'
+                              : 'Nhập mật khẩu để khóa liên kết...'
+                      }
+                      maxLength={128}
+                      autoFocus={!shareHasActivePassword}
+                    />
+                    <button
+                      type="button"
+                      className="share-modal__pass-eye"
+                      onClick={() => setShowSharePassword((v) => !v)}
+                      aria-label={showSharePassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    >
+                      {showSharePassword ? (
+                        <EyeOff className="i" aria-hidden="true" />
+                      ) : (
+                        <Eye className="i" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--primary"
+                    disabled={shareLoading || !sharePassword.trim()}
+                    onClick={() => void handleSaveSharePassword()}
+                  >
+                    {shareLoading ? (
+                      <Loader2 className="i animate-spin" aria-hidden="true" />
+                    ) : (
+                      <LockKeyhole className="i" aria-hidden="true" />
+                    )}
+                    <span>
+                      {language === 'en'
+                        ? 'Save Password'
+                        : language === 'zh'
+                          ? '保存密码'
+                          : 'Lưu mật khẩu'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {shareFeedback && <p className="share-modal__feedback">{shareFeedback}</p>}
+
+            {shareError && (
+              <div className="session-alert session-alert--danger" role="alert">
+                <p>{shareError}</p>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   )
 }
