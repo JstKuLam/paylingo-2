@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie'
+import { stringToUUID } from './soniox-parser'
 
 export interface LocalFolder {
   id: string
@@ -28,6 +29,7 @@ export interface LocalTranscriptEntry {
   id: string
   session_id: string
   speaker: 'host' | 'partner'
+  speaker_label?: string
   original_text: string
   translated_text: string
   start_ms: number
@@ -105,10 +107,49 @@ class PayLingoDatabase extends Dexie {
 
 export const db = new PayLingoDatabase()
 
+let hasPurgedDemoData = false
+const claimedOwnerKeys = new Set<string>()
+
+export async function purgeLegacyDemoData() {
+  if (typeof window === 'undefined' || hasPurgedDemoData) return
+  hasPurgedDemoData = true
+  try {
+    localStorage.removeItem('paylingo_demo_active')
+    localStorage.removeItem('paylingo_demo_email')
+  } catch {}
+  if (typeof indexedDB === 'undefined') return
+  try {
+    await db.transaction('rw', db.sessions, db.folders, db.transcriptEntries, async () => {
+      const demoSessions = await db.sessions
+        .filter((s) => s.id.startsWith('sess-demo-') || s.owner_id === 'demo-owner-kulam')
+        .primaryKeys()
+      if (demoSessions.length > 0) {
+        await db.sessions.bulkDelete(demoSessions)
+        await db.transcriptEntries.where('session_id').anyOf(demoSessions).delete()
+      }
+      const demoFolders = await db.folders
+        .filter(
+          (f) =>
+            f.id === 'folder-paypay-q4' ||
+            f.id === 'folder-security-audit' ||
+            f.owner_id === 'demo-owner-kulam'
+        )
+        .primaryKeys()
+      if (demoFolders.length > 0) {
+        await db.folders.bulkDelete(demoFolders)
+      }
+    })
+  } catch {}
+}
+
 export async function claimLegacyLocalData(ownerId: string, username: string) {
   if (typeof window === 'undefined' || typeof indexedDB === 'undefined' || !ownerId || !username) return
+  await purgeLegacyDemoData()
   const cleanUsername = username.trim().toLowerCase()
   if (!cleanUsername) return
+  const claimKey = `${ownerId}:${cleanUsername}`
+  if (claimedOwnerKeys.has(claimKey)) return
+  claimedOwnerKeys.add(claimKey)
 
   try {
     await db.transaction('rw', db.sessions, db.folders, async () => {
@@ -131,5 +172,82 @@ export async function claimLegacyLocalData(ownerId: string, username: string) {
     })
   } catch (err) {
     console.warn('Failed to claim legacy local data:', err)
+  }
+}
+
+export async function rekeyLocalDataOwner(oldOwnerId: string, newOwnerId: string) {
+  if (
+    typeof window === 'undefined' ||
+    typeof indexedDB === 'undefined' ||
+    !oldOwnerId ||
+    !newOwnerId ||
+    oldOwnerId === newOwnerId
+  ) {
+    return
+  }
+  try {
+    const now = new Date().toISOString()
+    await db.transaction('rw', db.sessions, db.folders, db.transcriptEntries, async () => {
+      const folderIdMap = new Map<string, string>()
+      const oldFolders = await db.folders.where('owner_id').equals(oldOwnerId).toArray()
+      for (const folder of oldFolders) {
+        const newFolderId = stringToUUID(`${newOwnerId}:folder:${folder.id}`)
+        folderIdMap.set(folder.id, newFolderId)
+        await db.folders.delete(folder.id)
+        await db.folders.put({
+          ...folder,
+          id: newFolderId,
+          owner_id: newOwnerId,
+          sync_status: 'pending',
+          updated_at: now,
+        })
+      }
+
+      const oldSessions = await db.sessions.where('owner_id').equals(oldOwnerId).toArray()
+      for (const session of oldSessions) {
+        const mappedFolderId = session.folder_id
+          ? folderIdMap.get(session.folder_id) ?? null
+          : null
+        if (!session.ended_at) {
+          // Active in-progress recording session: update owner_id in place without changing primary key id
+          // so useSessionLifecycle's activeSessionRef continues writing entries to this session seamlessly.
+          await db.sessions.update(session.id, {
+            owner_id: newOwnerId,
+            folder_id: mappedFolderId,
+            sync_status: 'pending',
+            updated_at: now,
+          })
+          continue
+        }
+        const newSessionId = stringToUUID(`${newOwnerId}:session:${session.id}`)
+        const oldEntries = await db.transcriptEntries
+          .where('session_id')
+          .equals(session.id)
+          .toArray()
+        if (oldEntries.length > 0) {
+          await db.transcriptEntries.where('session_id').equals(session.id).delete()
+          await db.transcriptEntries.bulkPut(
+            oldEntries.map((entry) => ({
+              ...entry,
+              id: stringToUUID(`${newSessionId}:${entry.id}`),
+              session_id: newSessionId,
+              sync_status: 'pending' as const,
+              updated_at: now,
+            }))
+          )
+        }
+        await db.sessions.delete(session.id)
+        await db.sessions.put({
+          ...session,
+          id: newSessionId,
+          folder_id: mappedFolderId,
+          owner_id: newOwnerId,
+          sync_status: 'pending',
+          updated_at: now,
+        })
+      }
+    })
+  } catch (err) {
+    console.warn('Failed to rekey local data owner:', err)
   }
 }

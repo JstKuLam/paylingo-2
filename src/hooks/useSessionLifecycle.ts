@@ -9,6 +9,8 @@ import { stringToUUID, type TranscriptMessage } from '@/lib/soniox-parser'
 interface UseSessionLifecycleProps {
   partnerLang: string
   isActive: boolean
+  isPaused?: boolean
+  elapsedSeconds?: number
   messages: TranscriptMessage[]
   stopRecording: () => Promise<void>
   silenceAlertMessage?: string
@@ -17,6 +19,8 @@ interface UseSessionLifecycleProps {
 export function useSessionLifecycle({
   partnerLang,
   isActive,
+  isPaused = false,
+  elapsedSeconds = 0,
   messages,
   stopRecording,
   silenceAlertMessage,
@@ -35,6 +39,60 @@ export function useSessionLifecycle({
   const stopRecordingRef = useRef(stopRecording)
   const silenceAlertMessageRef = useRef(silenceAlertMessage)
   const messagesRef = useRef(messages)
+  const elapsedSecondsRef = useRef(elapsedSeconds)
+  const savedFinalSignatureRef = useRef<Map<string, string>>(new Map())
+
+  const flushFinalEntries = useCallback(async (targetSessionId: string, msgs: TranscriptMessage[]) => {
+    if (!targetSessionId || msgs.length === 0) return
+    try {
+      const activeSession = await db.sessions.get(targetSessionId)
+      if (!activeSession) return
+      const rawStartTime = new Date(activeSession.started_at).getTime()
+      const sessionStartedAt = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
+
+      const finalEntries: LocalTranscriptEntry[] = msgs
+        .filter((message) => message.is_final || Boolean(message.original_text.trim() || message.translated_text.trim()))
+        .map((msg) => {
+          const startMs = Number.isFinite(msg.start_ms) ? Math.max(0, msg.start_ms) : 0
+          const endMs = Number.isFinite(msg.end_ms) ? Math.max(startMs, msg.end_ms) : startMs
+          const createdAtTime = sessionStartedAt + startMs
+          const validCreatedAt = Number.isFinite(createdAtTime)
+            ? new Date(createdAtTime).toISOString()
+            : new Date().toISOString()
+          return {
+            id: stringToUUID(`${targetSessionId}:${msg.id}`),
+            session_id: targetSessionId,
+            speaker: msg.speaker,
+            speaker_label: msg.speaker_label,
+            original_text: msg.original_text,
+            translated_text: msg.translated_text,
+            start_ms: startMs,
+            end_ms: endMs,
+            created_at: validCreatedAt,
+            sync_status: 'pending',
+            updated_at: new Date().toISOString(),
+          }
+        })
+
+      if (finalEntries.length === 0) return
+      const existingEntries = await db.transcriptEntries.bulkGet(finalEntries.map((entry) => entry.id))
+      const changedEntries = finalEntries.flatMap((entry, index) => {
+        const existing = existingEntries[index]
+        const hasChanged =
+          !existing ||
+          existing.original_text !== entry.original_text ||
+          existing.translated_text !== entry.translated_text ||
+          existing.end_ms !== entry.end_ms ||
+          existing.speaker_label !== entry.speaker_label
+        return hasChanged ? [{ ...entry, created_at: existing?.created_at || entry.created_at }] : []
+      })
+      if (changedEntries.length > 0) {
+        await db.transcriptEntries.bulkPut(changedEntries)
+      }
+    } catch (err) {
+      console.warn('Failed to flush final transcript entries:', err)
+    }
+  }, [])
 
   const clearSilenceTimers = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -58,6 +116,10 @@ export function useSessionLifecycle({
   useEffect(() => {
     messagesRef.current = messages
   }, [messages])
+
+  useEffect(() => {
+    elapsedSecondsRef.current = elapsedSeconds
+  }, [elapsedSeconds])
 
   // Track network online status
   useEffect(() => {
@@ -102,14 +164,39 @@ export function useSessionLifecycle({
           for (const sess of abandonedSessions) {
             if (sess.ended_at === null) {
               if (activeSessionRef.current && sess.id === activeSessionRef.current) continue
+              const entries = await db.transcriptEntries.where('session_id').equals(sess.id).toArray()
+              if (entries.length === 0 && (sess.duration_seconds || 0) === 0) {
+                await db.sessions.delete(sess.id)
+                if (typeof navigator !== 'undefined' && navigator.onLine) {
+                  fetch('/api/history', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table: 'sessions', field: 'id', value: sess.id }),
+                  }).catch(() => {})
+                }
+                continue
+              }
               const startTime = new Date(sess.started_at).getTime()
               const validStart = Number.isFinite(startTime) ? startTime : Date.now()
+              const maxEntryEndMs = entries.reduce((max, e) => Math.max(max, e.end_ms || 0), 0)
+              const updatedAtTime = sess.updated_at ? new Date(sess.updated_at).getTime() : NaN
+              const wallClockFromUpdated =
+                Number.isFinite(updatedAtTime) && updatedAtTime > validStart
+                  ? Math.min(7200, Math.floor((updatedAtTime - validStart) / 1000))
+                  : 0
               const durationSeconds = Math.max(
                 sess.duration_seconds || 0,
-                Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+                Math.ceil(maxEntryEndMs / 1000),
+                wallClockFromUpdated
               )
+              const endedAtIso =
+                maxEntryEndMs > 0
+                  ? new Date(validStart + maxEntryEndMs).toISOString()
+                  : Number.isFinite(updatedAtTime)
+                    ? new Date(updatedAtTime).toISOString()
+                    : now
               await db.sessions.update(sess.id, {
-                ended_at: now,
+                ended_at: endedAtIso,
                 duration_seconds: durationSeconds,
                 sync_status: 'pending',
                 updated_at: now
@@ -137,32 +224,42 @@ export function useSessionLifecycle({
       if (sid) {
         activeSessionRef.current = null
         const now = new Date().toISOString()
-        void db.sessions.get(sid).then((session) => {
+        const snapshotMessages = messagesRef.current
+        const snapshotElapsed = elapsedSecondsRef.current
+        void (async () => {
+          const savedCount = await db.transcriptEntries.where('session_id').equals(sid).count()
+          if (snapshotMessages.length === 0 && savedCount === 0) {
+            await db.sessions.delete(sid)
+            return
+          }
+          await flushFinalEntries(sid, snapshotMessages)
+          const session = await db.sessions.get(sid)
           if (session && session.ended_at === null) {
             const startTime = new Date(session.started_at).getTime()
             const validStart = Number.isFinite(startTime) ? startTime : Date.now()
+            const wallClock = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+            const effectiveElapsed = snapshotElapsed > 0 ? Math.min(wallClock, snapshotElapsed) : wallClock
             const latestEntryMs = messagesRef.current.reduce((max, msg) => Math.max(max, msg.end_ms || 0), 0)
             const durationFromEntries = Math.ceil(latestEntryMs / 1000)
             const duration = Math.max(
               Number.isFinite(session.duration_seconds) ? session.duration_seconds : 0,
-              Math.max(0, Math.floor((Date.now() - validStart) / 1000)),
+              effectiveElapsed,
               durationFromEntries
             )
-            return db.sessions.update(sid, {
+            await db.sessions.update(sid, {
               ended_at: now,
               duration_seconds: duration,
               sync_status: 'pending',
               updated_at: now,
             })
           }
-        }).then(() => {
-          syncPendingData()
-        }).catch((err) => {
+          await syncPendingData()
+        })().catch((err) => {
           console.error('Failed to close session on unmount:', err)
         })
       }
     }
-  }, [clearSilenceTimers])
+  }, [clearSilenceTimers, flushFinalEntries])
 
   // 1. Wake Lock API Integration
   const requestWakeLock = useCallback(async () => {
@@ -198,18 +295,29 @@ export function useSessionLifecycle({
     if (wasActiveRef.current && !isActive && activeSessionRef.current) {
       clearSilenceTimers()
       const sid = activeSessionRef.current
+      const snapshotMessages = messagesRef.current
+      const snapshotElapsed = elapsedSecondsRef.current
       activeSessionRef.current = null
       setSessionId(null)
       const now = new Date().toISOString()
-      void db.sessions.get(sid).then((session) => {
+      void flushFinalEntries(sid, snapshotMessages).then(async () => {
+        const savedCount = await db.transcriptEntries.where('session_id').equals(sid).count()
+        if (snapshotMessages.length === 0 && savedCount === 0) {
+          await db.sessions.delete(sid)
+          return null
+        }
+        return db.sessions.get(sid)
+      }).then((session) => {
         if (session && session.ended_at === null) {
           const startTime = new Date(session.started_at).getTime()
           const validStart = Number.isFinite(startTime) ? startTime : Date.now()
+          const wallClock = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+          const effectiveElapsed = snapshotElapsed > 0 ? Math.min(wallClock, snapshotElapsed) : wallClock
           const latestEntryMs = messagesRef.current.reduce((max, msg) => Math.max(max, msg.end_ms || 0), 0)
           const durationFromEntries = Math.ceil(latestEntryMs / 1000)
           const duration = Math.max(
             Number.isFinite(session.duration_seconds) ? session.duration_seconds : 0,
-            Math.max(0, Math.floor((Date.now() - validStart) / 1000)),
+            effectiveElapsed,
             durationFromEntries
           )
           return db.sessions.update(sid, {
@@ -230,7 +338,7 @@ export function useSessionLifecycle({
       }
     }
     wasActiveRef.current = isActive
-  }, [isActive, clearSilenceTimers])
+  }, [isActive, clearSilenceTimers, flushFinalEntries])
 
   // Handle automatic re-acquisition on tab visibility changes
   useEffect(() => {
@@ -249,7 +357,7 @@ export function useSessionLifecycle({
   }, [isActive, requestWakeLock])
 
   // 2. Start Session Lifecycle
-  const startSession = useCallback(async (langName: string) => {
+  const startSession = useCallback(async (langName: string, sessionPrefix = 'Hội thoại') => {
     const { data: { session } } = await authClient.getSession()
     const username = session?.user?.user_metadata?.username ||
                      session?.user?.user_metadata?.full_name ||
@@ -287,6 +395,7 @@ export function useSessionLifecycle({
     }
 
     const newSessionId = crypto.randomUUID()
+    savedFinalSignatureRef.current.clear()
     
     // Auto-name: Hội thoại [Lang] - YYYY-MM-DD HH:mm
     const dateStr = new Date().toLocaleString('vi-VN', {
@@ -297,7 +406,7 @@ export function useSessionLifecycle({
       minute: '2-digit',
     }).replace(',', '')
     
-    const sessionName = `Hội thoại - ${langName} - ${dateStr}`
+    const sessionName = `${sessionPrefix} - ${langName} - ${dateStr}`
 
     const newLocalSession: LocalSession = {
       id: newSessionId,
@@ -326,36 +435,51 @@ export function useSessionLifecycle({
   }, [partnerLang, requestWakeLock])
 
   // 3. Stop Session Lifecycle
-  const stopSession = useCallback(async () => {
+  const stopSession = useCallback(async (explicitElapsedSeconds?: number) => {
     clearSilenceTimers()
 
     const currentSessionId = activeSessionRef.current
+    const snapshotMessages = messagesRef.current
+    const effectiveElapsed =
+      typeof explicitElapsedSeconds === 'number' && explicitElapsedSeconds > 0
+        ? explicitElapsedSeconds
+        : elapsedSecondsRef.current
     activeSessionRef.current = null
     setSessionId(null)
     setSilenceWarning(false)
 
     if (currentSessionId) {
       try {
-        const now = new Date().toISOString()
-        const activeSession = await db.sessions.get(currentSessionId)
-        const rawStartTime = activeSession ? new Date(activeSession.started_at).getTime() : NaN
-        const validStart = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
-        const computedDuration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
-        const latestEntryMs = messagesRef.current.reduce((max, m) => Math.max(max, m.end_ms || 0), 0)
-        const durationFromEntries = Math.ceil(latestEntryMs / 1000)
-        const durationSeconds = activeSession
-          ? Math.max(
-              Number.isFinite(activeSession.duration_seconds) ? activeSession.duration_seconds : 0,
-              computedDuration,
-              durationFromEntries
-            )
-          : Math.max(computedDuration, durationFromEntries)
-        await db.sessions.update(currentSessionId, {
-          ended_at: now,
-          duration_seconds: durationSeconds,
-          sync_status: 'pending',
-          updated_at: now
-        })
+        await flushFinalEntries(currentSessionId, snapshotMessages)
+        const savedCount = await db.transcriptEntries.where('session_id').equals(currentSessionId).count()
+        if (snapshotMessages.length === 0 && savedCount === 0) {
+          await db.sessions.delete(currentSessionId)
+        } else {
+          const now = new Date().toISOString()
+          const activeSession = await db.sessions.get(currentSessionId)
+          const rawStartTime = activeSession ? new Date(activeSession.started_at).getTime() : NaN
+          const validStart = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
+          const wallClockDuration = Math.max(0, Math.floor((Date.now() - validStart) / 1000))
+          const computedDuration =
+            effectiveElapsed > 0
+              ? Math.min(wallClockDuration, effectiveElapsed)
+              : wallClockDuration
+          const latestEntryMs = snapshotMessages.reduce((max, m) => Math.max(max, m.end_ms || 0), 0)
+          const durationFromEntries = Math.ceil(latestEntryMs / 1000)
+          const durationSeconds = activeSession
+            ? Math.max(
+                Number.isFinite(activeSession.duration_seconds) ? activeSession.duration_seconds : 0,
+                computedDuration,
+                durationFromEntries
+              )
+            : Math.max(computedDuration, durationFromEntries)
+          await db.sessions.update(currentSessionId, {
+            ended_at: now,
+            duration_seconds: durationSeconds,
+            sync_status: 'pending',
+            updated_at: now
+          })
+        }
       } catch (err) {
         console.warn('Failed to update session upon stop:', err)
       }
@@ -366,7 +490,7 @@ export function useSessionLifecycle({
 
     // Sync everything
     void syncPendingData()
-  }, [releaseWakeLock, clearSilenceTimers])
+  }, [releaseWakeLock, clearSilenceTimers, flushFinalEntries])
 
   // Abort an unstarted or failed session to prevent ghost records
   const abortSession = useCallback(async () => {
@@ -395,12 +519,19 @@ export function useSessionLifecycle({
 
     const saveMessages = async () => {
       try {
+        const candidateMessages = messages.filter((message) => {
+          if (!message.is_final) return false
+          const sig = `${message.original_text}|${message.translated_text}|${message.end_ms}|${message.speaker_label || ''}`
+          return savedFinalSignatureRef.current.get(message.id) !== sig
+        })
+        if (candidateMessages.length === 0) return
+
         const activeSession = await db.sessions.get(sessionId)
         if (!activeSession) return
         const rawStartTime = new Date(activeSession.started_at).getTime()
         const sessionStartedAt = Number.isFinite(rawStartTime) ? rawStartTime : Date.now()
 
-        const localEntries: LocalTranscriptEntry[] = messages.filter((message) => message.is_final).map(msg => {
+        const localEntries: LocalTranscriptEntry[] = candidateMessages.map(msg => {
           const startMs = Number.isFinite(msg.start_ms) ? Math.max(0, msg.start_ms) : 0
           const endMs = Number.isFinite(msg.end_ms) ? Math.max(startMs, msg.end_ms) : startMs
           const createdAtTime = sessionStartedAt + startMs
@@ -409,6 +540,7 @@ export function useSessionLifecycle({
             id: stringToUUID(`${sessionId}:${msg.id}`),
             session_id: sessionId,
             speaker: msg.speaker,
+            speaker_label: msg.speaker_label,
             original_text: msg.original_text,
             translated_text: msg.translated_text,
             start_ms: startMs,
@@ -428,6 +560,7 @@ export function useSessionLifecycle({
             || existing.original_text !== entry.original_text
             || existing.translated_text !== entry.translated_text
             || existing.end_ms !== entry.end_ms
+            || existing.speaker_label !== entry.speaker_label
           return hasChanged ? [{ ...entry, created_at: existing?.created_at || entry.created_at }] : []
         })
 
@@ -436,14 +569,13 @@ export function useSessionLifecycle({
         if (changedEntries.length > 0) {
           await db.transcriptEntries.bulkPut(changedEntries)
         }
+        for (const msg of candidateMessages) {
+          const sig = `${msg.original_text}|${msg.translated_text}|${msg.end_ms}|${msg.speaker_label || ''}`
+          savedFinalSignatureRef.current.set(msg.id, sig)
+        }
       } catch (err) {
         console.warn('Failed to autosave transcript entries:', err)
       }
-      
-      // Note: We do not trigger syncPendingData() here because this useEffect runs 
-      // on every intermediate transcription token (multiple times per second).
-      // Background sync is handled by the 15-second timer in initAutoSync(),
-      // and explicit sync runs on start/stop/visibility changes to conserve network egress.
     }
 
     saveMessages()
@@ -451,7 +583,9 @@ export function useSessionLifecycle({
 
   const latestMessageMarker = useMemo(() => {
     const latestMessage = messages.at(-1)
-    return latestMessage ? `${latestMessage.id}:${latestMessage.end_ms}:${latestMessage.is_final}` : ''
+    return latestMessage
+      ? `${messages.length}:${latestMessage.id}:${latestMessage.end_ms}:${latestMessage.is_final}:${latestMessage.original_text.length}:${latestMessage.translated_text.length}`
+      : ''
   }, [messages])
 
   // Reset silence warning on token stream updates using React's recommended state adjustment pattern
@@ -465,7 +599,7 @@ export function useSessionLifecycle({
 
   // 5. Silence & inactivity monitoring (5-minute cap)
   useEffect(() => {
-    if (!isActive || !sessionId) {
+    if (!isActive || isPaused || !sessionId) {
       clearSilenceTimers()
       return
     }
@@ -500,11 +634,11 @@ export function useSessionLifecycle({
     return () => {
       clearSilenceTimers()
     }
-  }, [isActive, sessionId, latestMessageMarker, stopSession, clearSilenceTimers])
+  }, [isActive, isPaused, sessionId, latestMessageMarker, stopSession, clearSilenceTimers])
 
   return {
     sessionId,
-    silenceWarning: isActive && Boolean(sessionId) && silenceWarning,
+    silenceWarning: isActive && !isPaused && Boolean(sessionId) && silenceWarning,
     wakeLockError,
     offlineIndicator,
     startSession,

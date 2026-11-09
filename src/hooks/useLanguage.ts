@@ -12,7 +12,8 @@ function getLanguageSnapshot(): Language {
       return saved
     }
   } catch {}
-  return detectMachineLanguage()
+  const detected = detectMachineLanguage()
+  return detected === 'zh' ? 'zh' : 'vi'
 }
 
 function subscribeToLanguage(callback: () => void) {
@@ -23,6 +24,29 @@ function subscribeToLanguage(callback: () => void) {
     window.removeEventListener('storage', callback)
     window.removeEventListener(LANGUAGE_EVENT, callback)
   }
+}
+
+const proxyCache: Partial<Record<Language, I18nTranslations>> = {}
+
+function getTranslationProxy(language: Language): I18nTranslations {
+  const cached = proxyCache[language]
+  if (cached) return cached
+  const rawTranslations = translations[language] || translations.vi
+  const proxy: I18nTranslations = new Proxy(rawTranslations, {
+    get(target, prop: string | symbol) {
+      if (typeof prop === 'string' && prop in target) {
+        const val = target[prop as keyof I18nTranslations]
+        if (val !== undefined && val !== '') return val
+      }
+      if (typeof prop === 'string' && prop in translations.vi) {
+        const fallback = translations.vi[prop as keyof I18nTranslations]
+        if (fallback !== undefined && fallback !== '') return fallback
+      }
+      return ''
+    },
+  })
+  proxyCache[language] = proxy
+  return proxy
 }
 
 export function useLanguage(): {
@@ -47,20 +71,7 @@ export function useLanguage(): {
     }
   }
 
-  const rawTranslations = translations[language] || translations.vi
-  const t: I18nTranslations = new Proxy(rawTranslations, {
-    get(target, prop: string | symbol) {
-      if (typeof prop === 'string' && prop in target) {
-        const val = target[prop as keyof I18nTranslations]
-        if (val !== undefined && val !== '') return val
-      }
-      if (typeof prop === 'string' && prop in translations.vi) {
-        const fallback = translations.vi[prop as keyof I18nTranslations]
-        if (fallback !== undefined && fallback !== '') return fallback
-      }
-      return ''
-    },
-  })
+  const t = getTranslationProxy(language)
 
   return { language, changeLanguage, t }
 }

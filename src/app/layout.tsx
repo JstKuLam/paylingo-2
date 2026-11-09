@@ -1,21 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import "./fonts.css";
 import "./globals.css";
-import { Be_Vietnam_Pro, IBM_Plex_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import PwaUpdater from "@/components/PwaUpdater";
-
-const sans = Be_Vietnam_Pro({
-  subsets: ["latin", "vietnamese"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-app-sans",
-  display: "swap",
-});
-const mono = IBM_Plex_Mono({
-  subsets: ["latin", "vietnamese"],
-  weight: ["500", "600"],
-  variable: "--font-app-mono",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "PayLingo - Dịch song ngữ song song real-time",
@@ -23,21 +10,21 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "PayLingo",
   },
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f3f7f6" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1518" },
+    { media: "(prefers-color-scheme: light)", color: "#f8f9fc" },
+    { media: "(prefers-color-scheme: dark)", color: "#151824" },
   ],
   width: "device-width",
   initialScale: 1,
 };
 
-const themeScript = `(()=>{try{const s=localStorage.getItem('theme');const t=s==='light'||s?.startsWith('light-')?'light':'dark';document.documentElement.dataset.theme=t;document.documentElement.classList.toggle('dark',t==='dark')}catch{}})()`;
+const themeScript = `(()=>{try{const m=window.innerWidth<=760;if(m&&!localStorage.getItem('paylingo_mobile_dark_v1')){localStorage.setItem('theme','dark');localStorage.setItem('paylingo_mobile_dark_v1','1');localStorage.setItem('paylingo_cobalt_v1','1')}else if(!m&&!localStorage.getItem('paylingo_cobalt_v1')){localStorage.setItem('theme','light');localStorage.setItem('paylingo_cobalt_v1','1')}const s=localStorage.getItem('theme');const t=s==='dark'?'dark':s==='light'?'light':(m?'dark':'light');document.documentElement.dataset.theme=t;document.documentElement.classList.toggle('dark',t==='dark')}catch{}})()`;
 
 export default function RootLayout({
   children,
@@ -47,8 +34,8 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
-      data-theme="dark"
-      className={cn("h-full antialiased dark", "font-sans", sans.variable, mono.variable)}
+      data-theme="light"
+      className={cn("h-full antialiased", "font-sans")}
       suppressHydrationWarning
     >
       <head>

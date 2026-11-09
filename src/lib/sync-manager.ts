@@ -4,6 +4,7 @@ import { stringToUUID } from './soniox-parser'
 
 let isSyncing = false
 let hasQueuedSync = false
+let activeSyncPromise: Promise<{ success: boolean; syncedFolders?: number; syncedSessions: number; syncedEntries: number; error?: string }> | null = null
 
 /**
  * Sweeps the local IndexedDB and pushes all 'pending' folders, sessions and transcript entries to Cloudflare D1 via /api/sync.
@@ -15,6 +16,10 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
   }
 
   const { data: { session } } = await authClient.getSession()
+
+  if (!authClient.isServerSessionSynced()) {
+    return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'IdentityNotReconciled' }
+  }
 
   const ownerId = session?.user?.id
   const username = session?.user?.user_metadata?.username ||
@@ -40,11 +45,13 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
 
     // 0. Prepare pending/failed folders
     const pendingFolders = await db.folders.where('sync_status').anyOf(['pending', 'failed']).toArray()
-    const ownedFolders = pendingFolders.filter((folder) => folder.owner_id === ownerId).slice(0, 100)
+    const allOwnedFolders = pendingFolders.filter((folder) => folder.owner_id === ownerId)
+    const ownedFolders = allOwnedFolders.slice(0, 100)
 
     // 1. Prepare pending/failed sessions
     const pendingSessions = await db.sessions.where('sync_status').anyOf(['pending', 'failed']).toArray()
-    const ownedSessions = pendingSessions.filter((localSession) => localSession.owner_id === ownerId).slice(0, 100)
+    const allOwnedSessions = pendingSessions.filter((localSession) => localSession.owner_id === ownerId)
+    const ownedSessions = allOwnedSessions.slice(0, 100)
 
     // 2. Prepare pending/failed transcript entries
     const pendingEntries = await db.transcriptEntries.where('sync_status').anyOf(['pending', 'failed']).toArray()
@@ -61,7 +68,7 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
     const allSafeEntries = pendingEntries.filter(entry => verifiedSessionIds.has(entry.session_id))
     const BATCH_ENTRIES_LIMIT = 500
     const safeEntries = allSafeEntries.slice(0, BATCH_ENTRIES_LIMIT)
-    if (allSafeEntries.length > BATCH_ENTRIES_LIMIT || pendingSessions.length > 100 || pendingFolders.length > 100) {
+    if (allSafeEntries.length > BATCH_ENTRIES_LIMIT || allOwnedSessions.length > 100 || allOwnedFolders.length > 100) {
       hasQueuedSync = true
     }
 
@@ -78,6 +85,7 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
         id: entryId,
         session_id: entry.session_id,
         speaker: entry.speaker,
+        speaker_label: entry.speaker_label || null,
         original_text: entry.original_text,
         translated_text: entry.translated_text,
         start_ms: entry.start_ms,
@@ -114,6 +122,9 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
     })
 
     if (!res.ok) {
+      if (res.status === 401) {
+        authClient.resetServerSessionSync()
+      }
       const errData = await res.json().catch(() => ({}))
       const errorMsg = errData.error || `Sync API error ${res.status}`
       await db.transaction('rw', db.folders, db.sessions, db.transcriptEntries, async () => {
@@ -130,12 +141,31 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
       throw new Error(errorMsg)
     }
 
-    await res.json().catch(() => ({}))
+    const syncResp = await res.json().catch(() => ({}))
+    const failedFolderIds = new Set<string>(
+      Array.isArray(syncResp?.failedFolderIds) ? syncResp.failedFolderIds : []
+    )
+    const failedSessionIds = new Set<string>(
+      Array.isArray(syncResp?.failedSessionIds) ? syncResp.failedSessionIds : []
+    )
+    const failedEntryIds = new Set<string>(
+      Array.isArray(syncResp?.failedEntryIds) ? syncResp.failedEntryIds : []
+    )
 
-    // Mark folders as synced if unchanged during transit
+    // Mark folders as synced if unchanged during transit (or re-key on owner collision)
     if (ownedFolders.length > 0) {
-      await db.transaction('rw', db.folders, async () => {
+      await db.transaction('rw', db.folders, db.sessions, async () => {
         for (const folder of ownedFolders) {
+          if (failedFolderIds.has(folder.id)) {
+            const newFolderId = stringToUUID(`${ownerId}:folder:${folder.id}:${Date.now()}`)
+            const current = await db.folders.get(folder.id)
+            if (current) {
+              await db.folders.delete(folder.id)
+              await db.folders.put({ ...current, id: newFolderId, sync_status: 'pending' })
+              await db.sessions.where('folder_id').equals(folder.id).modify({ folder_id: newFolderId, sync_status: 'pending' })
+            }
+            continue
+          }
           const current = await db.folders.get(folder.id)
           if (current && (!current.updated_at || current.updated_at === folder.updated_at)) {
             await db.folders.update(folder.id, { sync_status: 'synced' })
@@ -145,10 +175,31 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
       })
     }
 
-    // Mark sessions as synced if unchanged during transit
+    // Mark sessions as synced if unchanged during transit (or re-key on owner collision)
     if (ownedSessions.length > 0) {
-      await db.transaction('rw', db.sessions, async () => {
+      await db.transaction('rw', db.sessions, db.transcriptEntries, async () => {
         for (const session of ownedSessions) {
+          if (failedSessionIds.has(session.id)) {
+            const newSessionId = stringToUUID(`${ownerId}:session:${session.id}:${Date.now()}`)
+            const current = await db.sessions.get(session.id)
+            if (current) {
+              const oldEntries = await db.transcriptEntries.where('session_id').equals(session.id).toArray()
+              if (oldEntries.length > 0) {
+                await db.transcriptEntries.where('session_id').equals(session.id).delete()
+                await db.transcriptEntries.bulkPut(
+                  oldEntries.map((entry) => ({
+                    ...entry,
+                    id: stringToUUID(`${newSessionId}:${entry.id}`),
+                    session_id: newSessionId,
+                    sync_status: 'pending' as const,
+                  }))
+                )
+              }
+              await db.sessions.delete(session.id)
+              await db.sessions.put({ ...current, id: newSessionId, sync_status: 'pending' })
+            }
+            continue
+          }
           const current = await db.sessions.get(session.id)
           if (current && (!current.updated_at || current.updated_at === session.updated_at)) {
             await db.sessions.update(session.id, { sync_status: 'synced' })
@@ -158,13 +209,17 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
       })
     }
 
-    // Mark entries as synced atomically
+    // Mark entries as synced atomically (excluding any chunk failures reported by server)
     if (safeEntries.length > 0) {
       await db.transaction('rw', db.transcriptEntries, async () => {
         for (const entry of safeEntries) {
           const entryId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id)
             ? entry.id
             : stringToUUID(entry.id)
+          if (failedEntryIds.has(entryId)) {
+            await db.transcriptEntries.update(entry.id, { sync_status: 'failed' })
+            continue
+          }
           const current = await db.transcriptEntries.get(entry.id)
           if (entryId !== entry.id) {
             await db.transcriptEntries.delete(entry.id)
@@ -197,23 +252,36 @@ async function performSync(): Promise<{ success: boolean; syncedFolders?: number
 }
 
 export async function syncPendingData(): Promise<{ success: boolean; syncedFolders?: number; syncedSessions: number; syncedEntries: number; error?: string }> {
-  if (isSyncing) {
+  if (isSyncing && activeSyncPromise) {
     hasQueuedSync = true
-    return { success: false, syncedFolders: 0, syncedSessions: 0, syncedEntries: 0, error: 'Sync already in progress' }
+    return activeSyncPromise
   }
   isSyncing = true
-  try {
-    const result = await performSync()
-    if (hasQueuedSync) {
-      hasQueuedSync = false
-      if (typeof window !== 'undefined' && navigator.onLine) {
-        window.setTimeout(() => { void syncPendingData() }, 1000)
+  const runLoop = async () => {
+    try {
+      let result = await performSync()
+      let iterations = 0
+      while (
+        hasQueuedSync &&
+        result.success &&
+        iterations < 5 &&
+        ((result.syncedFolders ?? 0) > 0 || result.syncedSessions > 0 || result.syncedEntries > 0) &&
+        (typeof window === 'undefined' || navigator.onLine)
+      ) {
+        hasQueuedSync = false
+        iterations++
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        result = await performSync()
       }
+      hasQueuedSync = false
+      return result
+    } finally {
+      isSyncing = false
+      activeSyncPromise = null
     }
-    return result
-  } finally {
-    isSyncing = false
   }
+  activeSyncPromise = runLoop()
+  return activeSyncPromise
 }
 
 /**

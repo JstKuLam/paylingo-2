@@ -18,3 +18,32 @@ export function formatTimeline(ms: number): string {
   }
   return `${pad(minutes)}:${pad(seconds)}`
 }
+
+export function scrollIntoViewAsync(
+  element: Element,
+  options: ScrollIntoViewOptions = { behavior: 'smooth', block: 'center' },
+  scroller: Element | Window | null = typeof window !== 'undefined' ? window : null
+): Promise<void> {
+  const result = element.scrollIntoView(options) as unknown
+  if (result instanceof Promise) {
+    return result as Promise<void>
+  }
+  if (!scroller) return Promise.resolve()
+
+  return new Promise((resolve) => {
+    let timeoutId: ReturnType<typeof setTimeout>
+    const finish = () => {
+      clearTimeout(timeoutId)
+      scroller.removeEventListener('scrollend', finish)
+      scroller.removeEventListener('scroll', onScroll)
+      resolve()
+    }
+    const onScroll = () => {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(finish, 100)
+    }
+    scroller.addEventListener('scrollend', finish, { once: true })
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    timeoutId = setTimeout(finish, 100)
+  })
+}

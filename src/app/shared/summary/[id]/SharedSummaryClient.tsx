@@ -3,8 +3,18 @@
 import type { FormEvent, ReactNode } from 'react'
 import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Copy, Eye, EyeOff, FileText, Loader2, LockKeyhole } from 'lucide-react'
-import PayPayLogo from '@/components/PayPayLogo'
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  FileText,
+  Loader2,
+  LockKeyhole,
+  MessageSquare,
+} from 'lucide-react'
 
 interface PageProps {
   params: Promise<{ id?: string | string[] }>
@@ -17,11 +27,16 @@ interface SharedSummary {
 }
 
 function renderInline(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).filter(Boolean).map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>
-    if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>
-    return <span key={index}>{part}</span>
-  })
+  return text
+    .split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g)
+    .filter(Boolean)
+    .map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**'))
+        return <strong key={index}>{part.slice(2, -2)}</strong>
+      if (part.startsWith('*') && part.endsWith('*'))
+        return <em key={index}>{part.slice(1, -1)}</em>
+      return <span key={index}>{part}</span>
+    })
 }
 
 function SummaryDocument({ content }: { content: string }) {
@@ -47,7 +62,11 @@ function SummaryDocument({ content }: { content: string }) {
     <div className="shared-document__content">
       {blocks.map((block) => {
         if (block.type === 'tree') {
-          return <pre className="document-tree" key={block.originalIndex}>{block.lines.join('\n')}</pre>
+          return (
+            <pre className="doc-tree" key={block.originalIndex}>
+              {block.lines.join('\n')}
+            </pre>
+          )
         }
         const line = block.lines[0]
         const trimmed = line.trim()
@@ -55,12 +74,28 @@ function SummaryDocument({ content }: { content: string }) {
         if (!trimmed) return <div className="document-space" key={index} aria-hidden="true" />
         if (trimmed.startsWith('### ')) return <h3 key={index}>{renderInline(trimmed.slice(4))}</h3>
         if (trimmed.startsWith('## ')) return <h2 key={index}>{renderInline(trimmed.slice(3))}</h2>
-        if (trimmed.startsWith('# ')) return <h2 className="document-heading-large" key={index}>{renderInline(trimmed.slice(2))}</h2>
-        if (trimmed.startsWith('> ')) return <blockquote key={index}>{renderInline(trimmed.slice(2))}</blockquote>
-        if (/^[-*]\s/.test(trimmed)) return <div className="document-list-item" key={index}><span aria-hidden="true" /> <p>{renderInline(trimmed.slice(2))}</p></div>
+        if (trimmed.startsWith('# '))
+          return (
+            <h2 className="document-heading-large" key={index}>
+              {renderInline(trimmed.slice(2))}
+            </h2>
+          )
+        if (trimmed.startsWith('> '))
+          return <blockquote key={index}>{renderInline(trimmed.slice(2))}</blockquote>
+        if (/^[-*]\s/.test(trimmed))
+          return (
+            <div className="document-list-item" key={index}>
+              <span aria-hidden="true" /> <p>{renderInline(trimmed.slice(2))}</p>
+            </div>
+          )
         if (/^\d+\.\s/.test(trimmed)) {
           const match = trimmed.match(/^(\d+)\.\s(.*)$/)
-          return <div className="document-list-item document-list-item--ordered" key={index}><b>{match?.[1]}</b><p>{renderInline(match?.[2] || '')}</p></div>
+          return (
+            <div className="document-list-item document-list-item--ordered" key={index}>
+              <b>{match?.[1]}</b>
+              <p>{renderInline(match?.[2] || '')}</p>
+            </div>
+          )
         }
         return <p key={index}>{renderInline(trimmed)}</p>
       })}
@@ -71,9 +106,12 @@ function SummaryDocument({ content }: { content: string }) {
 export default function SharedSummaryPage({ params }: PageProps) {
   const router = useRouter()
   const rawParams = use(params)
-  const id = (typeof rawParams.id === 'string' && rawParams.id !== 'fallback' && rawParams.id !== '')
-    ? rawParams.id
-    : (typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean).pop() || '' : '')
+  const id =
+    typeof rawParams.id === 'string' && rawParams.id !== 'fallback' && rawParams.id !== ''
+      ? rawParams.id
+      : typeof window !== 'undefined'
+        ? window.location.pathname.split('/').filter(Boolean).pop() || ''
+        : ''
   const [loading, setLoading] = useState(true)
   const [locked, setLocked] = useState(false)
   const [password, setPassword] = useState('')
@@ -86,17 +124,22 @@ export default function SharedSummaryPage({ params }: PageProps) {
     if (!id || id === 'fallback') return
     try {
       const response = await fetch(`/api/shared/summary?id=${encodeURIComponent(id)}`)
-      const data: SharedSummary & { error?: string; isLocked?: boolean } = await response.json().catch(() => ({}))
-      if (!response.ok || data.error) throw new Error(data.error || 'Không thể tải bản tóm tắt.')
+      const data: SharedSummary & { error?: string; isLocked?: boolean } = await response
+        .json()
+        .catch(() => ({}))
+      if (!response.ok || data.error)
+        throw new Error(data.error || 'Không thể tải bản tóm tắt.')
       if (data.isLocked) {
         setLocked(true)
-        setSummary({ title: 'Bản tóm tắt được bảo vệ', created_at: '' })
+        setSummary({ title: 'Bản tóm tắt được bảo vệ bằng mật khẩu', created_at: '' })
       } else {
         setLocked(false)
         setSummary(data)
       }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Không thể kết nối đến máy chủ.')
+      setError(
+        requestError instanceof Error ? requestError.message : 'Không thể kết nối đến máy chủ.'
+      )
     } finally {
       setLoading(false)
     }
@@ -124,7 +167,9 @@ export default function SharedSummaryPage({ params }: PageProps) {
       setSummary(data)
       setPassword('')
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Không thể xác thực mật khẩu.')
+      setError(
+        requestError instanceof Error ? requestError.message : 'Không thể xác thực mật khẩu.'
+      )
     } finally {
       setLoading(false)
     }
@@ -143,63 +188,149 @@ export default function SharedSummaryPage({ params }: PageProps) {
   }
 
   if (loading && !summary) {
-    return <div className="app-loading" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><span>Đang tải bản tóm tắt</span></div>
-  }
-
-  if (error && !locked) {
     return (
-      <div className="detail-not-found">
-        <FileText aria-hidden="true" />
-        <h1>Không thể mở bản tóm tắt</h1>
-        <p>{error}</p>
-        <button type="button" onClick={() => router.push('/')}><ArrowLeft aria-hidden="true" /> Trở về ứng dụng</button>
+      <div className="app-loading" role="status">
+        <Loader2 className="animate-spin" aria-hidden="true" />
+        <span>Đang tải bản tóm tắt</span>
       </div>
     )
   }
 
-  if (locked) {
-    return (
-      <main className="shared-lock-shell">
-        <section className="shared-lock-panel">
-          <span className="shared-lock-icon"><LockKeyhole aria-hidden="true" /></span>
-          <p className="eyebrow">Tài liệu được bảo vệ</p>
-          <h1>{summary?.title}</h1>
-          <p>Nhập mật khẩu do người chia sẻ cung cấp để xem nội dung.</p>
-          <form onSubmit={handlePasswordSubmit}>
-            <label htmlFor="summary-password">Mật khẩu truy cập</label>
-            <div className="password-control">
-              <input id="summary-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} maxLength={128} autoFocus required />
-              <button type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>
-                {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-              </button>
-            </div>
-            {error && <div className="session-alert session-alert--danger" role="alert"><p>{error}</p></div>}
-            <button type="submit" className="primary-command" disabled={loading}>{loading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}{loading ? 'Đang xác thực' : 'Mở tài liệu'}</button>
-          </form>
-        </section>
-      </main>
-    )
-  }
-
   return (
-    <div className="shared-summary-shell">
-      <header className="shared-summary-header">
-        <div><PayPayLogo width={102} height={32} /><span>Tài liệu được chia sẻ</span></div>
-        <div>
-          <button type="button" onClick={() => router.push('/')}><ArrowLeft aria-hidden="true" /><span>Ứng dụng</span></button>
-          <button type="button" onClick={handleCopyLink}>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? 'Đã sao chép' : 'Sao chép link'}</button>
+    <div className="scr-view">
+      <header className="scr-top">
+        <div className="scr-top__left">
+          <div className="brand">
+            <div className="brand__mark" aria-hidden="true">
+              <MessageSquare className="i" />
+            </div>
+            <span className="brand__name">PayLingo</span>
+          </div>
+          <span className="scr-hide-sm">
+            <strong>Tài liệu Tóm tắt được chia sẻ</strong>
+          </span>
+        </div>
+
+        <div className="scr-top__right">
+          <button type="button" className="btn btn--sm btn--outline" onClick={() => router.push('/')}>
+            <ArrowLeft className="i" aria-hidden="true" />
+            <span>Mở ứng dụng</span>
+          </button>
+          <button type="button" className="btn btn--sm btn--primary" onClick={handleCopyLink}>
+            {copied ? (
+              <Check className="i" aria-hidden="true" />
+            ) : (
+              <Copy className="i" aria-hidden="true" />
+            )}
+            <span>{copied ? 'Đã sao chép' : 'Sao chép Link'}</span>
+          </button>
         </div>
       </header>
-      <main className="shared-document">
-        <header>
-          <p className="eyebrow">Bản tóm tắt AI</p>
-          <h1>{summary?.title}</h1>
-          {summary?.created_at && Number.isFinite(new Date(summary.created_at).getTime()) && (
-            <p>Tạo ngày {new Date(summary.created_at).toLocaleDateString('vi-VN')}</p>
+
+      <main className="scr-body">
+        <div className="scr-wrap">
+          {error && !locked ? (
+            <div className="gate-card">
+              <div className="gate-icon">
+                <FileText className="i" aria-hidden="true" />
+              </div>
+              <h2>Không thể mở bản tóm tắt</h2>
+              <p>{error}</p>
+              <button type="button" className="btn btn--primary" onClick={() => router.push('/')}>
+                <ArrowLeft className="i" aria-hidden="true" />
+                <span>Trở về ứng dụng</span>
+              </button>
+            </div>
+          ) : locked ? (
+            <section className="gate-card">
+              <div className="gate-icon">
+                <LockKeyhole className="i" aria-hidden="true" />
+              </div>
+              <h2>{summary?.title}</h2>
+              <p>Nhập mật khẩu do người chia sẻ cung cấp để mở khóa biên bản họp.</p>
+              <form className="entry-form" onSubmit={handlePasswordSubmit}>
+                <label htmlFor="summary-password" className="sr-only">
+                  Mật khẩu truy cập
+                </label>
+                <div className="h-feed__search-row">
+                  <input
+                    id="summary-password"
+                    type={showPassword ? 'text' : 'password'}
+                    className="auth-input"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Nhập mật khẩu truy cập..."
+                    maxLength={128}
+                    autoFocus
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--icon btn--outline"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="i" aria-hidden="true" />
+                    ) : (
+                      <Eye className="i" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                {error && (
+                  <div className="session-alert session-alert--danger" role="alert">
+                    <p>{error}</p>
+                  </div>
+                )}
+                <button type="submit" className="btn btn--primary" disabled={loading}>
+                  {loading ? (
+                    <Loader2 className="i animate-spin" aria-hidden="true" />
+                  ) : (
+                    <LockKeyhole className="i" aria-hidden="true" />
+                  )}
+                  <span>{loading ? 'Đang xác thực...' : 'Mở khóa tài liệu'}</span>
+                </button>
+              </form>
+            </section>
+          ) : (
+            <article className="doc-paper">
+              <div className="g-head">
+                <div>
+                  <h2>{summary?.title}</h2>
+                  <div className="g-meta">
+                    <span className="meta-pill meta-pill--sync">
+                      <i />
+                      <span>Đã xác thực quyền xem</span>
+                    </span>
+                    {summary?.created_at &&
+                      Number.isFinite(new Date(summary.created_at).getTime()) && (
+                        <span className="meta-pill">
+                          Ngày tạo: {new Date(summary.created_at).toLocaleDateString('vi-VN')}
+                        </span>
+                      )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--sm btn--outline"
+                  onClick={async () => {
+                    const { downloadSummaryHTML } = await import('@/lib/html-generator')
+                    downloadSummaryHTML(
+                      summary?.title || 'Tóm tắt Hội thoại PayLingo',
+                      summary?.summary_content || '',
+                      summary?.created_at || new Date().toISOString(),
+                      'Song ngữ'
+                    )
+                  }}
+                >
+                  <Download className="i" aria-hidden="true" />
+                  <span>Tải báo cáo HTML</span>
+                </button>
+              </div>
+              <SummaryDocument content={summary?.summary_content || ''} />
+            </article>
           )}
-        </header>
-        <SummaryDocument content={summary?.summary_content || ''} />
-        <footer>PayLingo Live Interpreter</footer>
+        </div>
       </main>
     </div>
   )

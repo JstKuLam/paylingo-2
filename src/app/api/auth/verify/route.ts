@@ -11,7 +11,7 @@ const noStoreHeader = {
 
 export async function POST(request: Request) {
   try {
-    let body: { token?: unknown }
+    let body: { token?: unknown; email?: unknown }
     try {
       body = await request.json()
     } catch {
@@ -21,7 +21,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const { token } = body
+    const { token, email } = body
+    const cleanEmail = typeof email === 'string' && email.trim().length <= 254 ? email.trim().toLowerCase() : undefined
 
     if (!token || typeof token !== 'string') {
       return NextResponse.json(
@@ -52,7 +53,23 @@ export async function POST(request: Request) {
     })
     if (!tokenLimit.allowed) return rateLimitResponse(tokenLimit.retryAfterSeconds)
 
-    const sessionRes = await verifyMagicToken(cleanToken)
+    // Per-email rate limit for 6-digit OTPs to block brute-forcing without allowing global DoS
+    if (cleanToken.length === 6) {
+      if (!cleanEmail) {
+        return NextResponse.json(
+          { error: 'Cần cung cấp email khi xác thực bằng mã OTP.' },
+          { status: 400, headers: noStoreHeader }
+        )
+      }
+      const emailOtpLimit = checkRateLimit({
+        key: `verify-otp-email:${cleanEmail}`,
+        limit: 5,
+        windowMs: 15 * 60_000,
+      })
+      if (!emailOtpLimit.allowed) return rateLimitResponse(emailOtpLimit.retryAfterSeconds)
+    }
+
+    const sessionRes = await verifyMagicToken(cleanToken, cleanEmail)
     if (!sessionRes) {
       return NextResponse.json(
         { error: 'Mã xác thực không đúng hoặc đã hết hạn.' },

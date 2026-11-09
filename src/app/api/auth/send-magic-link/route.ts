@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { isAllowedEmail } from '@/lib/auth-utils'
+import { isAllowedEmail, isServerManagedEmailAllowed } from '@/lib/auth-utils'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 import { createMagicToken } from '@/lib/auth/session'
 import { sendEmail } from '@/lib/auth/smtp'
@@ -36,10 +36,10 @@ export async function POST(request: Request) {
     const sanitizedEmail = email.trim().toLowerCase().replace(/[\r\n\x00-\x1f]/g, '')
     const isAllowed = isAllowedEmail(sanitizedEmail)
 
-    if (!isAllowed) {
+    if (!isAllowed || !isServerManagedEmailAllowed(sanitizedEmail)) {
       return NextResponse.json(
-        { error: 'Email không hợp lệ. Vui lòng nhập đúng định dạng email.' },
-        { status: 400, headers: noStoreHeader }
+        { error: 'Email không hợp lệ hoặc không nằm trong danh sách được cấp quyền.' },
+        { status: 403, headers: noStoreHeader }
       )
     }
 
@@ -64,14 +64,23 @@ export async function POST(request: Request) {
     })
     if (!requestLimit.allowed) return rateLimitResponse(requestLimit.retryAfterSeconds)
 
-    // Generate Magic Token & 6-digit OTP
+    // Generate Magic Token, 6-digit OTP, and token-bound anti-CSRF browser nonce
     const { token, otp } = await createMagicToken(sanitizedEmail)
+    const browserNonce = crypto.randomUUID()
+    const nonceDigest = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(`paylingo-magic-nonce-v1:${token}:${browserNonce}`)
+    )
+    const boundNonce = Array.from(new Uint8Array(nonceDigest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+      .slice(0, 32)
 
     const requestOrigin = new URL(request.url).origin
     const configuredOrigin =
       process.env.NEXT_PUBLIC_APP_URL ||
       (process.env.NODE_ENV === 'development' ? requestOrigin : 'https://noidi.9phut.org')
-    const magicLinkUrl = `${configuredOrigin}/auth/callback?token=${token}`
+    const magicLinkUrl = `${configuredOrigin}/auth/callback?token=${token}&nonce=${boundNonce}`
 
     // Language selection for email content
     const selectedLang: Language = (lang === 'en' || lang === 'zh' || lang === 'vi') ? lang : 'vi'
@@ -120,7 +129,19 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json({ success: true }, { headers: noStoreHeader })
+    const nonceCookieName =
+      process.env.NODE_ENV === 'production' ? '__Host-paylingo_magic_nonce' : 'paylingo_magic_nonce'
+    const response = NextResponse.json({ success: true }, { headers: noStoreHeader })
+    response.cookies.set({
+      name: nonceCookieName,
+      value: browserNonce,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 15 * 60,
+    })
+    return response
   } catch (err) {
     console.error('Error in send-magic-link route:', err)
     return NextResponse.json(

@@ -178,6 +178,7 @@ export interface I18nTranslations {
   sessionDetailExportPdf: string
   sessionDetailExportTxt: string
   sessionDetailExportJson: string
+  sessionDetailExportMd: string
   sessionDetailSummarizeBtn: string
   sessionDetailDeleteBtn: string
   sessionDetailDeleteConfirm: string
@@ -400,6 +401,7 @@ export const translations: Record<Language, I18nTranslations> = {
     sessionDetailExportPdf: 'Tải tệp PDF (.pdf)',
     sessionDetailExportTxt: 'Tải tệp văn bản (.txt)',
     sessionDetailExportJson: 'Tải tệp JSON (.json)',
+    sessionDetailExportMd: 'Tải tệp Markdown (.md)',
     sessionDetailSummarizeBtn: 'Tóm tắt AI',
     sessionDetailDeleteBtn: 'Xóa hội thoại',
     sessionDetailDeleteConfirm: 'Xóa vĩnh viễn hội thoại và toàn bộ transcript?',
@@ -620,6 +622,7 @@ export const translations: Record<Language, I18nTranslations> = {
     sessionDetailExportPdf: 'Download PDF (.pdf)',
     sessionDetailExportTxt: 'Download Text (.txt)',
     sessionDetailExportJson: 'Download JSON (.json)',
+    sessionDetailExportMd: 'Download Markdown (.md)',
     sessionDetailSummarizeBtn: 'AI Summary',
     sessionDetailDeleteBtn: 'Delete Conversation',
     sessionDetailDeleteConfirm: 'Permanently delete this conversation and all transcripts?',
@@ -840,6 +843,7 @@ export const translations: Record<Language, I18nTranslations> = {
     sessionDetailExportPdf: '下载 PDF (.pdf)',
     sessionDetailExportTxt: '下载文本 (.txt)',
     sessionDetailExportJson: '下载 JSON (.json)',
+    sessionDetailExportMd: '下载 Markdown (.md)',
     sessionDetailSummarizeBtn: 'AI 总结',
     sessionDetailDeleteBtn: '删除对话',
     sessionDetailDeleteConfirm: '永久删除此对话及所有转录内容？',

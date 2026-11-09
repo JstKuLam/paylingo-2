@@ -42,11 +42,12 @@ export async function createMagicToken(email: string): Promise<{ token: string; 
   // 15 minutes expiration
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
-  // Clean up old tokens for this email and insert magic link token and OTP atomically
+  // Clean up old tokens for this email and insert magic link token and email-scoped OTP atomically
+  const scopedOtpToken = `otp:${sanitizedEmail}:${otp}`
   await db.batch([
     db.prepare('DELETE FROM auth_tokens WHERE email = ? OR datetime(expires_at) < datetime(\'now\')').bind(sanitizedEmail),
-    db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))').bind(token, sanitizedEmail, expiresAt),
-    db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))').bind(otp, sanitizedEmail, expiresAt),
+    db.prepare('INSERT OR REPLACE INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))').bind(token, sanitizedEmail, expiresAt),
+    db.prepare('INSERT OR REPLACE INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))').bind(scopedOtpToken, sanitizedEmail, expiresAt),
   ])
 
   return { token, otp }
@@ -55,23 +56,41 @@ export async function createMagicToken(email: string): Promise<{ token: string; 
 /**
  * Verifies a magic token or OTP code, issues a long-lived user session.
  */
-export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionResult | null> {
+export async function verifyMagicToken(tokenOrOtp: string, expectedEmail?: string): Promise<AuthSessionResult | null> {
   if (!tokenOrOtp || typeof tokenOrOtp !== 'string') return null
   const cleanInput = tokenOrOtp.trim()
   if (cleanInput.length < 6 || cleanInput.length > 128) return null
+  const cleanEmail = typeof expectedEmail === 'string' && expectedEmail.trim()
+    ? expectedEmail.trim().toLowerCase()
+    : null
+
+  // Short 6-digit OTPs MUST bind to the requesting email to prevent cross-account OTP collisions
+  if (cleanInput.length === 6 && !cleanEmail) {
+    return null
+  }
+  if (cleanInput.length !== 6 && cleanInput.length < 32) {
+    return null
+  }
+  const lookupToken = cleanInput.length === 6 && cleanEmail ? `otp:${cleanEmail}:${cleanInput}` : cleanInput
 
   const db = getD1()
 
-  const record = await db.prepare(
-    'SELECT * FROM auth_tokens WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
-  )
-    .bind(cleanInput)
-    .first<{ token: string; email: string; expires_at: string }>()
+  const record = cleanEmail
+    ? await db.prepare(
+        'SELECT * FROM auth_tokens WHERE token = ? AND lower(email) = lower(?) AND datetime(expires_at) > datetime(\'now\')'
+      )
+        .bind(lookupToken, cleanEmail)
+        .first<{ token: string; email: string; expires_at: string }>()
+    : await db.prepare(
+        'SELECT * FROM auth_tokens WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
+      )
+        .bind(lookupToken)
+        .first<{ token: string; email: string; expires_at: string }>()
 
   if (!record || !isAllowedEmail(record.email)) return null
 
   // Atomically delete token and verify changes > 0 to prevent concurrent replay race conditions
-  const deleteRes = await db.prepare('DELETE FROM auth_tokens WHERE token = ?').bind(cleanInput).run()
+  const deleteRes = await db.prepare('DELETE FROM auth_tokens WHERE token = ?').bind(lookupToken).run()
   if (!deleteRes.success || (deleteRes.meta && deleteRes.meta.changes === 0)) {
     return null
   }
@@ -131,6 +150,79 @@ export async function verifyMagicToken(tokenOrOtp: string): Promise<AuthSessionR
     user,
     sessionToken,
     expiresAt: sessionExpiresAt,
+  }
+}
+
+/**
+ * Finds or creates a user from a verified OAuth provider (e.g. Google SSO)
+ * and issues a 30-day authenticated session in D1.
+ */
+export async function createOrUpdateOAuthSession(
+  rawEmail: string
+): Promise<(AuthSessionResult & { isNewUser: boolean }) | null> {
+  if (!rawEmail || typeof rawEmail !== 'string') return null
+  const cleanEmail = rawEmail.trim().toLowerCase()
+  if (!isAllowedEmail(cleanEmail)) return null
+
+  const db = getD1()
+  let user = await db
+    .prepare('SELECT * FROM auth_users WHERE lower(email) = lower(?)')
+    .bind(cleanEmail)
+    .first<AuthUser>()
+
+  const nowIso = new Date().toISOString()
+  let isNewUser = false
+
+  if (!user) {
+    isNewUser = true
+    const newUserId = crypto.randomUUID()
+    try {
+      await db
+        .prepare(
+          'INSERT INTO auth_users (id, email, email_confirmed_at, created_at) VALUES (?, ?, ?, ?)'
+        )
+        .bind(newUserId, cleanEmail, nowIso, nowIso)
+        .run()
+
+      user = {
+        id: newUserId,
+        email: cleanEmail,
+        email_confirmed_at: nowIso,
+        created_at: nowIso,
+      }
+    } catch {
+      isNewUser = false
+      user = await db
+        .prepare('SELECT * FROM auth_users WHERE lower(email) = lower(?)')
+        .bind(cleanEmail)
+        .first<AuthUser>()
+    }
+  } else if (!user.email_confirmed_at) {
+    await db
+      .prepare('UPDATE auth_users SET email_confirmed_at = ? WHERE id = ?')
+      .bind(nowIso, user.id)
+      .run()
+    user.email_confirmed_at = nowIso
+  }
+
+  if (!user) return null
+
+  const sessionToken = `${crypto.randomUUID()}-${crypto.randomUUID()}`
+  const sessionExpiresAt = new Date(Date.now() + AUTH_COOKIE_MAX_AGE * 1000).toISOString()
+  const sessionId = crypto.randomUUID()
+
+  await db
+    .prepare(
+      'INSERT INTO auth_sessions (id, user_id, token, expires_at, created_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    .bind(sessionId, user.id, sessionToken, sessionExpiresAt, nowIso)
+    .run()
+
+  return {
+    user,
+    sessionToken,
+    expiresAt: sessionExpiresAt,
+    isNewUser,
   }
 }
 

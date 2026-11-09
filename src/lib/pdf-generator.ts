@@ -45,8 +45,9 @@ export function generateSessionPrintHTML(
   const rows = safeEntries.map((entry) => {
     const hostText = entry.speaker === 'host' ? (entry.original_text || '') : (entry.translated_text || '')
     const partnerText = entry.speaker === 'partner' ? (entry.original_text || '') : (entry.translated_text || '')
-    const hostLabel = entry.speaker === 'host' ? 'Bạn' : `${safePartnerLangName} (dịch)`
-    const partnerLabel = entry.speaker === 'partner' ? safePartnerLangName : 'Bạn (dịch)'
+    const speakerTag = entry.speaker_label ? ` #${entry.speaker_label}` : ''
+    const hostLabel = entry.speaker === 'host' ? `Bạn${speakerTag}` : `${safePartnerLangName} (dịch)`
+    const partnerLabel = entry.speaker === 'partner' ? `${safePartnerLangName}${speakerTag}` : 'Bạn (dịch)'
 
     return `
       <tr>
@@ -174,7 +175,8 @@ export async function downloadSessionTXT(
   txtContent += '==================================================\n\n'
 
   safeEntries.forEach((entry) => {
-    const speaker = entry.speaker === 'host' ? 'BẠN' : safePartnerLangName.toUpperCase()
+    const speakerTag = entry.speaker_label ? ` #${entry.speaker_label}` : ''
+    const speaker = entry.speaker === 'host' ? `BẠN${speakerTag}` : `${safePartnerLangName.toUpperCase()}${speakerTag}`
     txtContent += `[${formatOffset(entry.start_ms)}] ${speaker}:\n`
     txtContent += `- Gốc: ${entry.original_text || ''}\n`
     txtContent += `- Dịch: ${entry.translated_text || ''}\n`
@@ -216,6 +218,7 @@ export async function downloadSessionJSON(
     entries: safeEntries.map((entry) => ({
       id: entry.id,
       speaker: entry.speaker,
+      speaker_label: entry.speaker_label || null,
       original_text: entry.original_text || '',
       translated_text: entry.translated_text || '',
       start_ms: Number.isFinite(entry.start_ms) ? Math.max(0, entry.start_ms) : 0,
@@ -235,3 +238,71 @@ export async function downloadSessionJSON(
   link.remove()
   URL.revokeObjectURL(url)
 }
+
+export async function downloadSessionMarkdown(
+  sessionName: string,
+  partnerLangName: string,
+  startedAt: string,
+  entries: LocalTranscriptEntry[]
+) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
+  const formattedDate = Number.isFinite(new Date(startedAt).getTime())
+    ? new Date(startedAt).toLocaleString('vi-VN')
+    : 'Không rõ'
+  const safeSessionName =
+    typeof sessionName === 'string' && sessionName.trim()
+      ? sessionName.trim()
+      : 'Hội thoại PayLingo'
+  const safePartnerLangName = partnerLangName || 'Đối tác'
+  const safeEntries = Array.isArray(entries) ? entries : []
+
+  const noteEntries = safeEntries.filter(
+    (entry) => entry.speaker_label === 'NOTE' || entry.speaker_label === '[NOTE]'
+  )
+  const spokenEntries = safeEntries.filter(
+    (entry) => entry.speaker_label !== 'NOTE' && entry.speaker_label !== '[NOTE]'
+  )
+
+  let md = `# ${safeSessionName}\n\n`
+  md += `- **Thời gian bắt đầu:** ${formattedDate}\n`
+  md += `- **Ngôn ngữ đối tác:** ${safePartnerLangName}\n`
+  md += `- **Tổng số câu thoại:** ${spokenEntries.length}\n\n`
+
+  if (noteEntries.length > 0) {
+    md += `## Ghi chú theo mốc thời gian\n\n`
+    for (const note of noteEntries) {
+      md += `- **[${formatOffset(note.start_ms)}]** ${note.original_text || ''}`
+      if (note.translated_text) {
+        md += ` *(“${note.translated_text}”)*`
+      }
+      md += `\n`
+    }
+    md += `\n`
+  }
+
+  md += `## Nội dung hội thoại\n\n`
+  for (const entry of spokenEntries) {
+    const speakerTag = entry.speaker_label ? ` #${entry.speaker_label}` : ''
+    const speaker =
+      entry.speaker === 'host'
+        ? `Bạn${speakerTag}`
+        : `${safePartnerLangName}${speakerTag}`
+    md += `### [${formatOffset(entry.start_ms)}] ${speaker}\n\n`
+    md += `- **Gốc:** ${entry.original_text || ''}\n`
+    if (entry.translated_text && entry.translated_text !== entry.original_text) {
+      md += `- **Dịch:** ${entry.translated_text}\n`
+    }
+    md += `\n`
+  }
+
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${safeFilename(safeSessionName)}.md`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+

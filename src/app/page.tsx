@@ -1,71 +1,71 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
-  Check,
-  KeyRound,
-  Languages,
-  LockKeyhole,
-  Mail,
+  Loader2,
+  MessageSquare,
   Moon,
   Sun,
 } from 'lucide-react'
-import PayPayLogo from '@/components/PayPayLogo'
 import { useTheme } from '@/hooks/useTheme'
 import { useLanguage } from '@/hooks/useLanguage'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { authClient } from '@/lib/auth-client'
-import { isAllowedEmail } from '@/lib/auth-utils'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Spinner } from '@/components/ui/spinner'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 
 export default function Home() {
   const router = useRouter()
   const { theme, changeTheme } = useTheme()
   const { language, t } = useLanguage()
-  const [email, setEmail] = useState('')
-  const [otpCode, setOtpCode] = useState('')
-  const [isLinkSent, setIsLinkSent] = useState(false)
-  const [resendCountdown, setResendCountdown] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
 
   useEffect(() => {
-    let timer: NodeJS.Timeout
-    if (resendCountdown > 0) {
-      timer = setTimeout(() => setResendCountdown(prev => prev - 1), 1000)
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const errCode = params.get('error')
+    if (!errCode) return
+
+    let msg: string | null = null
+    if (errCode === 'google_not_configured') {
+      msg =
+        language === 'en'
+          ? 'Google SSO is not configured yet. Please add GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET in Admin Settings (/kulam).'
+          : language === 'zh'
+            ? '尚未配置 Google SSO。请在管理后台 (/kulam) 中配置 GOOGLE_CLIENT_ID 与 GOOGLE_CLIENT_SECRET。'
+            : 'Chưa cấu hình Google SSO (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET). Vui lòng cấu hình trong trang Quản trị (/kulam).'
+    } else if (errCode === 'google_cancelled') {
+      msg =
+        language === 'en'
+          ? 'Google sign-in was cancelled.'
+          : language === 'zh'
+            ? '已取消 Google 登录。'
+            : 'Đã hủy đăng nhập bằng Google.'
+    } else if (errCode === 'google_auth_failed') {
+      msg =
+        language === 'en'
+          ? 'Google authentication failed. Please try again.'
+          : language === 'zh'
+            ? 'Google 身份验证失败，请重试。'
+            : 'Xác thực Google không thành công. Vui lòng thử lại.'
     }
-    return () => clearTimeout(timer)
-  }, [resendCountdown])
+    if (msg) {
+      window.history.replaceState({}, '', window.location.pathname)
+      const timer = window.setTimeout(() => {
+        setError(msg)
+      }, 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [language])
 
   useEffect(() => {
     const checkUser = async () => {
       try {
-        const { data: { user } } = await authClient.getUser()
+        const {
+          data: { user },
+        } = await authClient.getUser()
         if (user) {
-          const userEmail = user.email
-          if (!isAllowedEmail(userEmail)) {
-            await authClient.signOut()
-            setError(t.errorInvalidEmail)
-            return
-          }
-          setError(null)
           router.replace('/session')
         }
       } catch (err) {
@@ -73,250 +73,116 @@ export default function Home() {
       }
     }
     void checkUser()
+  }, [router])
 
-    const errParam = new URLSearchParams(window.location.search).get('error')
-    const urlError =
-      errParam === 'invalid_or_expired_token' || errParam === 'invalid_token'
-        ? t.errorExpiredToken
-        : errParam === 'domain_restricted' || errParam === 'unauthorized'
-          ? t.errorAccessDenied
-          : errParam
-            ? t.errorGeneric
-            : null
-
-    if (urlError) {
-      const timer = window.setTimeout(() => setError(urlError), 0)
-      return () => window.clearTimeout(timer)
-    }
-  }, [router, t])
-
-  const handleSendLink = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    if (!email) return
-
-    const sanitizedEmail = email.trim().toLowerCase()
-    const isAllowed = isAllowedEmail(sanitizedEmail)
-    if (!isAllowed) {
-      setError(t.errorInvalidEmail)
-      return
-    }
-
-    setIsLoading(true)
+  const handleGoogleAuth = () => {
     setError(null)
-
+    setIsGoogleLoading(true)
     try {
-      const { error: sendErr } = await authClient.signInWithOtp({
-        email: sanitizedEmail,
-        lang: language,
+      authClient.signInWithGoogle({
+        mode: 'signin',
       })
-      if (sendErr) {
-        throw sendErr
-      }
-
-      setIsLinkSent(true)
-      setResendCountdown(60)
     } catch (err) {
-      console.error('Failed to send OTP code:', err)
-      const rawMsg = err instanceof Error ? err.message : ''
-      if (rawMsg.toLowerCase().includes('rate limit') || rawMsg.toLowerCase().includes('seconds')) {
-        setError(t.errorRateLimit)
-      } else {
-        setError(rawMsg || t.errorSendOtp)
-      }
-    } finally {
-      setIsLoading(false)
+      setError(err instanceof Error ? err.message : t.errorGeneric)
+      setIsGoogleLoading(false)
     }
   }
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!otpCode.trim()) return
-
-    setIsVerifyingOtp(true)
-    setError(null)
-
-    try {
-      const { data, error: verifyErr } = await authClient.verifyOtp({ token: otpCode.trim() })
-      if (verifyErr || !data.user) {
-        throw verifyErr || new Error(t.errorInvalidOtp)
-      }
-
-      router.replace('/session')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t.errorInvalidOtp)
-    } finally {
-      setIsVerifyingOtp(false)
-    }
-  }
+  const googleBtnLabel =
+    language === 'en'
+      ? 'Sign in with Google'
+      : language === 'zh'
+        ? '使用 Google 登录'
+        : 'Đăng nhập bằng Google'
+  const subtitleText =
+    language === 'en'
+      ? 'Sign in with your Google (Gmail) account to open the interpreter workspace.'
+      : language === 'zh'
+        ? '使用 Google (Gmail) 账号登录以进入同传工作区。'
+        : 'Đăng nhập bằng tài khoản Google (Gmail) để vào bàn phiên dịch.'
 
   return (
-    <main className="entry-shell">
-      {/* Liquid Glass Background Blobs */}
-      <div className="liquid-bg-container" aria-hidden="true">
-        <div className="liquid-blob liquid-blob-primary" />
-        <div className="liquid-blob liquid-blob-partner" />
-        <div className="liquid-blob liquid-blob-warning" />
-      </div>
-
-      <section className="entry-context" aria-label={t.appTagline}>
-        <div className="entry-brand-row">
-          <PayPayLogo width={178} height={56} />
-          <span className="entry-product-name">{t.appTagline}</span>
-        </div>
-
-        <div className="entry-intro">
-          <p className="eyebrow">{t.heroEyebrow}</p>
-          <h1>{t.heroTitle}</h1>
-        </div>
-
-        <div className="entry-proof" aria-label={t.heroEyebrow}>
-          <div><Languages aria-hidden="true" /><span>{t.featureRealtime}</span></div>
-          <div><LockKeyhole aria-hidden="true" /><span>{t.featureNoAudio}</span></div>
-          <div><Check aria-hidden="true" /><span>{t.featureLocalBackup}</span></div>
-        </div>
-      </section>
-
-      <section className="entry-action" aria-label={t.formTitle}>
-        <div className="entry-action-top">
-          <span className="entry-mobile-brand">{t.appName}</span>
-
-          <div className="entry-preferences">
-            <LanguageSwitcher size="touch" />
-            <ToggleGroup
-              variant="outline"
-              size="touch"
-              spacing={0}
-              value={[theme]}
-              onValueChange={(values) => {
-                const nextTheme = values[0]
-                if (nextTheme === 'dark' || nextTheme === 'light') changeTheme(nextTheme)
-              }}
-              aria-label={`${t.themeDark} / ${t.themeLight}`}
-            >
-              <ToggleGroupItem value="dark" aria-label={t.themeDark} title={t.themeDark}>
-                <Moon aria-hidden="true" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="light" aria-label={t.themeLight} title={t.themeLight}>
-                <Sun aria-hidden="true" />
-              </ToggleGroupItem>
-            </ToggleGroup>
+    <main className="scr-view">
+      <header className="scr-top">
+        <div className="scr-top__left">
+          <div className="brand">
+            <div className="brand__mark" aria-hidden="true">
+              <MessageSquare className="i" />
+            </div>
+            <span className="brand__name">PayLingo</span>
           </div>
         </div>
 
-        <div className="entry-form-wrap">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t.formTitle}</CardTitle>
-              <CardDescription>{t.formSubtitle}</CardDescription>
-            </CardHeader>
-
-            <CardContent>
-              <div className="flex flex-col gap-5">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle aria-hidden="true" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {!isLinkSent ? (
-              <form onSubmit={handleSendLink} noValidate>
-                <FieldGroup>
-                  <Field data-invalid={Boolean(error)} data-disabled={isLoading}>
-                    <FieldLabel htmlFor="email">{t.emailLabel}</FieldLabel>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      density="comfortable"
-                      value={email}
-                      onChange={(event) => {
-                        setEmail(event.target.value)
-                        setError(null)
-                      }}
-                      placeholder={t.emailPlaceholder}
-                      autoComplete="email"
-                      spellCheck={false}
-                      disabled={isLoading}
-                      aria-invalid={Boolean(error)}
-                    />
-                  </Field>
-
-                  <Button type="submit" size="touch" className="w-full" disabled={isLoading || !email.trim()}>
-                    {isLoading ? <Spinner data-icon="inline-start" /> : null}
-                    {isLoading ? t.gettingOtpBtn : t.getOtpBtn}
-                  </Button>
-                </FieldGroup>
-              </form>
+        <div className="scr-top__right">
+          <LanguageSwitcher />
+          <button
+            type="button"
+            className="btn btn--icon"
+            onClick={() => changeTheme(theme === 'dark' ? 'light' : 'dark')}
+            aria-label={theme === 'dark' ? t.themeLight : t.themeDark}
+            title={theme === 'dark' ? t.themeLight : t.themeDark}
+          >
+            {theme === 'dark' ? (
+              <Sun className="i" aria-hidden="true" />
             ) : (
-              <div className="flex flex-col gap-5">
-                <Alert>
-                  <Mail aria-hidden="true" />
-                  <AlertTitle>{t.otpSentTitle}</AlertTitle>
-                  <AlertDescription>{t.otpSentDesc.replace('{email}', email)}</AlertDescription>
-                </Alert>
-
-                <form onSubmit={handleVerifyOtp}>
-                  <FieldGroup>
-                    <Field>
-                      <FieldLabel htmlFor="otp"><KeyRound aria-hidden="true" />{t.otpInputLabel}</FieldLabel>
-                      <Input
-                        id="otp"
-                        name="otp"
-                        type="text"
-                        density="comfortable"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        maxLength={6}
-                        value={otpCode}
-                        onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, ''))}
-                        placeholder={t.otpPlaceholder}
-                      />
-                    </Field>
-
-                    <Button type="submit" size="touch" className="w-full" disabled={isVerifyingOtp || otpCode.trim().length !== 6}>
-                      {isVerifyingOtp ? <Spinner data-icon="inline-start" /> : null}
-                      {isVerifyingOtp ? t.verifyingBtn : t.verifyBtn}
-                    </Button>
-                  </FieldGroup>
-                </form>
-
-                <div className="flex items-center justify-between gap-3">
-                  <Button
-                    type="button"
-                    variant="link"
-                    onClick={() => {
-                      setIsLinkSent(false)
-                      setError(null)
-                    }}
-                    disabled={isLoading}
-                  >
-                    {t.changeEmailBtn}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="link"
-                    onClick={() => handleSendLink()}
-                    disabled={isLoading || resendCountdown > 0}
-                  >
-                    {resendCountdown > 0 ? t.resendCountdown.replace('{seconds}', String(resendCountdown)) : t.resendOtpBtn}
-                  </Button>
-                </div>
-              </div>
+              <Moon className="i" aria-hidden="true" />
             )}
-              </div>
-            </CardContent>
-
-            <CardFooter>
-              <div className="flex w-full items-center justify-between">
-                <span>v3.3.0</span>
-                <Link href="/kulam">{t.adminLink}</Link>
-              </div>
-            </CardFooter>
-          </Card>
+          </button>
         </div>
-      </section>
+      </header>
+
+      <div className="scr-body">
+        <section className="gate-card" aria-label={t.formTitle}>
+          <div className="gate-icon">
+            <MessageSquare className="i" aria-hidden="true" />
+          </div>
+          <h2>{t.formTitle}</h2>
+          <p>{subtitleText}</p>
+
+          {error && (
+            <div className="field-error" role="alert">
+              <AlertCircle aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="btn-google"
+            onClick={handleGoogleAuth}
+            disabled={isGoogleLoading}
+          >
+            {isGoogleLoading ? (
+              <Loader2 className="i animate-spin" aria-hidden="true" />
+            ) : (
+              <svg
+                className="btn-google__icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  className="google-fill-blue"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  className="google-fill-green"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  className="google-fill-yellow"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                />
+                <path
+                  className="google-fill-red"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                />
+              </svg>
+            )}
+            <span>{googleBtnLabel}</span>
+          </button>
+        </section>
+      </div>
     </main>
   )
 }

@@ -159,6 +159,13 @@ export default function AdminPage() {
   const [savingApi, setSavingApi] = useState(false)
   const [apiMessage, setApiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  // Google OAuth Settings states
+  const [googleClientId, setGoogleClientId] = useState('')
+  const [googleClientSecret, setGoogleClientSecret] = useState('')
+  const [hasGoogleSecret, setHasGoogleSecret] = useState(false)
+  const [savingGoogle, setSavingGoogle] = useState(false)
+  const [googleMessage, setGoogleMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
   const loadData = useCallback(async () => {
     setLoadingData(true)
     setDataError('')
@@ -174,6 +181,8 @@ export default function AdminPage() {
         endpoint?: string
         model?: string
         hasApiKey?: boolean
+        googleClientId?: string
+        hasGoogleSecret?: boolean
         error?: string
       } = (await settingsResponse.json().catch(() => ({}))) || {}
       const usage: UsageLog[] | { error: string } = (await usageResponse.json().catch(() => null)) || []
@@ -193,6 +202,9 @@ export default function AdminPage() {
       setApiModel(settings.model || 'gemini-2.5-flash')
       setHasApiKey(Boolean(settings.hasApiKey))
       setApiKeyInput('')
+      setGoogleClientId(settings.googleClientId || '')
+      setHasGoogleSecret(Boolean(settings.hasGoogleSecret))
+      setGoogleClientSecret('')
     } catch (error) {
       console.error('Failed to load admin data:', error)
       setDataError(error instanceof Error ? error.message : 'Không thể tải dữ liệu quản trị.')
@@ -594,13 +606,12 @@ export default function AdminPage() {
     }
   }
 
-  const handleExportPDF = async () => {
+  const handleExportMarkdown = async () => {
     if (!viewingSession) return
     const languageName = getPartnerLanguage(viewingSession.partner_language)?.name || viewingSession.partner_language || 'Tự động'
-    const { downloadSessionPDF } = await import('@/lib/pdf-generator')
-    await downloadSessionPDF(
+    const { downloadSessionMarkdown } = await import('@/lib/pdf-generator')
+    await downloadSessionMarkdown(
       viewingSession.name,
-      viewingSession.partner_language || 'any',
       languageName,
       viewingSession.started_at,
       sessionEntries
@@ -634,6 +645,36 @@ export default function AdminPage() {
     }
   }
 
+  const handleSaveGoogleOAuth = async (event: FormEvent) => {
+    event.preventDefault()
+    setSavingGoogle(true)
+    setGoogleMessage(null)
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_google_oauth',
+          googleClientId: googleClientId.trim(),
+          googleClientSecret:
+            googleClientSecret.trim() || (hasGoogleSecret ? MASKED_API_KEY : ''),
+        }),
+      })
+      const data: { error?: string } = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Không thể lưu cấu hình Google OAuth.')
+      setHasGoogleSecret(true)
+      setGoogleClientSecret('')
+      setGoogleMessage({ type: 'success', text: 'Đã lưu cấu hình Google SSO (OAuth 2.0).' })
+    } catch (error) {
+      setGoogleMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Không thể lưu cấu hình Google OAuth.',
+      })
+    } finally {
+      setSavingGoogle(false)
+    }
+  }
+
   const handleViewUserSessions = (username: string) => {
     setSearchSessionQuery(username)
     setActiveTab('sessions')
@@ -645,297 +686,300 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <main className="admin-login-shell">
-        <section className="admin-login-panel">
-          <div className="admin-login-heading">
-            <span><LockKeyhole aria-hidden="true" /></span>
-            <p className="eyebrow">Khu vực hạn chế</p>
-            <h1>Đăng nhập quản trị</h1>
-            <p>Nhập mật khẩu admin để xem dữ liệu vận hành và cấu hình hệ thống.</p>
-          </div>
-          <form onSubmit={handleLogin}>
-            <label htmlFor="admin-password">Mật khẩu Admin</label>
-            <input id="admin-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
-            {authError && <div className="session-alert session-alert--danger" role="alert"><p>{authError}</p></div>}
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
-              <button type="submit" className="primary-command" disabled={isLoadingAuth}>
-                {isLoadingAuth ? <Loader2 className="animate-spin" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
-                {isLoadingAuth ? 'Đang kiểm tra' : 'Đăng nhập'}
+      <main className="scr-view">
+        <WorkspaceHeader
+          title="Quản trị Hệ thống"
+          subtitle="PayLingo Admin"
+        />
+        <div className="scr-body">
+          <section className="gate-card">
+            <div className="gate-icon">
+              <LockKeyhole className="i" aria-hidden="true" />
+            </div>
+            <h2>Đăng nhập Quản trị</h2>
+            <p>Vui lòng nhập mật khẩu quản trị hoặc xác thực bằng Passkey.</p>
+            <form className="entry-form" onSubmit={handleLogin}>
+              <label htmlFor="admin-password" className="sr-only">Mật khẩu Admin</label>
+              <input
+                id="admin-password"
+                type="password"
+                className="auth-input"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Nhập mật khẩu Admin..."
+                autoComplete="current-password"
+                required
+              />
+              {authError && (
+                <div className="session-alert session-alert--danger" role="alert">
+                  <p>{authError}</p>
+                </div>
+              )}
+
+              <button type="submit" className="btn btn--primary" disabled={isLoadingAuth}>
+                {isLoadingAuth ? <Loader2 className="i animate-spin" aria-hidden="true" /> : <ShieldCheck className="i" aria-hidden="true" />}
+                <span>{isLoadingAuth ? 'Đang kiểm tra...' : 'Đăng nhập Admin'}</span>
               </button>
 
               {passkeySupport && hasPasskeyRegistered && passkeyEnabled && (
-                <button type="button" onClick={handleLoginPasskey} className="primary-command" style={{ background: '#10B981', borderColor: '#10B981' }} disabled={isLoadingAuth}>
-                  <Cpu aria-hidden="true" /> Đăng nhập bằng Passkey (Vân tay/FaceID)
+                <button type="button" onClick={handleLoginPasskey} className="btn btn--outline" disabled={isLoadingAuth}>
+                  <Cpu className="i" aria-hidden="true" />
+                  <span>Đăng nhập bằng Passkey (TouchID / FaceID)</span>
                 </button>
               )}
-            </div>
-          </form>
-          <button type="button" className="back-link" onClick={() => router.push('/')}>
-            Trở về ứng dụng
-          </button>
-        </section>
+
+              <button type="button" className="btn btn--sm btn--outline" onClick={() => router.push('/')}>
+                <span>Trở về ứng dụng</span>
+              </button>
+            </form>
+          </section>
+        </div>
       </main>
     )
   }
 
   return (
-    <div className="workspace-shell">
+    <div className="scr-view">
       <WorkspaceHeader
-        title="Bảng điều khiển"
+        title="Bảng điều khiển Quản trị"
         subtitle="Quản trị hệ thống PayLingo"
-        actions={<button type="button" onClick={handleLogout} aria-label="Đăng xuất quản trị" title="Đăng xuất"><LogOut aria-hidden="true" /></button>}
+        actions={
+          <button type="button" className="btn btn--sm btn--danger" onClick={handleLogout} aria-label="Đăng xuất quản trị" title="Đăng xuất">
+            <LogOut className="i" aria-hidden="true" />
+            <span>Đăng xuất</span>
+          </button>
+        }
       />
-      <main className="admin-main">
-        <section className="admin-overview" style={{ marginBottom: '24px' }}>
-          <div>
-            <p className="eyebrow">Thống Kê Tài Nguyên</p>
-            <h2>Tổng Quan Vận Hành Hệ Thống</h2>
-            <p>Dữ liệu hợp nhất mức độ sử dụng cơ sở dữ liệu Supabase, Cloudflare hosting tĩnh, Soniox Speech-to-Text và dịch vụ AI.</p>
-          </div>
-          <div className="admin-metrics" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-            <div style={{ padding: '16px', background: 'var(--surface-muted)', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Hoạt động & Dịch</span>
-                <Users size={14} style={{ color: 'var(--primary)' }} />
+      <main className="scr-body">
+        <div className="scr-wrap">
+          <section className="kpi-grid" aria-label="Chỉ số vận hành hệ thống">
+            <div className="kpi-card">
+              <div className="kpi-card__lbl">
+                <span>Hoạt động &amp; Dịch</span>
+                <Users size={15} />
               </div>
-              <strong style={{ fontSize: '18px', display: 'block', color: 'var(--foreground)' }}>
+              <div className="kpi-card__val">
                 {userRankingList.length} user / {globalSessions.length} phiên
-              </strong>
-              <span style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                <Clock size={10} /> {formatDuration(dashboardStats.totalDuration)} dịch thoại
-              </span>
+              </div>
+              <div className="kpi-card__sub">
+                <Clock size={11} /> {formatDuration(dashboardStats.totalDuration)} dịch thoại
+              </div>
             </div>
 
-            <div style={{ padding: '16px', background: 'var(--surface-muted)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Supabase (Database)</span>
-                <Database size={14} style={{ color: '#3B82F6' }} />
+            <div className="kpi-card">
+              <div className="kpi-card__lbl">
+                <span>Cloudflare D1 (SQLite)</span>
+                <Database size={15} />
               </div>
-              <strong style={{ fontSize: '18px', display: 'block', color: 'var(--foreground)' }}>
+              <div className="kpi-card__val">
                 {dashboardStats.totalSupaStorageKB < 1024 ? `${dashboardStats.totalSupaStorageKB.toFixed(1)} KB` : `${(dashboardStats.totalSupaStorageKB / 1024).toFixed(2)} MB`}
-              </strong>
-              <span style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
-                Băng thông Egress: {dashboardStats.totalSupaEgressKB < 1024 ? `${dashboardStats.totalSupaEgressKB.toFixed(1)} KB` : `${(dashboardStats.totalSupaEgressKB / 1024).toFixed(2)} MB`}
-              </span>
+              </div>
+              <div className="kpi-card__sub">
+                Băng thông D1: {dashboardStats.totalSupaEgressKB < 1024 ? `${dashboardStats.totalSupaEgressKB.toFixed(1)} KB` : `${(dashboardStats.totalSupaEgressKB / 1024).toFixed(2)} MB`}
+              </div>
             </div>
 
-            <div style={{ padding: '16px', background: 'var(--surface-muted)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Cloudflare (Hosting)</span>
-                <Wifi size={14} style={{ color: '#10B981' }} />
+            <div className="kpi-card">
+              <div className="kpi-card__lbl">
+                <span>Cloudflare Edge Worker</span>
+                <Wifi size={15} />
               </div>
-              <strong style={{ fontSize: '18px', display: 'block', color: 'var(--foreground)' }}>
+              <div className="kpi-card__val">
                 {dashboardStats.totalCFEgressMB < 1024 ? `${dashboardStats.totalCFEgressMB.toFixed(1)} MB` : `${(dashboardStats.totalCFEgressMB / 1024).toFixed(2)} GB`}
-              </strong>
-              <span style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
-                Dung lượng tĩnh: 2.8 MB (Unlimited)
-              </span>
+              </div>
+              <div className="kpi-card__sub">
+                Bundle Edge: &lt; 3.0 MiB (Edge Runtime)
+              </div>
             </div>
 
-            <div style={{ padding: '16px', background: 'var(--surface-muted)', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>Chi phí vận hành</span>
-                <Coins size={14} style={{ color: '#F59E0B' }} />
+            <div className="kpi-card">
+              <div className="kpi-card__lbl">
+                <span>Chi phí vận hành</span>
+                <Coins size={15} />
               </div>
-              <strong style={{ fontSize: '18px', display: 'block', color: 'var(--foreground)' }}>
+              <div className="kpi-card__val">
                 ${dashboardStats.totalOpsCostUSD.toFixed(3)}
-              </strong>
-              <span style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginTop: '4px', fontWeight: 'bold' }}>
-                Quy đổi: {Math.round(dashboardStats.totalOpsCostUSD * 25400).toLocaleString('vi-VN')} VNĐ
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <nav className="admin-tabs" aria-label="Khu vực quản trị">
-          {([
-            ['dashboard', 'Tổng quan & Xếp hạng', BarChart3],
-            ['sessions', 'Hội thoại', Database],
-            ['usage', 'Mức sử dụng AI', Cpu],
-            ['api-settings', 'Cấu hình hệ thống', Settings],
-          ] as const).map(([value, label, Icon]) => (
-            <button type="button" key={value} className={activeTab === value ? 'is-active' : ''} onClick={() => setActiveTab(value)}>
-              <Icon aria-hidden="true" />{label}
-            </button>
-          ))}
-        </nav>
-
-        {dataError && <div className="session-alert session-alert--danger" role="alert"><p>{dataError}</p></div>}
-
-        {loadingData ? (
-          <div className="admin-loading"><Loader2 className="animate-spin" aria-hidden="true" /><span>Đang tải dữ liệu</span></div>
-        ) : activeTab === 'dashboard' ? (
-          <section className="admin-section">
-            <header>
-              <div>
-                <h3>Xếp Hạng Người Dùng & Lưu Lượng Tài Nguyên</h3>
-                <p>Thống kê chi tiết tài nguyên sử dụng, lưu lượng băng thông, token và chi phí quy đổi theo từng người dùng.</p>
               </div>
-              <span>{userRankingList.length} thành viên</span>
-            </header>
-            
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '40px', paddingLeft: '16px' }}>STT</th>
-                    <th>Tên người dùng</th>
-                    <th style={{ textAlign: 'center' }}>Lượt dùng</th>
-                    <th style={{ textAlign: 'center' }}>Hội thoại</th>
-                    <th>Tổng thời lượng</th>
-                    <th>Supabase (DB / Băng thông)</th>
-                    <th>Cloudflare (Web / Băng thông)</th>
-                    <th style={{ textAlign: 'right' }}>AI Tokens</th>
-                    <th style={{ textAlign: 'right', paddingRight: '16px' }}>Chi phí ước tính ($ / VND)</th>
-                    <th>Hành động</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {userRankingList.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="table-empty">Chưa có dữ liệu thống kê người dùng</td>
-                    </tr>
-                  ) : (
-                    userRankingList.map((row, index) => (
-                      <tr key={row.username}>
-                        <td style={{ fontWeight: 'bold', color: 'var(--text-muted)', paddingLeft: '16px' }}>
-                          {index + 1}
-                        </td>
-                        <td>
-                          <span className="user-mark" style={{
-                            background: index === 0 ? 'var(--primary-soft)' : 'var(--surface-muted)',
-                            color: index === 0 ? 'var(--primary)' : 'var(--text-muted)'
-                          }}>
-                            {row.username.slice(0, 2).toUpperCase()}
-                          </span>
-                          <strong>{row.username}</strong>
-                        </td>
-                        <td style={{ textAlign: 'center' }}>{row.totalSessions}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span style={{ 
-                            color: row.conversationsCount > 0 ? 'var(--primary)' : 'var(--text-muted)',
-                            fontWeight: row.conversationsCount > 0 ? 'bold' : 'normal'
-                          }}>
-                            {row.conversationsCount}
-                          </span>
-                        </td>
-                        <td>{formatDurationShort(row.totalDurationSeconds)}</td>
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '9px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#3B82F6' }}></span>
-                              Size: <b>{row.supabaseStorageKB < 1024 ? `${row.supabaseStorageKB.toFixed(1)} KB` : `${(row.supabaseStorageKB/1024).toFixed(2)} MB`}</b>
-                            </span>
-                            <span style={{ fontSize: '9px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#EF4444' }}></span>
-                              Egress: <b>{row.supabaseBandwidthKB < 1024 ? `${row.supabaseBandwidthKB.toFixed(1)} KB` : `${(row.supabaseBandwidthKB/1024).toFixed(2)} MB`}</b>
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '9px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: 'var(--text-muted)' }}>
-                              Size: <i>{row.cloudflareStorage}</i>
-                            </span>
-                            <span style={{ fontSize: '9px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#10B981' }}></span>
-                              Egress: <b>{row.cloudflareBandwidthMB.toFixed(1)} MB</b>
-                            </span>
-                          </div>
-                        </td>
-                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-app-mono), monospace', fontSize: '9px' }}>
-                          {row.tokensUsed > 0 ? row.tokensUsed.toLocaleString() : '-'}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 'bold', color: row.estimatedCostUSD > 0 ? 'var(--foreground)' : 'var(--text-muted)', paddingRight: '16px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                            <span>${row.estimatedCostUSD.toFixed(3)}</span>
-                            <span style={{ fontSize: '8px', color: 'var(--text-muted)', fontWeight: 'normal' }}>
-                              ({Math.round(row.estimatedCostUSD * 25400).toLocaleString('vi-VN')}đ)
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <button type="button" onClick={() => handleViewUserSessions(row.username)}>Xem phiên</button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+              <div className="kpi-card__sub">
+                Quy đổi: {Math.round(dashboardStats.totalOpsCostUSD * 25400).toLocaleString('vi-VN')} VNĐ
+              </div>
             </div>
           </section>
-        ) : activeTab === 'sessions' ? (
-          <section className="admin-section">
-            <header><div><h3>Hội thoại toàn hệ thống</h3><p>Mở transcript, xuất PDF hoặc xóa dữ liệu.</p></div><div className="table-search"><Search aria-hidden="true" /><input type="search" value={searchSessionQuery} onChange={(event) => setSearchSessionQuery(event.target.value)} placeholder="Tên phiên hoặc người dùng" aria-label="Tìm hội thoại" /></div></header>
-            <div className="table-wrap"><table className="data-table"><thead><tr><th>Người dùng</th><th>Hội thoại</th><th>Ngôn ngữ</th><th>Thời lượng</th><th>Thời gian</th><th><span className="sr-only">Hành động</span></th></tr></thead><tbody>
-              {filteredSessions.length === 0 ? <tr><td colSpan={6} className="table-empty">Không tìm thấy hội thoại</td></tr> : filteredSessions.map((session) => {
-                const language = getPartnerLanguage(session.partner_language)
-                return <tr key={session.id}><td>{session.username || 'Khách'}</td><td><strong>{session.name}</strong></td><td><span className="language-inline"><b>{language?.shortName || (session.partner_language ? session.partner_language.toUpperCase() : 'AUTO')}</b>{language?.name || session.partner_language || 'Tự động'}</span></td><td>{formatDuration(session.duration_seconds)}</td><td>{new Date(session.started_at).toLocaleString('vi-VN')}</td><td><button type="button" onClick={() => void handleOpenSession(session)}>Mở</button></td></tr>
-              })}
-            </tbody></table></div>
-          </section>
-        ) : activeTab === 'usage' ? (
-          <section className="admin-section">
-            <header><div><h3>Mức sử dụng AI</h3><p>{dashboardStats.totalAItokens.toLocaleString()} token trong {usageLogs.length} lượt tóm tắt.</p></div><span>${dashboardStats.totalAIcost.toFixed(5)}</span></header>
-            <div className="table-wrap"><table className="data-table"><thead><tr><th>Người dùng</th><th>Model</th><th>Prompt</th><th>Hoàn thành</th><th>Tổng token</th><th>Chi phí</th><th>Thời gian</th></tr></thead><tbody>
-              {usageLogs.length === 0 ? <tr><td colSpan={7} className="table-empty">Chưa có dữ liệu sử dụng AI</td></tr> : usageLogs.map((log) => <tr key={log.id}><td>{log.username}</td><td><strong>{log.model}</strong></td><td>{log.prompt_tokens.toLocaleString()}</td><td>{log.completion_tokens.toLocaleString()}</td><td>{(log.prompt_tokens + log.completion_tokens).toLocaleString()}</td><td>${Number(log.cost_usd).toFixed(5)}</td><td>{new Date(log.created_at).toLocaleString('vi-VN')}</td></tr>)}
-            </tbody></table></div>
-          </section>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', width: 'min(100%, 620px)', margin: '10px auto 0' }}>
-            <section className="api-settings-section" style={{ width: '100%', margin: 0 }}>
-              <header><span><Cpu aria-hidden="true" /></span><div><h3>Cấu hình dịch vụ AI</h3><p>Áp dụng cho tính năng tóm tắt hội thoại và thư mục.</p></div></header>
-              <form onSubmit={handleSaveApiSettings}>
-                <label htmlFor="api-provider">Nhà cung cấp</label>
-                <select id="api-provider" value={apiProvider} onChange={(event) => { const provider = event.target.value as ApiProvider; setApiProvider(provider); setApiModel(provider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4.1-mini') }}><option value="gemini">Google Gemini</option><option value="openai">OpenAI hoặc endpoint tương thích</option></select>
-                {apiProvider === 'openai' && <><label htmlFor="api-endpoint">Endpoint HTTPS</label><input id="api-endpoint" type="url" value={apiEndpoint} onChange={(event) => setApiEndpoint(event.target.value)} placeholder="https://api.openai.com/v1" required /></>}
-                <label htmlFor="api-model">Tên model</label><input id="api-model" value={apiModel} onChange={(event) => setApiModel(event.target.value)} required maxLength={200} />
-                <label htmlFor="api-key"><KeyRound aria-hidden="true" /> API key</label>
-                <input id="api-key" type="password" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} placeholder={hasApiKey ? 'Đã cấu hình. Nhập khóa mới để thay thế.' : 'Nhập API key'} autoComplete="new-password" required={!hasApiKey} maxLength={1000} />
-                <p className="field-note">Khóa hiện tại không được gửi lại trình duyệt. Để trống nếu chỉ cập nhật provider, endpoint hoặc model.</p>
-                {apiMessage && <div className={`session-alert session-alert--${apiMessage.type === 'success' ? 'success' : 'danger'}`} role="status">{apiMessage.type === 'success' && <Check aria-hidden="true" />}<p>{apiMessage.text}</p></div>}
-                <button type="submit" className="primary-command" disabled={savingApi}>{savingApi ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Settings aria-hidden="true" />}{savingApi ? 'Đang lưu' : 'Lưu cấu hình'}</button>
-              </form>
-            </section>
 
-            <section className="api-settings-section" style={{ width: '100%', margin: 0 }}>
-              <header><span><LockKeyhole aria-hidden="true" /></span><div><h3>Bảo mật & Passkey</h3><p>Thay đổi mật khẩu đăng nhập admin và thiết lập đăng nhập bằng sinh trắc học thiết bị.</p></div></header>
-              <div style={{ gridColumn: '2' }}>
-                <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '24px', marginBottom: '24px' }}>
+          <nav className="seg" aria-label="Khu vực quản trị">
+            {([
+              ['dashboard', 'Tổng quan & Xếp hạng', BarChart3],
+              ['sessions', 'Hội thoại toàn hệ thống', Database],
+              ['usage', 'Mức sử dụng AI', Cpu],
+              ['api-settings', 'Cấu hình hệ thống & Passkey', Settings],
+            ] as const).map(([value, label, Icon]) => (
+              <button
+                type="button"
+                key={value}
+                className={`seg__btn ${activeTab === value ? 'is-active' : ''}`}
+                aria-pressed={activeTab === value}
+                onClick={() => setActiveTab(value)}
+              >
+                <Icon className="i" aria-hidden="true" />
+                <span className="seg__label">{label}</span>
+              </button>
+            ))}
+          </nav>
+
+          {dataError && <div className="session-alert session-alert--danger" role="alert"><p>{dataError}</p></div>}
+
+          {loadingData ? (
+            <div className="g-card list-empty"><Loader2 className="i animate-spin" aria-hidden="true" /><span>Đang tải dữ liệu...</span></div>
+          ) : activeTab === 'dashboard' ? (
+            <section className="g-card">
+              <div className="g-head">
+                <div>
+                  <h3 className="g-title">Xếp Hạng Người Dùng &amp; Lưu Lượng Tài Nguyên</h3>
+                  <p>Thống kê chi tiết tài nguyên sử dụng, lưu lượng băng thông D1, token AI và chi phí quy đổi theo từng người dùng.</p>
+                </div>
+                <span className="meta-pill">{userRankingList.length} thành viên</span>
+              </div>
+
+              <div className="adm-table-wrap">
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      <th>STT</th>
+                      <th>Tên người dùng</th>
+                      <th>Lượt dùng</th>
+                      <th>Hội thoại</th>
+                      <th>Tổng thời lượng</th>
+                      <th>Cloudflare D1 (DB / Egress)</th>
+                      <th>Cloudflare Edge (Web)</th>
+                      <th>AI Tokens</th>
+                      <th>Chi phí ước tính ($ / VND)</th>
+                      <th>Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userRankingList.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="table-empty">Chưa có dữ liệu thống kê người dùng</td>
+                      </tr>
+                    ) : (
+                      userRankingList.map((row, index) => (
+                        <tr key={row.username}>
+                          <td>{index + 1}</td>
+                          <td>
+                            <strong>{row.username}</strong>
+                          </td>
+                          <td>{row.totalSessions}</td>
+                          <td>{row.conversationsCount}</td>
+                          <td>{formatDurationShort(row.totalDurationSeconds)}</td>
+                          <td>
+                            Size: <b>{row.supabaseStorageKB < 1024 ? `${row.supabaseStorageKB.toFixed(1)} KB` : `${(row.supabaseStorageKB / 1024).toFixed(2)} MB`}</b> · Egress: <b>{row.supabaseBandwidthKB < 1024 ? `${row.supabaseBandwidthKB.toFixed(1)} KB` : `${(row.supabaseBandwidthKB / 1024).toFixed(2)} MB`}</b>
+                          </td>
+                          <td>
+                            {row.cloudflareStorage} · <b>{row.cloudflareBandwidthMB.toFixed(1)} MB</b>
+                          </td>
+                          <td>{row.tokensUsed > 0 ? row.tokensUsed.toLocaleString() : '-'}</td>
+                          <td>
+                            <b>${row.estimatedCostUSD.toFixed(3)}</b> ({Math.round(row.estimatedCostUSD * 25400).toLocaleString('vi-VN')}đ)
+                          </td>
+                          <td>
+                            <button type="button" className="btn btn--sm btn--outline" onClick={() => handleViewUserSessions(row.username)}>Xem phiên</button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : activeTab === 'sessions' ? (
+            <section className="g-card">
+              <div className="g-head">
+                <div>
+                  <h3 className="g-title">Hội thoại toàn hệ thống</h3>
+                  <p>Mở transcript, xuất Markdown hoặc xóa dữ liệu.</p>
+                </div>
+                <div className="search">
+                  <Search className="i" aria-hidden="true" />
+                  <input type="search" value={searchSessionQuery} onChange={(event) => setSearchSessionQuery(event.target.value)} placeholder="Tên phiên hoặc người dùng..." aria-label="Tìm hội thoại" />
+                </div>
+              </div>
+              <div className="adm-table-wrap"><table className="adm-table"><thead><tr><th>Người dùng</th><th>Hội thoại</th><th>Ngôn ngữ</th><th>Thời lượng</th><th>Thời gian</th><th><span className="sr-only">Hành động</span></th></tr></thead><tbody>
+                {filteredSessions.length === 0 ? <tr><td colSpan={6} className="table-empty">Không tìm thấy hội thoại</td></tr> : filteredSessions.map((session) => {
+                  const language = getPartnerLanguage(session.partner_language)
+                  return <tr key={session.id}><td>{session.username || 'Khách'}</td><td><strong>{session.name}</strong></td><td><span className="meta-pill"><b>{language?.shortName || (session.partner_language ? session.partner_language.toUpperCase() : 'AUTO')}</b> {language?.name || session.partner_language || 'Tự động'}</span></td><td>{formatDuration(session.duration_seconds)}</td><td>{new Date(session.started_at).toLocaleString('vi-VN')}</td><td><button type="button" className="btn btn--sm btn--outline" onClick={() => void handleOpenSession(session)}>Mở</button></td></tr>
+                })}
+              </tbody></table></div>
+            </section>
+          ) : activeTab === 'usage' ? (
+            <section className="g-card">
+              <div className="g-head"><div><h3 className="g-title">Mức sử dụng AI</h3><p>{dashboardStats.totalAItokens.toLocaleString()} token trong {usageLogs.length} lượt tóm tắt.</p></div><span className="meta-pill">${dashboardStats.totalAIcost.toFixed(5)}</span></div>
+              <div className="adm-table-wrap"><table className="adm-table"><thead><tr><th>Người dùng</th><th>Model</th><th>Prompt</th><th>Hoàn thành</th><th>Tổng token</th><th>Chi phí</th><th>Thời gian</th></tr></thead><tbody>
+                {usageLogs.length === 0 ? <tr><td colSpan={7} className="table-empty">Chưa có dữ liệu sử dụng AI</td></tr> : usageLogs.map((log) => <tr key={log.id}><td>{log.username}</td><td><strong>{log.model}</strong></td><td>{log.prompt_tokens.toLocaleString()}</td><td>{log.completion_tokens.toLocaleString()}</td><td>{(log.prompt_tokens + log.completion_tokens).toLocaleString()}</td><td>${Number(log.cost_usd).toFixed(5)}</td><td>{new Date(log.created_at).toLocaleString('vi-VN')}</td></tr>)}
+              </tbody></table></div>
+            </section>
+          ) : (
+            <div className="scr-wrap">
+              <section className="g-card">
+                <div className="g-head"><div><h3 className="g-title">Cấu hình dịch vụ AI</h3><p>Áp dụng cho tính năng tóm tắt hội thoại và thư mục.</p></div></div>
+                <form className="entry-form" onSubmit={handleSaveApiSettings}>
+                  <label htmlFor="api-provider">Nhà cung cấp</label>
+                  <select id="api-provider" className="set-select" value={apiProvider} onChange={(event) => { const provider = event.target.value as ApiProvider; setApiProvider(provider); setApiModel(provider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4.1-mini') }}><option value="gemini">Google Gemini</option><option value="openai">OpenAI hoặc endpoint tương thích</option></select>
+                  {apiProvider === 'openai' && <><label htmlFor="api-endpoint">Endpoint HTTPS</label><input id="api-endpoint" className="auth-input" type="url" value={apiEndpoint} onChange={(event) => setApiEndpoint(event.target.value)} placeholder="https://api.openai.com/v1" required /></>}
+                  <label htmlFor="api-model">Tên model</label><input id="api-model" className="auth-input" value={apiModel} onChange={(event) => setApiModel(event.target.value)} required maxLength={200} />
+                  <label htmlFor="api-key"><KeyRound aria-hidden="true" /> API key</label>
+                  <input id="api-key" className="auth-input" type="password" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} placeholder={hasApiKey ? 'Đã cấu hình. Nhập khóa mới để thay thế.' : 'Nhập API key'} autoComplete="new-password" required={!hasApiKey} maxLength={1000} />
+                  <p className="field-note">Khóa hiện tại không được gửi lại trình duyệt. Để trống nếu chỉ cập nhật provider, endpoint hoặc model.</p>
+                  {apiMessage && <div className={`session-alert session-alert--${apiMessage.type === 'success' ? 'success' : 'danger'}`} role="status">{apiMessage.type === 'success' && <Check aria-hidden="true" />}<p>{apiMessage.text}</p></div>}
+                  <button type="submit" className="btn btn--primary" disabled={savingApi}>{savingApi ? <Loader2 className="i animate-spin" aria-hidden="true" /> : <Settings className="i" aria-hidden="true" />}<span>{savingApi ? 'Đang lưu' : 'Lưu cấu hình'}</span></button>
+                </form>
+              </section>
+
+              <section className="g-card">
+                <div className="g-head"><div><h3 className="g-title">Cấu hình Google SSO (OAuth 2.0)</h3><p>Cho phép người dùng đăng nhập và đăng ký bằng tài khoản Google (PKCE S256). Redirect URI: <code>/api/auth/google/callback</code></p></div></div>
+                <form className="entry-form" onSubmit={handleSaveGoogleOAuth}>
+                  <label htmlFor="google-client-id">Google Client ID</label>
+                  <input id="google-client-id" className="auth-input" type="text" value={googleClientId} onChange={(event) => setGoogleClientId(event.target.value)} placeholder="xxxx.apps.googleusercontent.com" required maxLength={300} />
+                  <label htmlFor="google-client-secret"><KeyRound aria-hidden="true" /> Google Client Secret</label>
+                  <input id="google-client-secret" className="auth-input" type="password" value={googleClientSecret} onChange={(event) => setGoogleClientSecret(event.target.value)} placeholder={hasGoogleSecret ? 'Đã cấu hình. Nhập secret mới để thay thế.' : 'GOCSPX-...'} autoComplete="new-password" required={!hasGoogleSecret} maxLength={500} />
+                  <p className="field-note">Có thể cấu hình tại đây hoặc qua biến môi trường <code>GOOGLE_CLIENT_ID</code> &amp; <code>GOOGLE_CLIENT_SECRET</code> trên Cloudflare Pages.</p>
+                  {googleMessage && <div className={`session-alert session-alert--${googleMessage.type === 'success' ? 'success' : 'danger'}`} role="status">{googleMessage.type === 'success' && <Check aria-hidden="true" />}<p>{googleMessage.text}</p></div>}
+                  <button type="submit" className="btn btn--primary" disabled={savingGoogle}>{savingGoogle ? <Loader2 className="i animate-spin" aria-hidden="true" /> : <Settings className="i" aria-hidden="true" />}<span>{savingGoogle ? 'Đang lưu' : 'Lưu cấu hình Google SSO'}</span></button>
+                </form>
+              </section>
+
+              <section className="g-card">
+                <div className="g-head"><div><h3 className="g-title">Bảo mật &amp; Passkey</h3><p>Thay đổi mật khẩu đăng nhập admin và thiết lập đăng nhập bằng sinh trắc học thiết bị.</p></div></div>
+                <form className="entry-form" onSubmit={handleChangePassword}>
                   <label htmlFor="new-password">Mật khẩu mới</label>
-                  <input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={12} placeholder="Tối thiểu 12 ký tự" />
+                  <input id="new-password" className="auth-input" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={12} placeholder="Tối thiểu 12 ký tự" />
                   <label htmlFor="confirm-password">Xác nhận mật khẩu mới</label>
-                  <input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={12} placeholder="Nhập lại mật khẩu mới (tối thiểu 12 ký tự)" />
+                  <input id="confirm-password" className="auth-input" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={12} placeholder="Nhập lại mật khẩu mới (tối thiểu 12 ký tự)" />
                   {pwdMessage && <div className={`session-alert session-alert--${pwdMessage.type === 'success' ? 'success' : 'danger'}`} role="status"><p>{pwdMessage.text}</p></div>}
-                  <button type="submit" className="primary-command" disabled={savingPwd}>{savingPwd ? <Loader2 className="animate-spin" aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}{savingPwd ? 'Đang lưu' : 'Cập nhật mật khẩu'}</button>
+                  <button type="submit" className="btn btn--primary" disabled={savingPwd}>{savingPwd ? <Loader2 className="i animate-spin" aria-hidden="true" /> : <LockKeyhole className="i" aria-hidden="true" />}<span>{savingPwd ? 'Đang lưu' : 'Cập nhật mật khẩu'}</span></button>
                 </form>
 
-                <div>
-                  <h4 style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--foreground)', marginBottom: '8px' }}>Đăng nhập sinh trắc học (Passkey)</h4>
-                  <p className="field-note" style={{ marginBottom: '16px' }}>Đăng nhập nhanh an toàn bằng vân tay (TouchID) hoặc khuôn mặt (FaceID) trên thiết bị của bạn.</p>
-                  
+                <div className="f-box">
+                  <p className="f-box__h">Đăng nhập sinh trắc học (Passkey ECDSA P-256)</p>
+                  <p className="field-note">Đăng nhập nhanh an toàn bằng vân tay (TouchID) hoặc khuôn mặt (FaceID) trên thiết bị của bạn.</p>
                   {passkeySupport ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div className="h-feed__search-row">
                       {hasPasskeyRegistered ? (
                         <>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '9px', color: 'var(--foreground)', fontWeight: 'bold' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: passkeyEnabled ? '#10B981' : '#EF4444' }}></span>
-                            Trạng thái: {passkeyEnabled ? 'Kích hoạt' : 'Tạm dừng'}
-                          </div>
-                          <div style={{ display: 'flex', gap: '10px' }}>
-                            <button type="button" className="primary-command" style={{ background: 'var(--surface-muted)', color: 'var(--foreground)', borderColor: 'var(--border)' }} onClick={() => handleTogglePasskey(!passkeyEnabled)}>
-                              {passkeyEnabled ? 'Tạm ngưng Passkey' : 'Kích hoạt Passkey'}
-                            </button>
-                            <button type="button" className="primary-command is-danger" onClick={handleDeletePasskey}>
-                              Hủy đăng ký Passkey
-                            </button>
-                          </div>
+                          <span className="meta-pill meta-pill--sync">
+                            <i />
+                            <span>Trạng thái: {passkeyEnabled ? 'Kích hoạt' : 'Tạm dừng'}</span>
+                          </span>
+                          <button type="button" className="btn btn--sm btn--outline" onClick={() => handleTogglePasskey(!passkeyEnabled)}>
+                            {passkeyEnabled ? 'Tạm ngưng Passkey' : 'Kích hoạt Passkey'}
+                          </button>
+                          <button type="button" className="btn btn--sm btn--danger" onClick={handleDeletePasskey}>
+                            Hủy đăng ký Passkey
+                          </button>
                         </>
                       ) : (
-                        <button type="button" className="primary-command" style={{ background: '#10B981', borderColor: '#10B981' }} onClick={handleRegisterPasskey} disabled={registeringPasskey}>
-                          {registeringPasskey ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Cpu aria-hidden="true" />}
-                          {registeringPasskey ? 'Đang liên kết...' : 'Liên kết Passkey cho thiết bị này'}
+                        <button type="button" className="btn btn--sm btn--outline" onClick={handleRegisterPasskey} disabled={registeringPasskey}>
+                          {registeringPasskey ? <Loader2 className="i animate-spin" aria-hidden="true" /> : <Cpu className="i" aria-hidden="true" />}
+                          <span>{registeringPasskey ? 'Đang liên kết...' : 'Liên kết Passkey'}</span>
                         </button>
                       )}
                       {passkeyMessage && <div className={`session-alert session-alert--${passkeyMessage.type === 'success' ? 'success' : 'danger'}`} role="status"><p>{passkeyMessage.text}</p></div>}
@@ -944,16 +988,16 @@ export default function AdminPage() {
                     <div className="session-alert session-alert--danger"><p>Trình duyệt hoặc thiết bị này không hỗ trợ API Passkey (WebAuthn).</p></div>
                   )}
                 </div>
-              </div>
-            </section>
-          </div>
-        )}
+              </section>
+            </div>
+          )}
+        </div>
       </main>
 
       {viewingSession && (
         <div className="dialog-backdrop" role="presentation">
           <section className="admin-session-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-session-title">
-            <header><div><h2 id="admin-session-title">{viewingSession.name}</h2><p>{viewingSession.username || 'Khách'} · {new Date(viewingSession.started_at).toLocaleString('vi-VN')}</p></div><div><button type="button" onClick={handleExportPDF} aria-label="Xuất PDF" title="Xuất PDF"><Download aria-hidden="true" /></button><button type="button" className="is-danger" onClick={handleDeleteSession} aria-label="Xóa hội thoại" title="Xóa"><Trash2 aria-hidden="true" /></button><button type="button" onClick={() => setViewingSession(null)} aria-label="Đóng"><X aria-hidden="true" /></button></div></header>
+            <header><div><h2 id="admin-session-title">{viewingSession.name}</h2><p>{viewingSession.username || 'Khách'} · {new Date(viewingSession.started_at).toLocaleString('vi-VN')}</p></div><div><button type="button" onClick={handleExportMarkdown} aria-label="Xuất Markdown" title="Xuất Markdown (.md)"><Download aria-hidden="true" /></button><button type="button" className="is-danger" onClick={handleDeleteSession} aria-label="Xóa hội thoại" title="Xóa"><Trash2 aria-hidden="true" /></button><button type="button" onClick={() => setViewingSession(null)} aria-label="Đóng"><X aria-hidden="true" /></button></div></header>
             <div className="admin-transcript">
               {loadingEntries ? <div className="admin-loading"><Loader2 className="animate-spin" aria-hidden="true" /></div> : sessionEntries.length === 0 ? <div className="transcript-archive__empty"><Volume2 aria-hidden="true" /><strong>Không có transcript</strong></div> : sessionEntries.map((entry) => {
                 const language = getPartnerLanguage(viewingSession.partner_language)

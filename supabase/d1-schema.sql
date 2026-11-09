@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS transcript_entries (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     speaker TEXT NOT NULL CHECK (speaker IN ('host', 'partner')),
+    speaker_label TEXT,
     original_text TEXT NOT NULL,
     translated_text TEXT NOT NULL,
     start_ms INTEGER NOT NULL DEFAULT 0,
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS session_summaries (
     id TEXT PRIMARY KEY,
     session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
     folder_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
+    owner_id TEXT,
     summary_text TEXT NOT NULL,
     style TEXT NOT NULL DEFAULT 'standard',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -98,6 +100,17 @@ CREATE TABLE IF NOT EXISTS session_summaries (
 
 CREATE INDEX IF NOT EXISTS idx_session_summaries_session ON session_summaries(session_id);
 CREATE INDEX IF NOT EXISTS idx_session_summaries_folder ON session_summaries(folder_id);
+CREATE INDEX IF NOT EXISTS idx_session_summaries_owner_created ON session_summaries(owner_id, created_at);
+
+CREATE TABLE IF NOT EXISTS ai_rate_limits (
+    id TEXT PRIMARY KEY,
+    ip TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_rate_limits_ip_created ON ai_rate_limits(ip, created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_rate_limits_user_created ON ai_rate_limits(user_id, created_at);
 
 CREATE TABLE IF NOT EXISTS shared_summaries (
     id TEXT PRIMARY KEY,

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { destroySession, AUTH_COOKIE_NAME } from '@/lib/auth/session'
+import { GOOGLE_PROFILE_COOKIE } from '@/lib/auth/google-oauth'
 
 export const runtime = 'edge'
 
@@ -37,6 +38,15 @@ export async function POST(request: Request) {
     })
     response.cookies.set({
       name: AUTH_COOKIE_NAME,
+      value: '',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    })
+    response.cookies.set({
+      name: GOOGLE_PROFILE_COOKIE,
       value: '',
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

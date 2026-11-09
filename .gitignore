@@ -50,6 +50,7 @@ yarn-error.log*
 # local d1/sqlite
 .data/
 supabase/.temp/
+.hallmark/
 
 # typescript
 *.tsbuildinfo

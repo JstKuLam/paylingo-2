@@ -52,3 +52,20 @@ test('auth session operations use atomic batch creation, replay-proof token dele
   // Purges expired sessions on signout
   assert.match(sessionModule, /DELETE FROM auth_sessions WHERE token = \? OR datetime\(expires_at\) < datetime\(\\?'now\\?'\)/)
 })
+
+test('POST /api/auth/me preserves valid cookie user X when client sends new userId R (Safari ITP recovery) and rotates unverified existing UUIDs', async () => {
+  const meRoute = await readFile(
+    new URL('../src/app/api/auth/me/route.ts', import.meta.url),
+    'utf8',
+  )
+
+  // Case 1: requestedRecord verified by cookie or matching deviceTag
+  assert.match(meRoute, /if \(requestedRecord && \(isSameAuthenticatedCookie \|\| hasMatchingDeviceTag\)\)/)
+
+  // Case 2: Valid cookie X preserved with rotated: true when requestedUserId R is brand-new after storage eviction
+  assert.match(meRoute, /else if \(existingUser\)[\s\S]*?userId = existingUser\.id[\s\S]*?rotated = Boolean\(requestedUserId && requestedUserId !== existingUser\.id\)/)
+
+  // Case 3: Unverified existing requestedRecord rotates to a fresh UUID
+  assert.match(meRoute, /else if \(requestedRecord\)[\s\S]*?userId = crypto\.randomUUID\(\)[\s\S]*?rotated = true/)
+})
+

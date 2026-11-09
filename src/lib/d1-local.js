@@ -35,6 +35,11 @@ function getLocalD1() {
       console.warn('Local SQLite initialization notice:', e)
     }
   }
+  try {
+    sqlite.exec('ALTER TABLE transcript_entries ADD COLUMN speaker_label TEXT;')
+  } catch {
+    // Column already exists
+  }
 
   const d1Wrapper = {
     prepare(query) {

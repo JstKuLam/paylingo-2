@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:pages": "npx @cloudflare/next-on-pages && git checkout public/_routes.json && cp public/_routes.json .vercel/output/static/_routes.json",
+    "build:pages": "npx @cloudflare/next-on-pages && node scripts/inject-ws-proxy.mjs && git checkout public/_routes.json && cp public/_routes.json .vercel/output/static/_routes.json",
     "start": "next start",
     "lint": "eslint",
     "test": "node --test --experimental-strip-types tests/*.test.mjs"
@@ -14,8 +14,6 @@
     "@base-ui/react": "^1.5.0",
     "@soniox/node": "^2.3.0",
     "@soniox/react": "^2.3.0",
-    "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.106.2",
     "@types/nodemailer": "^8.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

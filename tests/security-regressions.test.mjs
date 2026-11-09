@@ -236,7 +236,7 @@ test('session lifecycle cleans up aborted sessions and finalizes unexpected stop
   assert.match(lifecycle, /wasActiveRef\.current && !isActive && activeSessionRef\.current/)
 
   // Starting state disables partner selector to prevent mid-handshake unmount
-  assert.match(sessionPage, /disabled=\{isActive \|\| isStarting \|\| recordingMode === 'one_way'\}/)
+  assert.match(sessionPage, /canChangeLang=\{!effectiveActive && !isStarting\}|disabled=\{isActive \|\| isStarting/)
 
   // Recording errors are captured and rendered in the alert stack
   assert.match(sessionPage, /error:\s*recordingError/)
@@ -877,6 +877,154 @@ test('SMTP transport bounds buffer size, cancels edge reader, and enforces conne
   assert.match(smtp, /setTimeout\([\s\S]*?15_000\)/)
   assert.match(smtp, /SMTP connection timed out/)
 })
+
+test('UI flags have bounded SVG/IMG dimensions, UI languages use single dropdown, layout defaults by viewport, and history supports direct inline edit without h-card__pair', async () => {
+  const languageFlag = await source('src/components/LanguageFlag.tsx')
+  const languageSwitcher = await source('src/components/LanguageSwitcher.tsx')
+  const sessionPage = await source('src/app/session/page.tsx')
+  const historyPage = await source('src/app/history/page.tsx')
+  const sessionDetail = await source('src/app/history/sessions/[id]/SessionDetailClient.tsx')
+
+  // LanguageFlag uses explicit width and height on both the globe SVG and HatScripts circle-flags IMG
+  const svgMatches = languageFlag.match(/<svg\b[^>]*>/g) || []
+  assert.ok(svgMatches.length >= 1)
+  for (const tag of svgMatches) {
+    assert.match(tag, /width="18"\s+height="18"/)
+  }
+  assert.match(languageFlag, /<img[\s\S]*?src=\{`\/flags\/\$\{flagCode\}\.svg`\}[\s\S]*?width=\{18\}[\s\S]*?height=\{18\}/)
+
+  // Session page defaults Partner language to Auto Detect ('any')
+  assert.match(sessionPage, /const \[partnerLang,\s*setPartnerLang\]\s*=\s*useState\('any'\)/)
+
+  // LanguageSwitcher renders a single dropdown trigger button and menu
+  assert.match(languageSwitcher, /lang-dropdown/)
+  assert.match(languageSwitcher, /className="btn lang-dropdown__btn"/)
+  assert.match(languageSwitcher, /className="lang-dropdown__menu"/)
+
+  // Session page defaults layout to split on desktop/tablet (>=640) and stacked on mobile (<640)
+  assert.match(sessionPage, /const isMobile = window\.innerWidth < 640/)
+  assert.match(sessionPage, /defaultLayout[\s\S]*?isMobile \? 'stacked' : 'split'/)
+
+  // History pages removed .h-card__pair and support clicking .tx-item__body--editable for inline edit
+  assert.doesNotMatch(historyPage, /h-card__pair/)
+  assert.doesNotMatch(sessionDetail, /h-card__pair/)
+  assert.match(historyPage, /tx-item__body--editable/)
+  assert.match(sessionDetail, /tx-item__body--editable/)
+  assert.match(historyPage, /tx-inline-edit/)
+  assert.match(sessionDetail, /tx-inline-edit/)
+})
+
+test('AI summarize endpoint enforces cross-site isolation, system/user prompt separation, encrypted key storage, and secret redaction', async () => {
+  const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
+  const adminSettingsRoute = await source('src/app/api/admin/settings/route.ts')
+
+  assert.match(summarizeRoute, /sec-fetch-site[\s\S]*?cross-site/)
+  assert.match(summarizeRoute, /decryptAiKey/)
+  assert.match(summarizeRoute, /redactSensitiveSecrets/)
+  assert.match(summarizeRoute, /role:\s*'system'/)
+  assert.match(adminSettingsRoute, /encryptAiKey/)
+  assert.match(adminSettingsRoute, /existing\.endpoint !== endpoint/)
+})
+
+test('UI export options provide TXT, JSON, and Markdown (.md) without PDF export buttons', async () => {
+  const pdfGen = await source('src/lib/pdf-generator.ts')
+  const historyPage = await source('src/app/history/page.tsx')
+  const sessionDetail = await source('src/app/history/sessions/[id]/SessionDetailClient.tsx')
+  const kulamPage = await source('src/app/kulam/page.tsx')
+
+  assert.match(pdfGen, /export async function downloadSessionMarkdown[\s\S]*?if \(typeof window === 'undefined' \|\| typeof document === 'undefined'\) return/)
+  assert.doesNotMatch(historyPage, /downloadSessionPDF/)
+  assert.doesNotMatch(sessionDetail, /downloadSessionPDF/)
+  assert.doesNotMatch(kulamPage, /downloadSessionPDF/)
+  assert.match(historyPage, /downloadSessionMarkdown/)
+  assert.match(sessionDetail, /downloadSessionMarkdown/)
+  assert.match(kulamPage, /downloadSessionMarkdown/)
+})
+
+test('Google SSO OAuth 2.0 implements PKCE S256, CSRF state cookie, Edge runtime, rate limiting, and COOP same-origin-allow-popups', async () => {
+  const googleOAuth = await source('src/lib/auth/google-oauth.ts')
+  const googleRoute = await source('src/app/api/auth/google/route.ts')
+  const googleCallback = await source('src/app/api/auth/google/callback/route.ts')
+  const authSession = await source('src/lib/auth/session.ts')
+  const middleware = await source('src/middleware.ts')
+
+  // Edge runtime declaration on both OAuth routes
+  assert.match(googleRoute, /export const runtime = 'edge'/)
+  assert.match(googleCallback, /export const runtime = 'edge'/)
+
+  // PKCE S256 and CSRF state cookie
+  assert.match(googleOAuth, /generatePkcePair/)
+  assert.match(googleOAuth, /crypto\.subtle\.digest\(\s*'SHA-256'/)
+  assert.match(googleRoute, /code_challenge_method',\s*'S256'/)
+  assert.match(googleRoute, /httpOnly:\s*true/)
+  assert.match(googleRoute, /sameSite:\s*'lax'/)
+
+  // Callback state validation, rate limiting, and verified email check
+  assert.match(googleCallback, /checkRateLimit/)
+  assert.match(googleCallback, /!savedState \|\| !codeVerifier \|\| savedState !== state/)
+  assert.match(googleCallback, /profile\.email_verified === false/)
+  assert.match(googleCallback, /createOrUpdateOAuthSession/)
+
+  // Session creation for OAuth users
+  assert.match(authSession, /export async function createOrUpdateOAuthSession/)
+  assert.match(middleware, /same-origin-allow-popups/)
+})
+
+test('AI summaries persist across tab switches, session switches, and D1 hydration with multi-stage progress UX', async () => {
+  const summaryStoreMod = await import('../src/lib/summary-store.ts')
+  const historyRoute = await source('src/app/api/history/route.ts')
+  const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
+  const historyPage = await source('src/app/history/page.tsx')
+  const aiProgress = await source('src/components/AiSummaryProgress.tsx')
+
+  // Verify summary-store saves, retrieves, hydrates from cloud, and deduplicates in-flight jobs
+  const target = { sessionId: '11111111-2222-4333-8444-555555555555' }
+  summaryStoreMod.clearSummariesForTarget(target)
+  assert.strictEqual(summaryStoreMod.getSavedSummary(target), null)
+
+  summaryStoreMod.saveSummaryToStore(target, 'standard', '# Bản tóm tắt tiêu chuẩn')
+  const savedStandard = summaryStoreMod.getSavedSummary(target, 'standard')
+  assert.strictEqual(savedStandard?.summary, '# Bản tóm tắt tiêu chuẩn')
+  assert.strictEqual(savedStandard?.style, 'standard')
+
+  summaryStoreMod.hydrateSummariesFromCloud(target, [
+    { style: 'formal', summary_text: '# Bản tóm tắt trang trọng', created_at: '2026-11-09T10:00:00Z' },
+  ])
+  const savedFormal = summaryStoreMod.getSavedSummary(target, 'formal')
+  assert.strictEqual(savedFormal?.summary, '# Bản tóm tắt trang trọng')
+
+  // In-flight deduplication and persistence
+  let callCount = 0
+  const [res1, res2] = await Promise.all([
+    summaryStoreMod.runSummaryJob(target, 'casual', async () => {
+      callCount += 1
+      await new Promise((r) => setTimeout(r, 15))
+      return '# Bản tóm tắt thân mật'
+    }),
+    summaryStoreMod.runSummaryJob(target, 'casual', async () => {
+      callCount += 1
+      return '# Không nên gọi lần 2'
+    }),
+  ])
+  assert.strictEqual(callCount, 1)
+  assert.strictEqual(res1, '# Bản tóm tắt thân mật')
+  assert.strictEqual(res2, '# Bản tóm tắt thân mật')
+  assert.strictEqual(summaryStoreMod.getSavedSummary(target, 'casual')?.summary, '# Bản tóm tắt thân mật')
+
+  summaryStoreMod.clearSummariesForTarget(target)
+  assert.strictEqual(summaryStoreMod.getSavedSummary(target), null)
+
+  // Verify API routes and UI components wire persistence and multi-stage progress
+  assert.match(historyRoute, /table === 'session_summaries'/)
+  assert.match(summarizeRoute, /SELECT summary_text, style, created_at FROM session_summaries/)
+  assert.match(historyPage, /AiSummaryProgress/)
+  assert.match(historyPage, /getSavedSummary/)
+  assert.match(aiProgress, /<progress/)
+  assert.match(aiProgress, /ai-prog__steps/)
+})
+
+
+
 
 
 

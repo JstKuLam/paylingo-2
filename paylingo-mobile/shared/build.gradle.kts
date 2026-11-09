@@ -6,6 +6,14 @@ plugins {
 }
 
 kotlin {
+    targets.all {
+        compilations.all {
+            kotlinOptions {
+                freeCompilerArgs += "-Xexpect-actual-classes"
+            }
+        }
+    }
+
     androidTarget {
         compilations.all {
             kotlinOptions {
@@ -36,9 +44,10 @@ kotlin {
             implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.9")
             // SQLDelight
             implementation("app.cash.sqldelight:runtime:2.0.1")
-            // Supabase-kt (Auth, Postgrest)
-            implementation("io.github.jan-tennert.supabase:postgrest-kt:2.2.3")
-            implementation("io.github.jan-tennert.supabase:gotrue-kt:2.2.3")
+        }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
         }
         
         androidMain.dependencies {

@@ -67,7 +67,16 @@ export default function PwaUpdater() {
       }
     }
 
+    const hadInitialController =
+      typeof navigator !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      Boolean(navigator.serviceWorker.controller)
+
     const handleControllerChange = () => {
+      if (!hadInitialController) return
+      if (typeof document !== 'undefined' && document.querySelector('[data-session="recording"]')) {
+        return
+      }
       const lastReload = Number(safeSessionGet('pwa_last_reload') || 0)
       const now = Date.now()
       if (now - lastReload > 5_000) {

@@ -13,42 +13,52 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 
 class SonioxWebSocketClient(private val apiKey: String) {
-    private val client = HttpClient {
-        install(WebSockets)
+    companion object {
+        private val sharedClient by lazy {
+            HttpClient {
+                install(WebSockets)
+            }
+        }
     }
 
     suspend fun startStreaming(
         initialRequest: SonioxInitialRequest,
         pcmAudioFlow: Flow<ByteArray>,
-        onTranscriptReceived: (String) -> Unit
+        onConnected: () -> Unit = {},
+        onTranscriptReceived: suspend (String) -> Unit
     ) {
-        
         val jsonSerializer = Json { encodeDefaults = true }
         val initialRequestJson = jsonSerializer.encodeToString(initialRequest)
 
+        var session: io.ktor.client.plugins.websocket.DefaultClientWebSocketSession? = null
+        var audioJob: kotlinx.coroutines.Job? = null
         try {
             AppLog.d("SonioxWebSocketClient", "Opening WebSocket connection: wss://stt-rt.soniox.com/transcribe-websocket")
-            val session = client.webSocketSession("wss://stt-rt.soniox.com/transcribe-websocket")
+            val activeSession = sharedClient.webSocketSession("wss://stt-rt.soniox.com/transcribe-websocket")
+            session = activeSession
             AppLog.d("SonioxWebSocketClient", "WebSocket session established! Sending setup frame...")
-            
+
             // Send initial setup frame
-            session.send(Frame.Text(initialRequestJson))
+            activeSession.send(Frame.Text(initialRequestJson))
             AppLog.d("SonioxWebSocketClient", "Setup frame sent successfully. Activating PCM streaming...")
+            onConnected()
 
             var chunkCount = 0
             var totalBytes = 0
 
             // Concurrently stream binary PCM audio chunks
-            val audioJob = session.launch {
+            audioJob = activeSession.launch {
                 try {
                     pcmAudioFlow.collect { chunk ->
                         chunkCount++
                         totalBytes += chunk.size
-                        if (chunkCount % 20 == 1) { // Log every 20th chunk to prevent console flood
+                        if (chunkCount % 20 == 1) {
                             AppLog.d("SonioxWebSocketClient", "Streaming chunk #$chunkCount (${chunk.size} bytes). Total: $totalBytes bytes")
                         }
-                        session.send(Frame.Binary(true, chunk))
+                        activeSession.send(Frame.Binary(true, chunk))
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     AppLog.e("SonioxWebSocketClient", "Error inside PCM streaming coroutine!", e)
                     throw e
@@ -57,19 +67,24 @@ class SonioxWebSocketClient(private val apiKey: String) {
 
             AppLog.d("SonioxWebSocketClient", "Audio streaming flow connected. Listening for incoming text frames...")
 
-            // Receive real-time STT transcripts
-            for (frame in session.incoming) {
+            // Receive real-time STT transcripts sequentially
+            for (frame in activeSession.incoming) {
                 if (frame is Frame.Text) {
                     val rawText = frame.readText()
                     onTranscriptReceived(rawText)
                 }
             }
             AppLog.d("SonioxWebSocketClient", "WebSocket session ended naturally by server.")
-            audioJob.cancel()
-            session.close()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            AppLog.d("SonioxWebSocketClient", "WebSocket streaming cancelled by user.")
+            throw e
         } catch (e: Exception) {
             AppLog.e("SonioxWebSocketClient", "WebSocket connection failed or crashed!", e)
             throw e
+        } finally {
+            audioJob?.cancel()
+            runCatching { session?.send(Frame.Text("")) }
+            runCatching { session?.close() }
         }
     }
 }

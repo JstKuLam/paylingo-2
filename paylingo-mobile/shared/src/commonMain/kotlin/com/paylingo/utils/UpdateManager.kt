@@ -11,22 +11,22 @@ import kotlinx.serialization.json.Json
 data class VersionConfig(
     val minVersionAndroid: String = "1.0.0",
     val latestVersionAndroid: String = "1.0.0",
-    val updateUrlAndroid: String = "https://noidi.9phut.org/downloads/paylingo.apk",
+    val updateUrlAndroid: String = "https://paylingo.pages.dev/downloads/paylingo.apk",
     val minVersionIos: String = "1.0.0",
     val latestVersionIos: String = "1.0.0",
-    val updateUrlIos: String = "https://testflight.apple.com/join/mock"
+    val updateUrlIos: String = "https://testflight.apple.com"
 )
 
 object VersionComparator {
     fun isUpdateRequired(current: String, minimumRequired: String): Boolean {
         val currentParts = current.split(".").mapNotNull { it.toIntOrNull() }
         val minParts = minimumRequired.split(".").mapNotNull { it.toIntOrNull() }
-        
+
         val maxLength = maxOf(currentParts.size, minParts.size)
         for (i in 0 until maxLength) {
             val currentVal = currentParts.getOrElse(i) { 0 }
             val minVal = minParts.getOrElse(i) { 0 }
-            
+
             if (currentVal < minVal) return true
             if (currentVal > minVal) return false
         }
@@ -39,8 +39,7 @@ class UpdateManager {
 
     suspend fun checkUpdate(): UpdateCheckResult {
         return try {
-            // Get constraints from user Next.js VPS endpoint
-            val response = client.get("https://noidi.9phut.org/api/app-version")
+            val response = client.get("https://paylingo.pages.dev/api/app-version")
             val jsonText = response.bodyAsText()
             val config = Json { ignoreUnknownKeys = true }.decodeFromString<VersionConfig>(jsonText)
 
@@ -51,7 +50,11 @@ class UpdateManager {
             val updateUrl = if (isAndroid) config.updateUrlAndroid else config.updateUrlIos
 
             val parsedUpdateUrl = Url(updateUrl)
-            val allowedHosts = if (isAndroid) setOf("noidi.9phut.org") else setOf("testflight.apple.com", "apps.apple.com")
+            val allowedHosts = if (isAndroid) {
+                setOf("paylingo.pages.dev", "noidi.9phut.org")
+            } else {
+                setOf("testflight.apple.com", "apps.apple.com")
+            }
             if (parsedUpdateUrl.protocol.name != "https" || parsedUpdateUrl.host.lowercase() !in allowedHosts) {
                 return UpdateCheckResult.Failure("Untrusted update URL")
             }

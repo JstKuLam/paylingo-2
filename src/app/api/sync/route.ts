@@ -4,6 +4,8 @@ import { getD1 } from '@/lib/d1-client'
 
 export const runtime = 'edge'
 
+let hasEnsuredSpeakerLabelCol = false
+
 
 const noStoreHeader = {
   'Cache-Control': 'no-store, max-age=0',
@@ -49,6 +51,9 @@ export async function POST(request: Request) {
     let syncedFolders = 0
     let syncedSessions = 0
     let syncedEntries = 0
+    const failedFolderIds: string[] = []
+    const failedSessionIds: string[] = []
+    const failedEntryIds: string[] = []
 
     const syncedFolderIds = new Set<string>()
     const syncedSessionIds = new Set<string>()
@@ -69,6 +74,7 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
         if (!folder.id || typeof folder.id !== 'string' || folder.id.length > 64 || !folder.name) continue
         const existingFolder = await db.prepare('SELECT id, owner_id FROM folders WHERE id = ?').bind(folder.id).first<{ id: string; owner_id: string }>()
         if (existingFolder && existingFolder.owner_id !== user.id) {
+          failedFolderIds.push(folder.id)
           continue
         }
         const nowIso = new Date().toISOString()
@@ -100,6 +106,7 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
         if (!sess.id || typeof sess.id !== 'string' || sess.id.length > 64 || !sess.name) continue
         const existingSession = await db.prepare('SELECT id, owner_id FROM sessions WHERE id = ?').bind(sess.id).first<{ id: string; owner_id: string }>()
         if (existingSession && existingSession.owner_id !== user.id) {
+          failedSessionIds.push(sess.id)
           continue
         }
         const nowIso = new Date().toISOString()
@@ -180,10 +187,16 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
         }
       }
 
+      if (!hasEnsuredSpeakerLabelCol) {
+        hasEnsuredSpeakerLabelCol = true
+        await db.prepare('ALTER TABLE transcript_entries ADD COLUMN speaker_label TEXT').run().catch(() => {})
+      }
+
       const validEntries: Array<{
         id: string
         session_id: string
         speaker: 'partner' | 'host'
+        speakerLabel: string | null
         origText: string
         transText: string
         startMs: number
@@ -194,13 +207,17 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
       for (const entry of entries) {
         if (!entry.id || typeof entry.id !== 'string' || entry.id.length > 64) continue
         if (!entry.session_id || typeof entry.session_id !== 'string' || entry.session_id.length > 64) continue
-        if (!authorizedSessionIds.has(entry.session_id)) continue
+        if (!authorizedSessionIds.has(entry.session_id)) {
+          failedEntryIds.push(entry.id)
+          continue
+        }
 
         const nowIso = new Date().toISOString()
         const createdAt = clampIsoTimestamp(entry.created_at, nowIso)
         const startMs = Math.max(0, Math.floor(typeof entry.start_ms === 'number' && Number.isFinite(entry.start_ms) ? entry.start_ms : 0))
         const endMs = Math.max(startMs, Math.floor(typeof entry.end_ms === 'number' && Number.isFinite(entry.end_ms) ? entry.end_ms : startMs))
         const speaker = entry.speaker === 'partner' ? 'partner' : 'host'
+        const speakerLabel = typeof entry.speaker_label === 'string' && entry.speaker_label.trim() ? entry.speaker_label.trim().slice(0, 32) : null
         const origText = typeof entry.original_text === 'string' ? entry.original_text.slice(0, 10_000) : ''
         const transText = typeof entry.translated_text === 'string' ? entry.translated_text.slice(0, 10_000) : ''
 
@@ -208,6 +225,7 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
           id: entry.id,
           session_id: entry.session_id,
           speaker,
+          speakerLabel,
           origText,
           transText,
           startMs,
@@ -222,21 +240,26 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
         const chunk = validEntries.slice(i, i + CHUNK_SIZE)
         const statements = chunk.map((entry) => {
           return db.prepare(`
-            INSERT INTO transcript_entries (id, session_id, speaker, original_text, translated_text, start_ms, end_ms, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO transcript_entries (id, session_id, speaker, speaker_label, original_text, translated_text, start_ms, end_ms, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               speaker = excluded.speaker,
+              speaker_label = COALESCE(excluded.speaker_label, transcript_entries.speaker_label),
               original_text = excluded.original_text,
               translated_text = excluded.translated_text,
               start_ms = excluded.start_ms,
               end_ms = excluded.end_ms
-          `).bind(entry.id, entry.session_id, entry.speaker, entry.origText, entry.transText, entry.startMs, entry.endMs, entry.createdAt)
+            WHERE transcript_entries.session_id = excluded.session_id
+          `).bind(entry.id, entry.session_id, entry.speaker, entry.speakerLabel, entry.origText, entry.transText, entry.startMs, entry.endMs, entry.createdAt)
         })
         try {
           await db.batch(statements)
           syncedEntries += chunk.length
         } catch (chunkErr) {
           console.warn('[Sync] Failed to batch sync chunk:', chunkErr)
+          for (const failedItem of chunk) {
+            failedEntryIds.push(failedItem.id)
+          }
         }
       }
     }
@@ -246,6 +269,9 @@ function clampIsoTimestamp(input?: string | null, fallback?: string): string {
       syncedFolders,
       syncedSessions,
       syncedEntries,
+      failedFolderIds,
+      failedSessionIds,
+      failedEntryIds,
     }, {
       headers: {
         'Cache-Control': 'no-store, max-age=0',

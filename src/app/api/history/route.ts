@@ -4,6 +4,7 @@ import { getD1 } from '@/lib/d1-client'
 
 export const runtime = 'edge'
 
+let hasEnsuredSpeakerLabelCol = false
 
 export async function GET(request: Request) {
   const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
@@ -19,6 +20,12 @@ export async function GET(request: Request) {
     const id = searchParams.get('id')
     const db = getD1()
 
+    if (!hasEnsuredSpeakerLabelCol) {
+      await db.prepare('ALTER TABLE transcript_entries ADD COLUMN speaker_label TEXT').run().catch(() => {})
+      await db.prepare('ALTER TABLE session_summaries ADD COLUMN owner_id TEXT').run().catch(() => {})
+      hasEnsuredSpeakerLabelCol = true
+    }
+
     if (table === 'folders') {
       if (single && id) {
         const folder = await db.prepare('SELECT * FROM folders WHERE id = ? AND owner_id = ?')
@@ -30,7 +37,11 @@ export async function GET(request: Request) {
         const sessions = await db.prepare('SELECT * FROM sessions WHERE folder_id = ? AND owner_id = ? ORDER BY started_at DESC LIMIT 1000')
           .bind(id, user.id)
           .all()
-        return NextResponse.json({ item: folder, sessions: sessions.results || [] }, { headers: noStoreHeader })
+        const summaries = await db.prepare('SELECT id, folder_id, style, summary_text, created_at FROM session_summaries WHERE folder_id = ? AND owner_id = ? ORDER BY created_at DESC LIMIT 20')
+          .bind(id, user.id)
+          .all()
+          .catch(() => ({ results: [] }))
+        return NextResponse.json({ item: folder, sessions: sessions.results || [], summaries: summaries.results || [] }, { headers: noStoreHeader })
       }
 
       const res = await db.prepare('SELECT * FROM folders WHERE owner_id = ? ORDER BY created_at DESC LIMIT 1000')
@@ -50,10 +61,35 @@ export async function GET(request: Request) {
         const entries = await db.prepare('SELECT * FROM transcript_entries WHERE session_id = ? ORDER BY start_ms ASC LIMIT 2000')
           .bind(id)
           .all()
-        return NextResponse.json({ item: session, entries: entries.results || [] }, { headers: noStoreHeader })
+        const summaries = await db.prepare('SELECT id, session_id, style, summary_text, created_at FROM session_summaries WHERE session_id = ? AND owner_id = ? ORDER BY created_at DESC LIMIT 20')
+          .bind(id, user.id)
+          .all()
+          .catch(() => ({ results: [] }))
+        return NextResponse.json({ item: session, entries: entries.results || [], summaries: summaries.results || [] }, { headers: noStoreHeader })
       }
 
       const res = await db.prepare('SELECT * FROM sessions WHERE owner_id = ? ORDER BY started_at DESC LIMIT 1000')
+        .bind(user.id)
+        .all()
+      return NextResponse.json({ items: res.results || [] }, { headers: noStoreHeader })
+    }
+
+    if (table === 'session_summaries') {
+      const sessionIdParam = searchParams.get('sessionId')?.trim()
+      const folderIdParam = searchParams.get('folderId')?.trim()
+      if (sessionIdParam) {
+        const res = await db.prepare('SELECT id, session_id, folder_id, style, summary_text, created_at FROM session_summaries WHERE session_id = ? AND owner_id = ? ORDER BY created_at DESC LIMIT 20')
+          .bind(sessionIdParam, user.id)
+          .all()
+        return NextResponse.json({ items: res.results || [] }, { headers: noStoreHeader })
+      }
+      if (folderIdParam) {
+        const res = await db.prepare('SELECT id, session_id, folder_id, style, summary_text, created_at FROM session_summaries WHERE folder_id = ? AND owner_id = ? ORDER BY created_at DESC LIMIT 20')
+          .bind(folderIdParam, user.id)
+          .all()
+        return NextResponse.json({ items: res.results || [] }, { headers: noStoreHeader })
+      }
+      const res = await db.prepare('SELECT id, session_id, folder_id, style, summary_text, created_at FROM session_summaries WHERE owner_id = ? ORDER BY created_at DESC LIMIT 200')
         .bind(user.id)
         .all()
       return NextResponse.json({ items: res.results || [] }, { headers: noStoreHeader })
@@ -169,7 +205,14 @@ export async function DELETE(request: Request) {
         .bind(cleanValue, user.id)
         .first()
       if (!session) {
-        return NextResponse.json({ success: false, error: 'Không tìm thấy phiên hoặc không có quyền' }, { status: 404, headers: noStoreHeader })
+        const existingOtherOwner = await db.prepare('SELECT id FROM sessions WHERE id = ?')
+          .bind(cleanValue)
+          .first()
+        if (existingOtherOwner) {
+          return NextResponse.json({ success: false, error: 'Không tìm thấy phiên hoặc không có quyền' }, { status: 404, headers: noStoreHeader })
+        }
+        // Idempotent success when deleting a local-only session that has not yet been synced to D1
+        return NextResponse.json({ success: true }, { headers: noStoreHeader })
       }
       await db.batch([
         db.prepare('DELETE FROM transcript_entries WHERE session_id = ?').bind(cleanValue),
@@ -185,7 +228,14 @@ export async function DELETE(request: Request) {
         .bind(cleanValue, user.id)
         .first()
       if (!folder) {
-        return NextResponse.json({ success: false, error: 'Không tìm thấy thư mục hoặc không có quyền' }, { status: 404, headers: noStoreHeader })
+        const existingOtherOwner = await db.prepare('SELECT id FROM folders WHERE id = ?')
+          .bind(cleanValue)
+          .first()
+        if (existingOtherOwner) {
+          return NextResponse.json({ success: false, error: 'Không tìm thấy thư mục hoặc không có quyền' }, { status: 404, headers: noStoreHeader })
+        }
+        // Idempotent success when deleting a local-only folder that has not yet been synced to D1
+        return NextResponse.json({ success: true }, { headers: noStoreHeader })
       }
       await db.batch([
         db.prepare('UPDATE sessions SET folder_id = NULL WHERE folder_id = ? AND owner_id = ?').bind(cleanValue, user.id),

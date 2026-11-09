@@ -2,6 +2,7 @@ export interface SonioxToken {
   text: string
   is_final?: boolean
   language?: string
+  speaker?: string
   translation_status?: 'original' | 'translation' | 'none'
   source_language?: string
   start_ms: number
@@ -11,6 +12,7 @@ export interface SonioxToken {
 export interface TranscriptMessage {
   id: string
   speaker: 'host' | 'partner'
+  speaker_label?: string
   original_text: string
   translated_text: string
   start_ms: number
@@ -22,6 +24,7 @@ export interface SonioxTranscriptToken {
   text: string
   is_final?: boolean
   language?: string
+  speaker?: string
   translation_status?: 'original' | 'translation' | 'none'
   source_language?: string
   start_ms?: number
@@ -29,54 +32,13 @@ export interface SonioxTranscriptToken {
 }
 
 const FILLER_WORDS = new Set([
-  'uh', 'um', 'uhm', 'er', 'eh', 'ah', 'umm', 'uhhh', 'ummm',
-  'ờ', 'ừm', 'ừ', 'ơ', 'hơ', 'ư', 'ưm', 'oh', 'a', 'ha'
+  'uh', 'um', 'uhm', 'umm', 'uhhh', 'ummm',
+  'ừm', 'ờm', 'ưm'
 ])
-
-const VIETNAMESE_ABBREVIATIONS: Record<string, string> = {
-  'dng': 'dừng',
-  'hn': 'hơn',
-  'ko': 'không',
-  'đc': 'được',
-  'dc': 'được',
-  'nhg': 'nhưng',
-  'ng': 'người',
-  'vs': 'với',
-  'trc': 'trước',
-  'đt': 'điện thoại',
-  'kb': 'không biết',
-  'thg': 'thường',
-  'bth': 'bình thường'
-}
-
-function expandVietnameseAbbreviations(text: string): string {
-  if (!text) return ''
-  
-  // Split into words, keeping track of punctuation
-  return text.split(/\s+/).map(word => {
-    // Strip trailing/leading punctuation for dictionary lookup
-    const cleanWord = word.toLowerCase().normalize('NFC').replace(/[.,!?;:]/g, '')
-    const replacement = VIETNAMESE_ABBREVIATIONS[cleanWord]
-    
-    if (replacement) {
-      // Re-apply punctuation if any
-      const punctuationMatch = word.match(/[.,!?;:]+$/)
-      const punctuation = punctuationMatch ? punctuationMatch[0] : ''
-      
-      // Match case (capitalization) of original word
-      if (word[0] === word[0].toUpperCase()) {
-        return replacement[0].toUpperCase() + replacement.slice(1) + punctuation
-      }
-      return replacement + punctuation
-    }
-    return word
-  }).join(' ')
-}
 
 function cleanTranscriptText(text: string): string {
   if (!text) return ''
-  const expanded = expandVietnameseAbbreviations(text)
-  return expanded
+  return text
     .replace(/\s+/g, ' ')                  // collapse multiple spaces
     .replace(/\s+([.,!?;:])/g, '$1')       // remove space before any punctuation
     .trim()
@@ -84,8 +46,8 @@ function cleanTranscriptText(text: string): string {
 }
 
 /**
- * Parses Soniox v5 two-way and one-way translation tokens into structured conversation messages.
- * Groups consecutive words by speaker, sentence boundaries, and silence thresholds.
+ * Parses Soniox v6 two-way and one-way translation tokens into structured conversation messages.
+ * Groups consecutive words by speaker, speaker diarization label, sentence boundaries, and silence thresholds.
  * Seamlessly pairs translation tokens (which lack start_ms) with their corresponding original tokens.
  */
 export function parseTokensToMessages(
@@ -100,17 +62,81 @@ export function parseTokensToMessages(
 
   let lastHostMessage: TranscriptMessage | null = null
   let lastPartnerMessage: TranscriptMessage | null = null
+  let lastOriginalSpeaker: 'host' | 'partner' | null = null
+  let hostTransCursor = 0
+  let partnerTransCursor = 0
 
-  const SENTENCE_END_REGEX = /[.!?。？！]$/
+  const SENTENCE_END_REGEX = /[.!?。？！…]+['"”’)\]]*$/
+  const CLAUSE_END_REGEX = /[,;，；:：、—–-]['"”’)\]]*$/
+  const CJK_START_REGEX = /^[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/
   const SILENCE_THRESHOLD_MS = 1500 // 1.5 seconds gap starts a new message
+  const SOFT_CLAUSE_CHAR_LIMIT = 100
+  const HARD_TURN_CHAR_LIMIT = 180
+  let timeOffsetMs = 0
+  let segmentMaxEndMs = 0
+  let lastRawStartMs = 0
+  let pendingEndpointSplit = false
+  const completedTranslations = new Set<string>()
+  const forcedSplitMessages = new Set<string>()
 
-  for (const token of allTokens) {
+  for (let i = 0; i < allTokens.length; i++) {
+    const token = allTokens[i]
     if (!token.text) continue
-
-    // Filter out filler words ("uh", "ờ", "ừm", etc.)
-    const cleanTokenText = token.text.trim().toLowerCase().normalize('NFC').replace(/[.,!?;:]/g, '')
-    if (FILLER_WORDS.has(cleanTokenText)) {
+    const trimmedToken = token.text.trim()
+    if (trimmedToken === '<end>' || trimmedToken === '<fin>') {
+      pendingEndpointSplit = true
+      if (lastHostMessage && lastHostMessage.translated_text.trim().length > 0) {
+        completedTranslations.add(lastHostMessage.id)
+      }
+      if (lastPartnerMessage && lastPartnerMessage.translated_text.trim().length > 0) {
+        completedTranslations.add(lastPartnerMessage.id)
+      }
       continue
+    }
+
+    const rawTokenStart =
+      typeof token.start_ms === 'number' && Number.isFinite(token.start_ms)
+        ? Math.max(0, token.start_ms)
+        : null
+    const rawTokenEnd =
+      typeof token.end_ms === 'number' && Number.isFinite(token.end_ms)
+        ? Math.max(rawTokenStart ?? 0, token.end_ms)
+        : null
+
+    let didReconnectReset = false
+    if (rawTokenStart !== null) {
+      if (rawTokenStart + 100 < lastRawStartMs) {
+        timeOffsetMs += segmentMaxEndMs + SILENCE_THRESHOLD_MS + 1
+        segmentMaxEndMs = 0
+        didReconnectReset = true
+      }
+      lastRawStartMs = rawTokenStart
+      segmentMaxEndMs = Math.max(segmentMaxEndMs, rawTokenEnd ?? rawTokenStart)
+    }
+
+    // Filter out isolated filler words ("uh", "um", "ừm", etc.) only on original speech tokens
+    // while preserving BPE subwords inside real words (e.g., "medi" + "um" or "um" + "brella").
+    if (token.translation_status !== 'translation') {
+      const cleanTokenText = token.text.trim().toLowerCase().normalize('NFC').replace(/[.,!?;:]/g, '')
+      if (FILLER_WORDS.has(cleanTokenText)) {
+        const prevToken = i > 0 ? allTokens[i - 1] : null
+        const nextToken = i + 1 < allTokens.length ? allTokens[i + 1] : null
+        const isAttachedToPrevWord = Boolean(
+          prevToken &&
+            prevToken.translation_status !== 'translation' &&
+            !token.text.startsWith(' ') &&
+            /[a-zA-ZÀ-ỹ]$/.test(prevToken.text)
+        )
+        const isAttachedToNextWord = Boolean(
+          nextToken &&
+            nextToken.translation_status !== 'translation' &&
+            !nextToken.text.startsWith(' ') &&
+            /^[a-zà-ỹ]/.test(nextToken.text)
+        )
+        if (!isAttachedToPrevWord && !isAttachedToNextWord) {
+          continue
+        }
+      }
     }
 
     // 1. Determine the speaker of this token
@@ -131,24 +157,93 @@ export function parseTokensToMessages(
 
     const isOriginal = token.translation_status !== 'translation'
     const tokenText = token.text
+    const tokenSpeakerLabel =
+      typeof token.speaker === 'string' && token.speaker.trim() ? token.speaker.trim() : undefined
 
     if (isOriginal) {
       const lastMsg = speaker === 'host' ? lastHostMessage : lastPartnerMessage
-      const rawStart = typeof token.start_ms === 'number' && Number.isFinite(token.start_ms) ? Math.max(0, token.start_ms) : null
-      const startMs = rawStart ?? (lastMsg ? lastMsg.end_ms : 0)
-      const rawEnd = typeof token.end_ms === 'number' && Number.isFinite(token.end_ms) ? Math.max(startMs, token.end_ms) : null
+      const rawStart = rawTokenStart !== null ? rawTokenStart + timeOffsetMs : null
+      const startMs = rawStart ?? (lastMsg ? lastMsg.end_ms : timeOffsetMs)
+      const rawEnd = rawTokenEnd !== null ? Math.max(startMs, rawTokenEnd + timeOffsetMs) : null
       const endMs = rawEnd ?? startMs
+
+      const speakerLabelChanged = Boolean(
+        lastMsg?.speaker_label && tokenSpeakerLabel && lastMsg.speaker_label !== tokenSpeakerLabel
+      )
+      const interleavedOtherSpeaker = Boolean(
+        lastOriginalSpeaker !== null && lastOriginalSpeaker !== speaker && lastMsg && startMs > lastMsg.end_ms
+      )
+      const silenceGapMs = lastMsg ? startMs - lastMsg.end_ms : 0
+      const trimmedOrig = lastMsg ? lastMsg.original_text.trim() : ''
+      // Split on natural silence (>1.5s) once a clause has >=45 chars, already received translation, or silence >3s,
+      // while keeping short (<45 char) mid-sentence hesitations ("Chúng tôi muốn ... giảm giá 10%.") aligned.
+      const pauseShouldSplit = Boolean(
+        lastMsg &&
+          silenceGapMs > SILENCE_THRESHOLD_MS &&
+          (didReconnectReset ||
+            lastMsg.translated_text.length > 0 ||
+            trimmedOrig.length >= 45 ||
+            silenceGapMs > 3000)
+      )
+      const clauseShouldSplit = Boolean(
+        lastMsg &&
+          CLAUSE_END_REGEX.test(trimmedOrig) &&
+          (trimmedOrig.length >= SOFT_CLAUSE_CHAR_LIMIT ||
+            (trimmedOrig.length >= 50 && silenceGapMs >= 800))
+      )
+      const isWordBoundary = tokenText.startsWith(' ') || CJK_START_REGEX.test(tokenText)
+      const maxLengthShouldSplit = Boolean(
+        lastMsg && trimmedOrig.length >= HARD_TURN_CHAR_LIMIT && isWordBoundary
+      )
 
       const shouldStartNew =
         !lastMsg ||
-        startMs - lastMsg.end_ms > SILENCE_THRESHOLD_MS ||
-        SENTENCE_END_REGEX.test(lastMsg.original_text.trim())
+        pendingEndpointSplit ||
+        speakerLabelChanged ||
+        interleavedOtherSpeaker ||
+        pauseShouldSplit ||
+        clauseShouldSplit ||
+        maxLengthShouldSplit ||
+        SENTENCE_END_REGEX.test(trimmedOrig)
+
+      lastOriginalSpeaker = speaker
 
       if (shouldStartNew) {
+        if (
+          lastMsg &&
+          (pendingEndpointSplit || pauseShouldSplit || clauseShouldSplit || maxLengthShouldSplit)
+        ) {
+          forcedSplitMessages.add(lastMsg.id)
+        }
+        pendingEndpointSplit = false
         const initialText = tokenText.startsWith(' ') ? tokenText.slice(1) : tokenText
+        const targetList = speaker === 'host' ? hostMessages : partnerMessages
+        if (
+          lastMsg &&
+          lastMsg.translated_text.trim().length > 0 &&
+          (pauseShouldSplit ||
+            clauseShouldSplit ||
+            maxLengthShouldSplit ||
+            didReconnectReset ||
+            forcedSplitMessages.has(lastMsg.id) ||
+            SENTENCE_END_REGEX.test(trimmedOrig) ||
+            SENTENCE_END_REGEX.test(lastMsg.translated_text.trim()))
+        ) {
+          completedTranslations.add(lastMsg.id)
+          if (speaker === 'host') {
+            hostTransCursor = targetList.length
+          } else {
+            partnerTransCursor = targetList.length
+          }
+        }
+        const msgId =
+          lastMsg && lastMsg.start_ms === startMs
+            ? `msg-${speaker}-${startMs}-${targetList.length}`
+            : `msg-${speaker}-${startMs}`
         const newMsg: TranscriptMessage = {
-          id: `msg-${speaker}-${startMs}`,
+          id: msgId,
           speaker,
+          speaker_label: tokenSpeakerLabel,
           original_text: initialText,
           translated_text: '',
           start_ms: startMs,
@@ -166,19 +261,62 @@ export function parseTokensToMessages(
       } else {
         lastMsg.original_text += tokenText
         lastMsg.end_ms = Math.max(lastMsg.end_ms, endMs)
+        if (!lastMsg.speaker_label && tokenSpeakerLabel) {
+          lastMsg.speaker_label = tokenSpeakerLabel
+        }
         if (!token.is_final) {
           lastMsg.is_final = false
         }
       }
     } else {
-      // Translation token
-      const lastMsg = speaker === 'host' ? lastHostMessage : lastPartnerMessage
+      // O(1) amortized sentence-aligned translation cursor routing
+      const targetList = speaker === 'host' ? hostMessages : partnerMessages
+      let cursor = speaker === 'host' ? hostTransCursor : partnerTransCursor
+      while (cursor < targetList.length - 1) {
+        const candidate = targetList[cursor]
+        if (candidate.original_text.trim().length === 0) {
+          cursor++
+          continue
+        }
+        const origEnded = SENTENCE_END_REGEX.test(candidate.original_text.trim())
+        const trimmedTrans = candidate.translated_text.trim()
+        const transEnded =
+          completedTranslations.has(candidate.id) ||
+          SENTENCE_END_REGEX.test(trimmedTrans) ||
+          (forcedSplitMessages.has(candidate.id) &&
+            CLAUSE_END_REGEX.test(trimmedTrans) &&
+            trimmedTrans.length >= 50)
+        if (transEnded) {
+          cursor++
+          if (!origEnded && !forcedSplitMessages.has(candidate.id)) {
+            while (
+              cursor < targetList.length - 1 &&
+              targetList[cursor].translated_text.trim().length === 0
+            ) {
+              const contEnded =
+                SENTENCE_END_REGEX.test(targetList[cursor].original_text.trim()) ||
+                forcedSplitMessages.has(targetList[cursor].id)
+              cursor++
+              if (contEnded) break
+            }
+          }
+          continue
+        }
+        break
+      }
+      if (speaker === 'host') {
+        hostTransCursor = cursor
+      } else {
+        partnerTransCursor = cursor
+      }
+      const pendingTranslationMsg =
+        targetList[cursor] ?? (speaker === 'host' ? lastHostMessage : lastPartnerMessage)
 
-      if (!lastMsg) {
+      if (!pendingTranslationMsg) {
         // Fallback: if no original message exists yet, create a placeholder
-        const rawStart = typeof token.start_ms === 'number' && Number.isFinite(token.start_ms) ? Math.max(0, token.start_ms) : null
-        const startMs = rawStart ?? 0
-        const rawEnd = typeof token.end_ms === 'number' && Number.isFinite(token.end_ms) ? Math.max(startMs, token.end_ms) : null
+        const rawStart = rawTokenStart !== null ? rawTokenStart + timeOffsetMs : null
+        const startMs = rawStart ?? timeOffsetMs
+        const rawEnd = rawTokenEnd !== null ? Math.max(startMs, rawTokenEnd + timeOffsetMs) : null
         const endMs = rawEnd ?? startMs
         const initialText = tokenText.startsWith(' ') ? tokenText.slice(1) : tokenText
         const newMsg: TranscriptMessage = {
@@ -199,9 +337,9 @@ export function parseTokensToMessages(
           lastPartnerMessage = newMsg
         }
       } else {
-        lastMsg.translated_text += tokenText
+        pendingTranslationMsg.translated_text += tokenText
         if (!token.is_final) {
-          lastMsg.is_final = false
+          pendingTranslationMsg.is_final = false
         }
       }
     }

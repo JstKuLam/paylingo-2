@@ -242,8 +242,13 @@ export async function sendEmail(options: SmtpEmailOptions): Promise<{ success: b
   const host = process.env.SMTP_HOST || 'smtp.maileroo.com'
   const port = parseInt(process.env.SMTP_PORT || '465', 10)
   const user = process.env.SMTP_USER || 'no-reply@pay2pay.vn'
-  const pass = process.env.SMTP_PASS || 'REDACTED_SMTP_SECRET_KEY'
+  const pass = process.env.SMTP_PASS || ''
   const from = process.env.MAIL_FROM || `"Paypay - Pay Linggo" <${user}>`
+
+  if (!pass) {
+    console.error('[SMTP] Missing SMTP_PASS environment variable')
+    return { success: false, error: 'Chưa cấu hình mật khẩu SMTP' }
+  }
 
   const config: SmtpConfig = { host, port, user, pass, from }
 

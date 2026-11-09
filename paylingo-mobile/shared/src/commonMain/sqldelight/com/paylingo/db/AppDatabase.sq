@@ -9,6 +9,9 @@ CREATE TABLE TranscriptMessage (
     isFinal INTEGER NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_transcript_session_start
+ON TranscriptMessage(sessionId, startMs);
+
 CREATE TABLE Session (
     id TEXT NOT NULL PRIMARY KEY,
     title TEXT NOT NULL,
@@ -21,6 +24,9 @@ CREATE TABLE Session (
 insertSession:
 INSERT OR REPLACE INTO Session(id, title, mode, partnerLang, createdAt)
 VALUES (?, ?, ?, ?, ?);
+
+renameSession:
+UPDATE Session SET title = ? WHERE id = ?;
 
 getAllSessions:
 SELECT * FROM Session ORDER BY createdAt DESC;

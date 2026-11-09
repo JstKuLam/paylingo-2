@@ -2,15 +2,34 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, LogOut, User } from 'lucide-react'
+import {
+  ChevronDown,
+  LogOut,
+  User,
+} from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { useLanguage } from '@/hooks/useLanguage'
 
+function decodeLabel(raw: string): string {
+  let out = raw.trim()
+  for (let i = 0; i < 3; i++) {
+    if (!/%[0-9A-Fa-f]{2}/.test(out)) break
+    try {
+      const next = decodeURIComponent(out)
+      if (next === out) break
+      out = next
+    } catch {
+      break
+    }
+  }
+  return out.trim()
+}
+
 export default function ProfileMenu({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter()
-  const { t } = useLanguage()
+  const { language, t } = useLanguage()
   const [userLabel, setUserLabel] = useState('Khách')
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState('')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -21,15 +40,16 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
         const res = await authClient.getUser()
         const user = res?.data?.user
         if (user && isMounted) {
-          const email = user.email
-          const username =
+          const email = user.email || ''
+          const username = decodeLabel(
             user.user_metadata?.username ||
-            user.user_metadata?.full_name ||
-            user.user_metadata?.name ||
-            email?.split('@')[0] ||
-            'Khách'
+              user.user_metadata?.full_name ||
+              user.user_metadata?.name ||
+              email.split('@')[0] ||
+              'Khách'
+          )
           setUserLabel(username)
-          setUserEmail(email || null)
+          setUserEmail(email)
         }
       } catch (err) {
         console.warn('Failed to fetch user in ProfileMenu:', err)
@@ -75,42 +95,65 @@ export default function ProfileMenu({ disabled = false }: { disabled?: boolean }
     }
   }
 
+  const avatarInitials = userLabel
+    ? userLabel
+        .trim()
+        .split(/\s+/)
+        .map((part) => part.charAt(0).toUpperCase())
+        .slice(0, 2)
+        .join('')
+    : ''
+
   return (
     <div className="profile-menu-container" ref={menuRef}>
       <button
         type="button"
-        className="profile-trigger"
-        onClick={() => setIsMenuOpen((prev) => !prev)}
+        className="user-btn"
+        onClick={() => {
+          setIsMenuOpen((prev) => !prev)
+        }}
         disabled={disabled}
-        aria-haspopup="true"
+        aria-haspopup="menu"
         aria-expanded={isMenuOpen}
-        aria-label="Menu tài khoản"
+        aria-label="Cài đặt người dùng"
       >
-        <div className="profile-avatar">
-          {userLabel ? userLabel.charAt(0).toUpperCase() : <User size={14} />}
-        </div>
-        <span className="profile-username">{userLabel}</span>
-        <ChevronDown className={`profile-chevron ${isMenuOpen ? 'is-active' : ''}`} aria-hidden="true" />
+        <span className="user-btn__avatar" aria-hidden="true">
+          {avatarInitials || <User size={13} />}
+          <span className="user-btn__dot" />
+        </span>
+        <span className="user-btn__name">{userLabel === 'Khách' ? t.profileGuest : userLabel}</span>
+        <ChevronDown className="user-btn__chev" aria-hidden="true" />
       </button>
 
       {isMenuOpen && (
-        <div className="profile-dropdown" role="menu">
-          <div className="dropdown-user-info">
-            <div className="dropdown-username">{userLabel === 'Khách' ? t.profileGuest : userLabel}</div>
-            <div className="dropdown-email">{userEmail || t.profileGuest}</div>
+        <div className="user-menu" role="menu" aria-label="Cài đặt người dùng">
+          <div className="f-box">
+            <span className="f-box__h">
+              {language === 'en' ? 'Google Account' : language === 'zh' ? 'Google 账号' : 'Tài khoản Google'}
+            </span>
+            <strong className="user-btn__name">{userLabel}</strong>
+            {userEmail && <span className="pane__sub">{userEmail}</span>}
           </div>
-          <div className="dropdown-divider" />
+
+          <div className="menu__sep" />
+
           <button
             type="button"
             onClick={() => {
               setIsMenuOpen(false)
               void handleLogout()
             }}
-            className="dropdown-item logout-item"
+            className="u-item"
             role="menuitem"
           >
-            <LogOut aria-hidden="true" />
-            <span>{t.profileLogout}</span>
+            <LogOut className="i" aria-hidden="true" />
+            <span>
+              {language === 'en'
+                ? 'Sign out'
+                : language === 'zh'
+                  ? '退出登录'
+                  : 'Đăng xuất'}
+            </span>
           </button>
         </div>
       )}

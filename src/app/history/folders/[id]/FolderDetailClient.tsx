@@ -4,10 +4,8 @@ import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
-  CalendarDays,
+  ArrowLeftRight,
   Check,
-  ChevronRight,
-  Clock3,
   Copy,
   Download,
   Edit3,
@@ -22,13 +20,20 @@ import {
   X,
 } from 'lucide-react'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
+import AiSummaryProgress from '@/components/AiSummaryProgress'
 import { useLanguage } from '@/hooks/useLanguage'
 import { claimLegacyLocalData, db, LocalFolder, LocalSession } from '@/lib/db'
 import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage } from '@/lib/languages'
 import { syncPendingData } from '@/lib/sync-manager'
-
-type SummaryStyle = 'default' | 'formal' | 'casual' | 'very_casual'
+import {
+  clearSummariesForTarget,
+  getInFlightSummaryJob,
+  getSavedSummary,
+  hydrateSummariesFromCloud,
+  runSummaryJob,
+  type SummaryStyle,
+} from '@/lib/summary-store'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -58,13 +63,14 @@ export default function FolderDetailPage({ params }: PageProps) {
   const [renaming, setRenaming] = useState(false)
   const [newName, setNewName] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiStartTimeMs, setAiStartTimeMs] = useState<number | undefined>(undefined)
   const [aiSummary, setAiSummary] = useState('')
   const [summaryError, setSummaryError] = useState('')
   const [sharePassword, setSharePassword] = useState('')
   const [shareLink, setShareLink] = useState('')
   const [copied, setCopied] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
-  const [selectedStyle, setSelectedStyle] = useState<SummaryStyle>('default')
+  const [selectedStyle, setSelectedStyle] = useState<SummaryStyle>('standard')
 
   const loadFolderData = useCallback(async () => {
     if (!id || id === 'fallback') return
@@ -83,6 +89,12 @@ export default function FolderDetailPage({ params }: PageProps) {
       setOwnerId(user.id)
       await claimLegacyLocalData(user.id, legacyUsername)
 
+      const saved = getSavedSummary({ folderId: id })
+      if (saved?.summary) {
+        setSelectedStyle(saved.style)
+        setAiSummary(saved.summary)
+      }
+
       const localFolder = await db.folders.get(id)
       if (localFolder?.owner_id === user.id) {
         const localSessions = (await db.sessions.where('folder_id').equals(id).reverse().sortBy('started_at'))
@@ -90,6 +102,20 @@ export default function FolderDetailPage({ params }: PageProps) {
         setFolder(localFolder)
         setNewName(localFolder.name)
         setSessions(localSessions)
+        if (!saved?.summary) {
+          void fetch(`/api/history?table=session_summaries&folderId=${encodeURIComponent(id)}`)
+            .then(async (r) => (r.ok ? r.json() : { items: [] }))
+            .then((res) => {
+              if (!Array.isArray(res.items) || res.items.length === 0) return
+              hydrateSummariesFromCloud({ folderId: id }, res.items)
+              const hydrated = getSavedSummary({ folderId: id })
+              if (hydrated?.summary) {
+                setSelectedStyle(hydrated.style)
+                setAiSummary(hydrated.summary)
+              }
+            })
+            .catch(() => {})
+        }
         return
       }
 
@@ -102,6 +128,14 @@ export default function FolderDetailPage({ params }: PageProps) {
         .catch(() => ({}))
       const cloudFolder = cloudRes.item
       const cloudSessions = cloudRes.sessions || []
+      if (Array.isArray(cloudRes.summaries) && cloudRes.summaries.length > 0) {
+        hydrateSummariesFromCloud({ folderId: id }, cloudRes.summaries)
+        const hydrated = getSavedSummary({ folderId: id })
+        if (hydrated?.summary) {
+          setSelectedStyle(hydrated.style)
+          setAiSummary(hydrated.summary)
+        }
+      }
 
       if (!cloudFolder) {
         setPageError('Không tìm thấy thư mục hoặc bạn không có quyền truy cập.')
@@ -144,20 +178,23 @@ export default function FolderDetailPage({ params }: PageProps) {
       }))
 
       const existingSessions = await db.sessions.where('folder_id').equals(id).toArray()
-      const localPendingSessionIds = new Set(existingSessions.filter(s => s.sync_status === 'pending').map(s => s.id))
+      const localPendingSessionIds = new Set(existingSessions.filter(s => s.sync_status !== 'synced').map(s => s.id))
       const safeSessions = formattedSessions.filter(s => !localPendingSessionIds.has(s.id))
 
       await db.transaction('rw', db.folders, db.sessions, async () => {
-        if (!localFolder || localFolder.sync_status !== 'pending') {
+        if (!localFolder || localFolder.sync_status === 'synced') {
           await db.folders.put(formattedFolder)
         }
         if (safeSessions.length > 0) {
           await db.sessions.bulkPut(safeSessions)
         }
       })
-      setFolder(formattedFolder)
-      setNewName(formattedFolder.name)
-      setSessions(formattedSessions)
+      const resolvedFolder = localFolder && localFolder.sync_status !== 'synced' ? localFolder : formattedFolder
+      const mergedSessions = (await db.sessions.where('folder_id').equals(id).reverse().sortBy('started_at'))
+        .filter((s) => s.owner_id === user.id)
+      setFolder(resolvedFolder)
+      setNewName(resolvedFolder.name)
+      setSessions(mergedSessions.length > 0 ? mergedSessions : formattedSessions)
     } catch (error) {
       console.error('Error loading folder:', error)
       setPageError('Không thể tải thư mục. Hãy kiểm tra kết nối và thử lại.')
@@ -203,6 +240,7 @@ export default function FolderDetailPage({ params }: PageProps) {
         })
         await db.folders.delete(folder.id)
       })
+      clearSummariesForTarget({ folderId: folder.id })
       router.replace('/history')
       void syncPendingData()
     } catch (error) {
@@ -233,39 +271,51 @@ export default function FolderDetailPage({ params }: PageProps) {
     }
   }
 
-  const handleAiSummarize = async (style: SummaryStyle = selectedStyle) => {
+  const handleAiSummarize = async (style: SummaryStyle = selectedStyle, force = false) => {
     if (!folder || sessions.length === 0 || !ownerId) return
-    setAiLoading(true)
     setShowSummaryModal(true)
     setSelectedStyle(style)
     setSummaryError('')
     setShareLink('')
-    try {
-      const localSessions = (await db.sessions.where('folder_id').equals(folder.id).toArray())
-        .filter((session) => session.owner_id === ownerId)
-      const entriesBySession = await Promise.all(localSessions.map(async (session) => {
-        const sessionEntries = await db.transcriptEntries.where('session_id').equals(session.id).sortBy('start_ms')
-        return sessionEntries.map((entry) => ({ ...entry, sessionName: session.name }))
-      }))
 
-      const response = await fetch('/api/ai/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderId: folder.id, sessions: localSessions, entries: entriesBySession.flat(), style }),
-      })
-      let data: { summary?: string; error?: string } = {}
-      try {
-        data = await response.json()
-      } catch {
-        throw new Error(response.status === 413 ? 'Dữ liệu quá lớn để tóm tắt' : 'Không thể kết nối dịch vụ tóm tắt.')
+    if (!force) {
+      const cached = getSavedSummary({ folderId: folder.id }, style)
+      if (cached?.summary) {
+        setAiSummary(cached.summary)
+        setAiLoading(false)
+        setAiStartTimeMs(undefined)
+        return
       }
-      if (!response.ok || !data.summary) throw new Error(data.error || 'Không thể tạo bản tóm tắt.')
-      setAiSummary(data.summary)
+    }
+
+    const existingInFlight = getInFlightSummaryJob({ folderId: folder.id })
+    setAiLoading(true)
+    setAiStartTimeMs(existingInFlight?.style === style ? existingInFlight.startedAtMs : Date.now())
+
+    try {
+      const summaryText = await runSummaryJob({ folderId: folder.id }, style, async () => {
+        await syncPendingData().catch(() => {})
+        const response = await fetch('/api/ai/summarize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderId: folder.id, style, force }),
+        })
+        let data: { summary?: string; error?: string } = {}
+        try {
+          data = await response.json()
+        } catch {
+          throw new Error(response.status === 413 ? 'Dữ liệu quá lớn để tóm tắt' : 'Không thể kết nối dịch vụ tóm tắt.')
+        }
+        if (!response.ok || !data.summary) throw new Error(data.error || 'Không thể tạo bản tóm tắt.')
+        return data.summary
+      })
+      setAiSummary(summaryText)
     } catch (error) {
       console.error('Error during folder summary:', error)
       setSummaryError(error instanceof Error ? error.message : 'Không thể kết nối dịch vụ tóm tắt.')
     } finally {
       setAiLoading(false)
+      setAiStartTimeMs(undefined)
     }
   }
 
@@ -274,6 +324,7 @@ export default function FolderDetailPage({ params }: PageProps) {
     setAiLoading(true)
     setSummaryError('')
     try {
+      await syncPendingData().catch(() => {})
       const response = await fetch('/api/shared/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -328,66 +379,107 @@ export default function FolderDetailPage({ params }: PageProps) {
 
   const totalDuration = sessions.reduce((total, session) => total + session.duration_seconds, 0)
   const summaryStyles: Array<{ value: SummaryStyle; label: string; description: string }> = [
-    { value: 'default', label: t.summaryStyleDefault, description: t.summaryStyleDefaultDesc },
+    { value: 'standard', label: t.summaryStyleDefault, description: t.summaryStyleDefaultDesc },
     { value: 'formal', label: t.summaryStyleFormal, description: t.summaryStyleFormalDesc },
     { value: 'casual', label: t.summaryStyleCasual, description: t.summaryStyleCasualDesc },
     { value: 'very_casual', label: t.summaryStyleVeryCasual, description: t.summaryStyleVeryCasualDesc },
   ]
 
   return (
-    <div className="workspace-shell">
-      <WorkspaceHeader title={t.folderDetailHeaderTitle} subtitle={folder.name} />
-      <main className="detail-main">
-        <button type="button" className="back-link" onClick={() => router.push('/history')}><ArrowLeft aria-hidden="true" /> {t.folderDetailBackLink}</button>
+    <div className="scr-view">
+      <WorkspaceHeader
+        title={t.folderDetailHeaderTitle}
+        subtitle={folder.name}
+        routeBadge="/history/folders/[id]"
+      />
+      <main className="scr-body">
+        <div className="scr-wrap">
+          <div className="h-feed__search-row">
+            <button type="button" className="btn btn--sm btn--outline" onClick={() => router.push('/history')}>
+              <ArrowLeft className="i" aria-hidden="true" />
+              <span>{t.folderDetailBackLink}</span>
+            </button>
+          </div>
 
-        <section className="detail-titlebar">
-          <div className="detail-title">
-            {renaming ? (
-              <div className="rename-control">
-                <label htmlFor="folder-title" className="sr-only">{t.folderNameLabel}</label>
-                <input id="folder-title" value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={100} autoFocus />
-                <button type="button" onClick={handleRename} aria-label={t.folderDetailSaveNameAria}><Check aria-hidden="true" /></button>
-                <button type="button" onClick={() => setRenaming(false)} aria-label={t.folderDetailCancelNameAria}><X aria-hidden="true" /></button>
+          <section className="g-card">
+            <div className="g-head">
+              <div>
+                {renaming ? (
+                  <div className="inline-edit-title">
+                    <label htmlFor="folder-title" className="sr-only">{t.folderNameLabel}</label>
+                    <input id="folder-title" value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={100} autoFocus />
+                    <button type="button" className="btn btn--sm btn--primary" onClick={handleRename} aria-label={t.folderDetailSaveNameAria}><Check className="i" aria-hidden="true" /> <span>Lưu</span></button>
+                    <button type="button" className="btn btn--sm btn--outline" onClick={() => setRenaming(false)} aria-label={t.folderDetailCancelNameAria}><X className="i" aria-hidden="true" /> <span>Hủy</span></button>
+                  </div>
+                ) : (
+                  <h1 className="g-title">
+                    <Folder className="i" aria-hidden="true" />
+                    <span>{folder.name}</span>
+                    <button type="button" className="btn btn--sm btn--outline" onClick={() => setRenaming(true)} aria-label={t.folderDetailRenameAria}><Edit3 className="i" aria-hidden="true" /> <span>Đổi tên</span></button>
+                  </h1>
+                )}
+                <div className="g-meta">
+                  <span className="meta-pill">{t.folderDetailCreatedDate.replace('{date}', new Date(folder.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN'))}</span>
+                  <span className="meta-pill">{formatDuration(totalDuration, t)}</span>
+                  <span className="meta-pill">{t.folderDetailConversationsCount.replace('{count}', String(sessions.length))}</span>
+                </div>
+              </div>
+              <div className="h-feed__search-row">
+                <button type="button" className="btn btn--primary" onClick={() => void handleAiSummarize()} disabled={sessions.length === 0}>
+                  <Sparkles className="i" aria-hidden="true" />
+                  <span>{t.folderDetailSummarizeBtn}</span>
+                </button>
+                <button type="button" className="btn btn--danger" onClick={handleDeleteFolder} aria-label={t.folderDetailDeleteBtn} title={t.folderDetailDeleteBtn}>
+                  <Trash2 className="i" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {pageError && <div className="session-alert session-alert--danger" role="alert"><p>{pageError}</p></div>}
+
+          <section className="g-card">
+            <div className="g-head">
+              <div>
+                <h2 className="g-title">{t.folderDetailSessionsSectionTitle}</h2>
+                <p>{t.folderDetailSessionsSectionDesc}</p>
+              </div>
+              <span className="meta-pill">{t.itemsCount.replace('{count}', String(sessions.length))}</span>
+            </div>
+            {sessions.length === 0 ? (
+              <div className="list-empty">
+                <FolderOpen className="i" aria-hidden="true" />
+                <p><strong>{t.folderDetailEmptyFolderTitle}</strong></p>
+                <p>{t.folderDetailEmptyFolderDesc}</p>
               </div>
             ) : (
-              <div className="title-with-action"><span className="folder-title-icon"><Folder aria-hidden="true" /></span><h1>{folder.name}</h1><button type="button" onClick={() => setRenaming(true)} aria-label={t.folderDetailRenameAria}><Edit3 aria-hidden="true" /></button></div>
+              <div>
+                {sessions.map((session) => {
+                  const partnerLang = getPartnerLanguage(session.partner_language, language)
+                  return (
+                    <div className="h-card" key={session.id}>
+                      <button type="button" className="h-card__main" onClick={() => router.push(`/history/sessions/${session.id}`)}>
+                        <span className="session__icon" aria-hidden="true"><ArrowLeftRight className="i" /></span>
+                        <span className="h-card__body">
+                          <span className="h-card__title">{session.name}</span>
+                          <span className="h-card__sub">
+                            <span className="h-card__pair">
+                              {partnerLang?.shortName ?? (session.partner_language ? String(session.partner_language).toUpperCase() : 'AUTO')} · {partnerLang?.name ?? session.partner_language ?? 'Auto'}
+                            </span>
+                            <span>{formatDuration(session.duration_seconds, t)}</span>
+                          </span>
+                        </span>
+                      </button>
+                      <button type="button" className="btn btn--sm btn--outline" onClick={() => void handleRemoveSession(session.id)} aria-label={t.folderDetailRemoveSessionAria} title={t.folderDetailRemoveSessionAria}>
+                        <Unlink className="i" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
             )}
-            <div className="detail-metadata">
-              <span><CalendarDays aria-hidden="true" />{t.folderDetailCreatedDate.replace('{date}', new Date(folder.created_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN'))}</span>
-              <span><Clock3 aria-hidden="true" />{formatDuration(totalDuration, t)}</span>
-              <span>{t.folderDetailConversationsCount.replace('{count}', String(sessions.length))}</span>
-            </div>
-          </div>
-          <div className="detail-actions">
-            <button type="button" className="ai-command" onClick={() => void handleAiSummarize()} disabled={sessions.length === 0}><Sparkles aria-hidden="true" /> {t.folderDetailSummarizeBtn}</button>
-            <button type="button" className="delete-command" onClick={handleDeleteFolder} aria-label={t.folderDetailDeleteBtn} title={t.folderDetailDeleteBtn}><Trash2 aria-hidden="true" /></button>
-          </div>
-        </section>
-
-        {pageError && <div className="session-alert session-alert--danger" role="alert"><p>{pageError}</p></div>}
-
-        <section className="folder-session-section">
-          <header><div><h2>{t.folderDetailSessionsSectionTitle}</h2><p>{t.folderDetailSessionsSectionDesc}</p></div><span>{t.itemsCount.replace('{count}', String(sessions.length))}</span></header>
-          {sessions.length === 0 ? (
-            <div className="history-empty"><FolderOpen aria-hidden="true" /><strong>{t.folderDetailEmptyFolderTitle}</strong><p>{t.folderDetailEmptyFolderDesc}</p></div>
-          ) : (
-            <div className="history-list">
-              {sessions.map((session) => {
-                const partnerLang = getPartnerLanguage(session.partner_language)
-                return (
-                  <div className="folder-session-row" key={session.id}>
-                    <button type="button" onClick={() => router.push(`/history/sessions/${session.id}`)}>
-                      <span className="history-row__date"><strong>{new Date(session.started_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN', { day: '2-digit' })}</strong><small>{new Date(session.started_at).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN', { month: 'short' })}</small></span>
-                      <span className="history-row__main"><strong>{session.name}</strong><small><span className="language-inline"><b>{partnerLang?.shortName ?? (session.partner_language ? String(session.partner_language).toUpperCase() : 'AUTO')}</b>{partnerLang?.name ?? session.partner_language ?? 'Auto'}</span><span><Clock3 aria-hidden="true" />{formatDuration(session.duration_seconds, t)}</span></small></span>
-                      <ChevronRight aria-hidden="true" />
-                    </button>
-                    <button type="button" className="unlink-command" onClick={() => void handleRemoveSession(session.id)} aria-label={t.folderDetailRemoveSessionAria} title={t.folderDetailRemoveSessionAria}><Unlink aria-hidden="true" /></button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </section>
+          </section>
+        </div>
       </main>
 
       {showSummaryModal && (
@@ -398,7 +490,14 @@ export default function FolderDetailPage({ params }: PageProps) {
               <button type="button" onClick={() => setShowSummaryModal(false)} aria-label={t.closeAria}><X aria-hidden="true" /></button>
             </header>
             {aiLoading && !aiSummary ? (
-              <div className="report-loading" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><strong>{t.summaryModalAnalyzingTitle}</strong><p>{t.summaryModalAnalyzingDesc}</p></div>
+              <div className="scr-wrap">
+                <AiSummaryProgress
+                  language={language}
+                  entryCount={sessions.length}
+                  styleLabel={summaryStyles.find((s) => s.value === selectedStyle)?.label}
+                  startedAtMs={aiStartTimeMs}
+                />
+              </div>
             ) : (
               <div className="report-layout">
                 <aside className="report-settings">

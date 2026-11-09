@@ -3,6 +3,7 @@ import { getAuthenticatedUser, AUTH_COOKIE_NAME } from '@/lib/auth/session'
 import { isAllowedEmail } from '@/lib/auth-utils'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getD1 } from '@/lib/d1-client'
+import { decryptAiKey, mintSonioxWsTicket } from '@/lib/ai-security'
 
 export const runtime = 'edge'
 
@@ -18,6 +19,13 @@ function errorKind(error: unknown) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (request.headers.get('sec-fetch-site') === 'cross-site') {
+      return NextResponse.json(
+        { error: 'Yêu cầu cross-site bị từ chối' },
+        { status: 403, headers: noStoreHeader }
+      )
+    }
+
     const user = await getAuthenticatedUser(request)
 
     if (!user) {
@@ -31,8 +39,8 @@ export async function POST(request: NextRequest) {
 
     if (!email || !isAllowedEmail(email) || !user.email_confirmed_at) {
       return NextResponse.json(
-        { error: 'Tài khoản không hợp lệ hoặc chưa được xác thực.' },
-        { status: 403, headers: noStoreHeader }
+        { error: 'Phiên đăng nhập không hợp lệ' },
+        { status: 401, headers: noStoreHeader }
       )
     }
 
@@ -50,8 +58,25 @@ export async function POST(request: NextRequest) {
     })
     if (!ipKeyLimit.allowed) return rateLimitResponse(ipKeyLimit.retryAfterSeconds)
 
-    // 3. Verify SONIOX_API_KEY env is set
-    if (!process.env.SONIOX_API_KEY) {
+    // 3. Resolve encrypted D1 Soniox key or SONIOX_API_KEY env
+    let sonioxMasterKey = (process.env.SONIOX_API_KEY || '').trim()
+    try {
+      const db = getD1()
+      const row = await db
+        .prepare('SELECT api_key FROM api_settings WHERE key = ?')
+        .bind('soniox')
+        .first<{ api_key?: string | null }>()
+      if (row?.api_key) {
+        const decrypted = (await decryptAiKey(row.api_key)).trim()
+        if (decrypted) {
+          sonioxMasterKey = decrypted
+        }
+      }
+    } catch {
+      // Fallback to process.env.SONIOX_API_KEY
+    }
+
+    if (!sonioxMasterKey) {
       return NextResponse.json(
         { error: 'Chưa cấu hình Soniox API Key trên máy chủ' },
         { status: 500, headers: noStoreHeader }
@@ -64,7 +89,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SONIOX_API_KEY}`
+        'Authorization': `Bearer ${sonioxMasterKey}`
       },
       body: JSON.stringify({
         usage_type: 'transcribe_websocket',
@@ -75,6 +100,23 @@ export async function POST(request: NextRequest) {
       }),
       signal: AbortSignal.timeout(10_000),
     })
+
+    // 5. If the project key is scoped strictly to Real-time WebSocket (403 on REST),
+    // mint a 60s HMAC-SHA256 Edge WebSocket Proxy ticket so the master key is NEVER exposed to the client.
+    if (response.status === 403) {
+      const requestUrl = new URL(request.url)
+      const wsProtocol = requestUrl.protocol === 'https:' ? 'wss:' : 'ws:'
+      const ticket = await mintSonioxWsTicket(sonioxMasterKey, sanitizedUserId, 60)
+      return NextResponse.json(
+        {
+          success: true,
+          api_key: ticket,
+          stt_ws_url: `${wsProtocol}//${requestUrl.host}/api/ws/soniox`,
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+        },
+        { headers: noStoreHeader }
+      )
+    }
 
     if (!response.ok) {
       console.error('Soniox temporary key request failed:', response.status)

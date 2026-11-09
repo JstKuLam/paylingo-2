@@ -17,12 +17,13 @@ class AndroidAudioRecorder : AudioRecorder {
     private var audioRecord: AudioRecord? = null
     private val isRecording = AtomicBoolean(false)
     private val scope = CoroutineScope(Dispatchers.IO)
-    private val _audioFlow = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
+    // Replay up to 256 PCM chunks (~8s of initial speech at 100ms/chunk) while the WebSocket handshake completes
+    private val _audioFlow = MutableSharedFlow<ByteArray>(replay = 256, extraBufferCapacity = 256)
 
     private val sampleRate = 16000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+    private val bufferSize = maxOf(AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat), 3200)
 
     @SuppressLint("MissingPermission")
     override fun startRecording(): Flow<ByteArray> {
@@ -30,6 +31,8 @@ class AndroidAudioRecorder : AudioRecorder {
             AppLog.d("AndroidAudioRecorder", "Already recording, returning active audio flow")
             return _audioFlow.asSharedFlow()
         }
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        _audioFlow.resetReplayCache()
 
         AppLog.d("AndroidAudioRecorder", "Configuring AudioRecord: rate=$sampleRate, bufferSize=$bufferSize")
         try {

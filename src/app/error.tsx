@@ -34,7 +34,6 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
     <main className="error-shell">
       <section className="error-panel">
         <span className="error-icon"><AlertTriangle aria-hidden="true" /></span>
-        <p className="eyebrow">Không thể tiếp tục</p>
         <h1>Trang vừa gặp sự cố</h1>
         <p>Dữ liệu hội thoại đã lưu trên thiết bị không bị xóa. Hãy thử tải lại phần giao diện này trước.</p>
         <div className="error-actions">

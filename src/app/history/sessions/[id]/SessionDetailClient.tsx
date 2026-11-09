@@ -1,16 +1,13 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
-  CalendarDays,
   Check,
   ChevronDown,
-  CircleCheck,
-  Clock3,
-  CloudLightning,
   Copy,
+  CornerDownRight,
   Download,
   Edit3,
   FileJson,
@@ -24,15 +21,22 @@ import {
   X,
 } from 'lucide-react'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
+import AiSummaryProgress from '@/components/AiSummaryProgress'
 import { claimLegacyLocalData, db, LocalSession, LocalTranscriptEntry } from '@/lib/db'
 import { generatePremiumHTMLReport } from '@/lib/html-generator'
 import { authClient } from '@/lib/auth-client'
 import { getPartnerLanguage } from '@/lib/languages'
 import { syncPendingData } from '@/lib/sync-manager'
-import { formatTimeline } from '@/lib/utils'
+import {
+  clearSummariesForTarget,
+  getInFlightSummaryJob,
+  getSavedSummary,
+  hydrateSummariesFromCloud,
+  runSummaryJob,
+  type SummaryStyle,
+} from '@/lib/summary-store'
+import { formatTimeline, scrollIntoViewAsync } from '@/lib/utils'
 import { useLanguage } from '@/hooks/useLanguage'
-
-type SummaryStyle = 'default' | 'formal' | 'casual' | 'very_casual'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -64,14 +68,26 @@ export default function SessionDetailPage({ params }: PageProps) {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [editOrigText, setEditOrigText] = useState('')
   const [editTransText, setEditTransText] = useState('')
+  const [highlightedEntryId, setHighlightedEntryId] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiStartTimeMs, setAiStartTimeMs] = useState<number | undefined>(undefined)
   const [aiSummary, setAiSummary] = useState('')
   const [summaryError, setSummaryError] = useState('')
   const [sharePassword, setSharePassword] = useState('')
   const [shareLink, setShareLink] = useState('')
   const [copied, setCopied] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
-  const [selectedStyle, setSelectedStyle] = useState<SummaryStyle>('default')
+  const [selectedStyle, setSelectedStyle] = useState<SummaryStyle>('standard')
+  const scrollOpIdRef = useRef(0)
+  const highlightTimeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current !== null) {
+        window.clearTimeout(highlightTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const loadSessionData = useCallback(async () => {
     if (!id || id === 'fallback') return
@@ -99,6 +115,12 @@ export default function SessionDetailPage({ params }: PageProps) {
         }
       }
 
+      const saved = getSavedSummary({ sessionId: id })
+      if (saved?.summary) {
+        setSelectedStyle(saved.style)
+        setAiSummary(saved.summary)
+      }
+
       if (localSession?.owner_id === user.id) {
         const localEntries = await db.transcriptEntries
           .where('session_id')
@@ -108,6 +130,20 @@ export default function SessionDetailPage({ params }: PageProps) {
           setSession(localSession)
           setNewName(localSession.name)
           setEntries(localEntries)
+          if (!saved?.summary) {
+            void fetch(`/api/history?table=session_summaries&sessionId=${encodeURIComponent(id)}`)
+              .then(async (r) => (r.ok ? r.json() : { items: [] }))
+              .then((res) => {
+                if (!Array.isArray(res.items) || res.items.length === 0) return
+                hydrateSummariesFromCloud({ sessionId: id }, res.items)
+                const hydrated = getSavedSummary({ sessionId: id })
+                if (hydrated?.summary) {
+                  setSelectedStyle(hydrated.style)
+                  setAiSummary(hydrated.summary)
+                }
+              })
+              .catch(() => {})
+          }
           return
         }
       }
@@ -121,6 +157,14 @@ export default function SessionDetailPage({ params }: PageProps) {
         .catch(() => ({}))
       const cloudSession = cloudRes.item
       const cloudEntries = cloudRes.entries || []
+      if (Array.isArray(cloudRes.summaries) && cloudRes.summaries.length > 0) {
+        hydrateSummariesFromCloud({ sessionId: id }, cloudRes.summaries)
+        const hydrated = getSavedSummary({ sessionId: id })
+        if (hydrated?.summary) {
+          setSelectedStyle(hydrated.style)
+          setAiSummary(hydrated.summary)
+        }
+      }
 
       if (!cloudSession) {
         setPageError(t.sessionDetailNotFoundDesc)
@@ -144,6 +188,7 @@ export default function SessionDetailPage({ params }: PageProps) {
         id: string
         session_id: string
         speaker: 'host' | 'partner'
+        speaker_label?: string | null
         original_text: string
         translated_text: string
         start_ms: number
@@ -155,6 +200,7 @@ export default function SessionDetailPage({ params }: PageProps) {
         id: entry.id,
         session_id: entry.session_id,
         speaker: entry.speaker,
+        speaker_label: entry.speaker_label ?? undefined,
         original_text: entry.original_text,
         translated_text: entry.translated_text,
         start_ms: entry.start_ms,
@@ -166,12 +212,12 @@ export default function SessionDetailPage({ params }: PageProps) {
 
       const existingEntries = await db.transcriptEntries.where('session_id').equals(id).toArray()
       const localPendingEntryIds = new Set(
-        existingEntries.filter((entry) => entry.sync_status === 'pending').map((entry) => entry.id)
+        existingEntries.filter((entry) => entry.sync_status !== 'synced').map((entry) => entry.id)
       )
       const safeEntries = formattedEntries.filter((entry) => !localPendingEntryIds.has(entry.id))
 
       await db.transaction('rw', db.sessions, db.transcriptEntries, async () => {
-        if (!localSession || localSession.sync_status !== 'pending') {
+        if (!localSession || localSession.sync_status === 'synced') {
           await db.sessions.put(formattedSession)
         }
         if (safeEntries.length > 0) {
@@ -179,9 +225,11 @@ export default function SessionDetailPage({ params }: PageProps) {
         }
       })
 
-      setSession(formattedSession)
-      setNewName(formattedSession.name)
-      setEntries(formattedEntries)
+      const resolvedSession = localSession && localSession.sync_status !== 'synced' ? localSession : formattedSession
+      const mergedEntries = await db.transcriptEntries.where('session_id').equals(id).sortBy('start_ms')
+      setSession(resolvedSession)
+      setNewName(resolvedSession.name)
+      setEntries(mergedEntries.length > 0 ? mergedEntries : formattedEntries)
     } catch (error) {
       console.error('Error loading session:', error)
       setPageError(t.sessionDetailLoadError)
@@ -222,6 +270,7 @@ export default function SessionDetailPage({ params }: PageProps) {
         await db.transcriptEntries.where('session_id').equals(session.id).delete()
         await db.sessions.delete(session.id)
       })
+      clearSummariesForTarget({ sessionId: session.id })
       router.replace('/history')
     } catch (error) {
       console.error('Failed to delete session:', error)
@@ -254,17 +303,17 @@ export default function SessionDetailPage({ params }: PageProps) {
     void syncPendingData()
   }
 
-  const handleExport = async (format: 'pdf' | 'txt' | 'json') => {
+  const handleExport = async (format: 'txt' | 'json' | 'md') => {
     if (!session) return
     setShowExportMenu(false)
     setPageError('')
     try {
-      const languageName = getPartnerLanguage(session.partner_language)?.name || session.partner_language
-      const { downloadSessionPDF, downloadSessionTXT, downloadSessionJSON } = await import('@/lib/pdf-generator')
-      if (format === 'pdf') {
-        await downloadSessionPDF(session.name, session.partner_language, languageName, session.started_at, entries)
-      } else if (format === 'txt') {
+      const languageName = getPartnerLanguage(session.partner_language, language)?.name || session.partner_language
+      const { downloadSessionTXT, downloadSessionJSON, downloadSessionMarkdown } = await import('@/lib/pdf-generator')
+      if (format === 'txt') {
         await downloadSessionTXT(session.name, languageName, session.started_at, entries)
+      } else if (format === 'md') {
+        await downloadSessionMarkdown(session.name, languageName, session.started_at, entries)
       } else {
         await downloadSessionJSON(session.name, session.partner_language, languageName, session.started_at, entries)
       }
@@ -274,33 +323,51 @@ export default function SessionDetailPage({ params }: PageProps) {
     }
   }
 
-  const handleAiSummarize = async (style: SummaryStyle = selectedStyle) => {
+  const handleAiSummarize = async (style: SummaryStyle = selectedStyle, force = false) => {
     if (!session || entries.length === 0) return
-    setAiLoading(true)
     setShowSummaryModal(true)
     setSelectedStyle(style)
     setSummaryError('')
     setShareLink('')
 
-    try {
-      const response = await fetch('/api/ai/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: session.id, sessions: [session], entries, style }),
-      })
-      let data: { summary?: string; error?: string } = {}
-      try {
-        data = await response.json()
-      } catch {
-        throw new Error(response.status === 413 ? 'Dữ liệu quá lớn để tóm tắt' : t.summaryModalServiceError)
+    if (!force) {
+      const cached = getSavedSummary({ sessionId: session.id }, style)
+      if (cached?.summary) {
+        setAiSummary(cached.summary)
+        setAiLoading(false)
+        setAiStartTimeMs(undefined)
+        return
       }
-      if (!response.ok || !data.summary) throw new Error(data.error || t.summaryModalGenerateError)
-      setAiSummary(data.summary)
+    }
+
+    const existingInFlight = getInFlightSummaryJob({ sessionId: session.id })
+    setAiLoading(true)
+    setAiStartTimeMs(existingInFlight?.style === style ? existingInFlight.startedAtMs : Date.now())
+
+    try {
+      const summaryText = await runSummaryJob({ sessionId: session.id }, style, async () => {
+        await syncPendingData().catch(() => {})
+        const response = await fetch('/api/ai/summarize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: session.id, style, force }),
+        })
+        let data: { summary?: string; error?: string } = {}
+        try {
+          data = await response.json()
+        } catch {
+          throw new Error(response.status === 413 ? 'Dữ liệu quá lớn để tóm tắt' : t.summaryModalServiceError)
+        }
+        if (!response.ok || !data.summary) throw new Error(data.error || t.summaryModalGenerateError)
+        return data.summary
+      })
+      setAiSummary(summaryText)
     } catch (error) {
       console.error('Error during AI summarize:', error)
       setSummaryError(error instanceof Error ? error.message : t.summaryModalServiceError)
     } finally {
       setAiLoading(false)
+      setAiStartTimeMs(undefined)
     }
   }
 
@@ -309,6 +376,7 @@ export default function SessionDetailPage({ params }: PageProps) {
     setAiLoading(true)
     setSummaryError('')
     try {
+      await syncPendingData().catch(() => {})
       const response = await fetch('/api/shared/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -368,153 +436,326 @@ export default function SessionDetailPage({ params }: PageProps) {
     )
   }
 
-  const partnerLanguage = getPartnerLanguage(session.partner_language)
-  const firstEntryStart = entries[0]?.start_ms ?? 0
+  const partnerLanguage = getPartnerLanguage(session.partner_language, language)
+  const manualNoteEntries = entries.filter((e) => e.speaker_label === 'NOTE')
+  const speechEntries = entries.filter((e) => e.speaker_label !== 'NOTE')
+  const firstEntryStart = speechEntries[0]?.start_ms ?? entries[0]?.start_ms ?? 0
   const duration = formatDuration(session.duration_seconds, t)
+  const partnerBadge = partnerLanguage?.shortName ?? session.partner_language.toUpperCase()
+
+  const handleJumpToNote = async (note: LocalTranscriptEntry) => {
+    if (speechEntries.length === 0) return
+    let targetEntry = speechEntries[0]
+    let bestDiff = Number.POSITIVE_INFINITY
+    for (const entry of speechEntries) {
+      const diff = Math.abs(entry.start_ms - note.start_ms)
+      if (diff < bestDiff) {
+        bestDiff = diff
+        targetEntry = entry
+      }
+    }
+    if (!targetEntry) return
+    const el = document.getElementById(`tx-entry-${targetEntry.id}`)
+    if (!el) return
+
+    const opId = ++scrollOpIdRef.current
+    await scrollIntoViewAsync(el, { behavior: 'smooth', block: 'center' })
+    if (opId !== scrollOpIdRef.current) return
+
+    setHighlightedEntryId(targetEntry.id)
+    el.focus({ preventScroll: true })
+    if (highlightTimeoutRef.current !== null) {
+      window.clearTimeout(highlightTimeoutRef.current)
+    }
+    highlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedEntryId((curr) => (curr === targetEntry.id ? null : curr))
+    }, 2600)
+  }
 
   const summaryStyles: Array<{ value: SummaryStyle; label: string; description: string }> = [
-    { value: 'default', label: t.summaryStyleDefault, description: t.summaryStyleDefaultDesc },
+    { value: 'standard', label: t.summaryStyleDefault, description: t.summaryStyleDefaultDesc },
     { value: 'formal', label: t.summaryStyleFormal, description: t.summaryStyleFormalDesc },
     { value: 'casual', label: t.summaryStyleCasual, description: t.summaryStyleCasualDesc },
     { value: 'very_casual', label: t.summaryStyleVeryCasual, description: t.summaryStyleVeryCasualDesc },
   ]
 
   return (
-    <div className="workspace-shell">
-      <WorkspaceHeader title={t.sessionDetailHeaderTitle} subtitle={session.name} />
+    <div className="scr-view">
+      <WorkspaceHeader
+        title={t.sessionDetailHeaderTitle}
+        subtitle={session.name}
+        routeBadge="/history/sessions/[id]"
+      />
 
-      <main className="detail-main">
-        <button type="button" className="back-link" onClick={() => router.push('/history')}>
-          <ArrowLeft aria-hidden="true" /> {t.sessionDetailBackLink}
-        </button>
+      <main className="scr-body">
+        <div className="scr-wrap">
+          <div className="h-feed__search-row">
+            <button type="button" className="btn btn--sm btn--outline" onClick={() => router.push('/history')}>
+              <ArrowLeft className="i" aria-hidden="true" />
+              <span>{t.sessionDetailBackLink}</span>
+            </button>
+          </div>
 
-        <section className="detail-titlebar">
-          <div className="detail-title">
-            {renaming ? (
-              <div className="rename-control">
-                <label htmlFor="session-name" className="sr-only">{t.sessionDetailNameLabel}</label>
-                <input
-                  id="session-name"
-                  value={newName}
-                  onChange={(event) => setNewName(event.target.value)}
-                  maxLength={180}
-                  autoFocus
-                />
-                <button type="button" onClick={handleRename} aria-label={t.sessionDetailSaveNameAria}><Check aria-hidden="true" /></button>
-                <button type="button" onClick={() => setRenaming(false)} aria-label={t.sessionDetailCancelNameAria}><X aria-hidden="true" /></button>
+          <section className="g-card">
+            <div className="g-head">
+              <div>
+                {renaming ? (
+                  <div className="inline-edit-title">
+                    <label htmlFor="session-name" className="sr-only">{t.sessionDetailNameLabel}</label>
+                    <input
+                      id="session-name"
+                      value={newName}
+                      onChange={(event) => setNewName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          if (event.nativeEvent.isComposing || event.keyCode === 229) return
+                          void handleRename()
+                        } else if (event.key === 'Escape') {
+                          event.preventDefault()
+                          setRenaming(false)
+                        }
+                      }}
+                      maxLength={180}
+                      autoFocus
+                    />
+                    <button type="button" className="btn btn--sm btn--primary" onClick={handleRename} aria-label={t.sessionDetailSaveNameAria}>
+                      <Check className="i" aria-hidden="true" />
+                      <span>Lưu</span>
+                    </button>
+                    <button type="button" className="btn btn--sm btn--outline" onClick={() => setRenaming(false)} aria-label={t.sessionDetailCancelNameAria}>
+                      <X className="i" aria-hidden="true" />
+                      <span>Hủy</span>
+                    </button>
+                  </div>
+                ) : (
+                  <h1 className="g-title">
+                    <span>{session.name}</span>
+                    <button type="button" className="btn btn--sm btn--outline" onClick={() => setRenaming(true)} aria-label={t.sessionDetailRenameAria} title={t.sessionDetailRenameAria}>
+                      <Edit3 className="i" aria-hidden="true" />
+                      <span>Đổi tên</span>
+                    </button>
+                  </h1>
+                )}
+                <p className="h-detail__meta-line">
+                  <span>
+                    {new Date(session.started_at).toLocaleString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <span>·</span>
+                  <span>{duration}</span>
+                </p>
               </div>
-            ) : (
-              <div className="title-with-action">
-                <h1>{session.name}</h1>
-                <button type="button" onClick={() => setRenaming(true)} aria-label={t.sessionDetailRenameAria} title={t.sessionDetailRenameAria}>
-                  <Edit3 aria-hidden="true" />
+
+              <div className="h-feed__search-row">
+                <button type="button" className="btn btn--primary" onClick={() => void handleAiSummarize()} disabled={entries.length === 0}>
+                  <Sparkles className="i" aria-hidden="true" />
+                  <span>{t.sessionDetailSummarizeBtn}</span>
+                </button>
+                <div className="export-control">
+                  <button type="button" className="btn btn--outline" onClick={() => setShowExportMenu((current) => !current)} aria-expanded={showExportMenu}>
+                    <Download className="i" aria-hidden="true" />
+                    <span>{t.sessionDetailExportBtn}</span>
+                    <ChevronDown className="i" aria-hidden="true" />
+                  </button>
+                  {showExportMenu && (
+                    <div className="export-menu">
+                      <button type="button" onClick={() => void handleExport('txt')}><FileText aria-hidden="true" /> {t.sessionDetailExportTxt}</button>
+                      <button type="button" onClick={() => void handleExport('json')}><FileJson aria-hidden="true" /> {t.sessionDetailExportJson}</button>
+                      <button type="button" onClick={() => void handleExport('md')}><FileText aria-hidden="true" /> {t.sessionDetailExportMd}</button>
+                    </div>
+                  )}
+                </div>
+                <button type="button" className="btn btn--danger" onClick={handleDelete} aria-label={t.sessionDetailDeleteBtn} title={t.sessionDetailDeleteBtn}>
+                  <Trash2 className="i" aria-hidden="true" />
                 </button>
               </div>
-            )}
-            <div className="detail-metadata">
-              <span><CalendarDays aria-hidden="true" />{new Date(session.started_at).toLocaleString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'vi-VN')}</span>
-              <span><Clock3 aria-hidden="true" />{duration}</span>
-              <span className="language-inline"><b>{partnerLanguage?.shortName ?? session.partner_language.toUpperCase()}</b>{partnerLanguage?.name ?? session.partner_language}</span>
             </div>
-          </div>
+          </section>
 
-          <div className="detail-actions">
-            <button type="button" className="ai-command" onClick={() => void handleAiSummarize()} disabled={entries.length === 0}>
-              <Sparkles aria-hidden="true" /> {t.sessionDetailSummarizeBtn}
-            </button>
-            <div className="export-control">
-              <button type="button" onClick={() => setShowExportMenu((current) => !current)} aria-expanded={showExportMenu}>
-                <Download aria-hidden="true" /> {t.sessionDetailExportBtn} <ChevronDown aria-hidden="true" />
-              </button>
-              {showExportMenu && (
-                <div className="export-menu">
-                  <button type="button" onClick={() => void handleExport('pdf')}><FileText aria-hidden="true" /> {t.sessionDetailExportPdf}</button>
-                  <button type="button" onClick={() => void handleExport('txt')}><FileText aria-hidden="true" /> {t.sessionDetailExportTxt}</button>
-                  <button type="button" onClick={() => void handleExport('json')}><FileJson aria-hidden="true" /> {t.sessionDetailExportJson}</button>
-                </div>
-              )}
-            </div>
-            <button type="button" className="delete-command" onClick={handleDelete} aria-label={t.sessionDetailDeleteBtn} title={t.sessionDetailDeleteBtn}>
-              <Trash2 aria-hidden="true" />
-            </button>
-          </div>
-        </section>
-
-        {pageError && (
-          <div className="session-alert session-alert--danger" role="alert"><p>{pageError}</p></div>
-        )}
-
-        <section className="transcript-archive" aria-labelledby="transcript-heading">
-          <header>
-            <div>
-              <h2 id="transcript-heading">{t.sessionDetailTranscriptHeading}</h2>
-              <p>{t.sessionDetailEntriesCount.replace('{count}', String(entries.length))}</p>
-            </div>
-            <span className={`sync-label sync-label--${session.sync_status}`}>
-              {session.sync_status === 'synced' ? <CircleCheck aria-hidden="true" /> : <CloudLightning aria-hidden="true" />}
-              {session.sync_status === 'synced' ? t.syncStatusSynced : session.sync_status === 'failed' ? t.syncStatusFailed : t.syncStatusPending}
-            </span>
-          </header>
-
-          {entries.length === 0 ? (
-            <div className="transcript-archive__empty">
-              <Volume2 aria-hidden="true" />
-              <strong>{t.sessionDetailEmptyTranscriptTitle}</strong>
-              <p>{t.sessionDetailEmptyTranscriptDesc}</p>
-            </div>
-          ) : (
-            <ol className="archive-entry-list">
-              {entries.map((entry) => {
-                const hostText = entry.speaker === 'host' ? entry.original_text : entry.translated_text
-                const partnerText = entry.speaker === 'partner' ? entry.original_text : entry.translated_text
-                const isEditing = editingEntryId === entry.id
-                return (
-                  <li key={entry.id} className={`archive-entry archive-entry--${entry.speaker}`}>
-                    <div className="archive-entry__meta">
-                      <span>{entry.speaker === 'host' ? t.sessionDetailSpeakerYou : t.sessionDetailSpeakerPartner.replace('{name}', partnerLanguage?.name ?? t.partnerLangLabel)}</span>
-                      <time>{formatTimeline(entry.start_ms - firstEntryStart)}</time>
-                      {!isEditing && (
-                        <button type="button" onClick={() => startEditing(entry)} aria-label={t.sessionDetailEditEntryAria} title={t.sessionDetailEditEntryAria}>
-                          <Edit3 aria-hidden="true" />
-                        </button>
-                      )}
-                    </div>
-
-                    {isEditing ? (
-                      <div className="entry-editor">
-                        <label>
-                          <span>{t.vietnameseLabel}</span>
-                          <textarea
-                            rows={3}
-                            value={entry.speaker === 'host' ? editOrigText : editTransText}
-                            onChange={(event) => entry.speaker === 'host' ? setEditOrigText(event.target.value) : setEditTransText(event.target.value)}
-                          />
-                        </label>
-                        <label>
-                          <span>{partnerLanguage?.name ?? t.partnerLangLabel}</span>
-                          <textarea
-                            rows={3}
-                            value={entry.speaker === 'partner' ? editOrigText : editTransText}
-                            onChange={(event) => entry.speaker === 'partner' ? setEditOrigText(event.target.value) : setEditTransText(event.target.value)}
-                          />
-                        </label>
-                        <footer>
-                          <button type="button" className="secondary-command" onClick={() => setEditingEntryId(null)}>{t.sessionDetailCancelEditBtn}</button>
-                          <button type="button" className="primary-command" onClick={() => void handleSaveEntryEdit(entry.id)}><Check aria-hidden="true" /> {t.sessionDetailSaveEditBtn}</button>
-                        </footer>
-                      </div>
-                    ) : (
-                      <div className="archive-entry__content">
-                        {hostText.trim() && <div><b>VI</b><p>{hostText}</p></div>}
-                        {partnerText.trim() && <div><b>{partnerLanguage?.shortName ?? 'INTL'}</b><p>{partnerText}</p></div>}
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ol>
+          {pageError && (
+            <div className="session-alert session-alert--danger" role="alert"><p>{pageError}</p></div>
           )}
-        </section>
+
+          <section aria-labelledby="transcript-heading">
+            <h2 id="transcript-heading" className="sr-only">{t.sessionDetailTranscriptHeading}</h2>
+
+            {entries.length === 0 ? (
+              <div className="g-card list-empty">
+                <Volume2 className="i" aria-hidden="true" />
+                <p><strong>{t.sessionDetailEmptyTranscriptTitle}</strong></p>
+                <p>{t.sessionDetailEmptyTranscriptDesc}</p>
+              </div>
+            ) : (
+              <>
+                {manualNoteEntries.length > 0 && (
+                  <div className="tx-notes-panel">
+                    <div className="tx-notes-panel__head">
+                      <strong>
+                        {language === 'en'
+                          ? `Timeline Notes (${manualNoteEntries.length})`
+                          : language === 'zh'
+                            ? `时间轴笔记 (${manualNoteEntries.length})`
+                            : `Ghi chú theo mốc thời gian (${manualNoteEntries.length})`}
+                      </strong>
+                      <span>
+                        {language === 'en'
+                          ? 'Click any note to scroll to that moment'
+                          : language === 'zh'
+                            ? '点击任意笔记可滚动至对应段落'
+                            : 'Nhấp vào ghi chú để tự cuộn tới đoạn đã ghi'}
+                      </span>
+                    </div>
+                    <div className="note-list">
+                      {manualNoteEntries.map((note) => (
+                        <article
+                          key={note.id}
+                          className="note note--clickable"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => void handleJumpToNote(note)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              void handleJumpToNote(note)
+                            }
+                          }}
+                        >
+                          <div className="note__head">
+                            <span className="cite" aria-label="Timestamp">
+                              <span>
+                                {formatTimeline(Math.max(0, note.start_ms - firstEntryStart))}
+                              </span>
+                              <CornerDownRight className="i" aria-hidden="true" />
+                            </span>
+                            <span className="note__jump">
+                              {language === 'en'
+                                ? 'Jump to segment'
+                                : language === 'zh'
+                                  ? '定位至该段'
+                                  : 'Cuộn tới đoạn này'}
+                            </span>
+                          </div>
+                          <div className="note__body">{note.original_text}</div>
+                          {note.translated_text && (
+                            <div className="note__sub">
+                              <em>“{note.translated_text}”</em>
+                            </div>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <ol className="tx-list">
+                  {speechEntries.map((entry) => {
+                    const isHost = entry.speaker === 'host'
+                    const origText = (entry.original_text || '').trim()
+                    const transText = (entry.translated_text || '').trim()
+                    const primaryText = origText || transText
+                    const secondaryText = transText && transText !== origText ? transText : ''
+                    const isEditing = editingEntryId === entry.id
+                    const isHighlighted = highlightedEntryId === entry.id
+                    const partnerLabel = partnerLanguage?.name ?? partnerBadge
+                    return (
+                      <li
+                        key={entry.id}
+                        id={`tx-entry-${entry.id}`}
+                        tabIndex={-1}
+                        className={`tx-item ${isHost ? 'tx-item--m' : ''} ${isHighlighted ? 'is-highlighted' : ''}`.trim()}
+                      >
+                        <div className="tx-item__head">
+                          <span className="tx-item__role">
+                            {isHost ? t.sessionDetailSpeakerYou : partnerLabel}
+                            {entry.speaker_label ? ` · #${entry.speaker_label}` : ''}
+                          </span>
+                          <time className="tx-item__time">{formatTimeline(Math.max(0, entry.start_ms - firstEntryStart))}</time>
+                        </div>
+
+                        {isEditing ? (
+                          <div className="tx-item__body tx-inline-edit">
+                            <textarea
+                              className="tx-inline-input tx-inline-input--orig"
+                              aria-label={language === 'en' ? 'Original' : language === 'zh' ? '原文' : 'Câu gốc'}
+                              rows={Math.max(1, Math.ceil((editOrigText.length || 1) / 68))}
+                              value={editOrigText}
+                              autoFocus
+                              onChange={(event) => setEditOrigText(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' && !event.shiftKey) {
+                                  event.preventDefault()
+                                  if (event.nativeEvent.isComposing || event.keyCode === 229) return
+                                  void handleSaveEntryEdit(entry.id)
+                                } else if (event.key === 'Escape') {
+                                  event.preventDefault()
+                                  setEditingEntryId(null)
+                                }
+                              }}
+                            />
+                            {(secondaryText || editTransText) && (
+                              <textarea
+                                className="tx-inline-input tx-inline-input--trans"
+                                aria-label={language === 'en' ? 'Translation' : language === 'zh' ? '译文' : 'Bản dịch'}
+                                rows={Math.max(1, Math.ceil((editTransText.length || 1) / 68))}
+                                value={editTransText}
+                                onChange={(event) => setEditTransText(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' && !event.shiftKey) {
+                                    event.preventDefault()
+                                    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+                                    void handleSaveEntryEdit(entry.id)
+                                  } else if (event.key === 'Escape') {
+                                    event.preventDefault()
+                                    setEditingEntryId(null)
+                                  }
+                                }}
+                              />
+                            )}
+                            <div className="tx-inline-actions">
+                              <span className="tx-inline-hint">
+                                {language === 'en'
+                                  ? 'Enter to save · Esc to cancel'
+                                  : language === 'zh'
+                                    ? 'Enter 保存 · Esc 取消'
+                                    : 'Enter để lưu · Esc để hủy'}
+                              </span>
+                              <button type="button" className="btn btn--sm btn--outline" onClick={() => setEditingEntryId(null)}>{t.sessionDetailCancelEditBtn}</button>
+                              <button type="button" className="btn btn--sm btn--primary" onClick={() => void handleSaveEntryEdit(entry.id)}><Check className="i" aria-hidden="true" /> <span>{t.sessionDetailSaveEditBtn}</span></button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            className="tx-item__body tx-item__body--editable"
+                            role="button"
+                            tabIndex={0}
+                            title={t.sessionDetailEditEntryAria}
+                            onClick={() => startEditing(entry)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                startEditing(entry)
+                              }
+                            }}
+                          >
+                            <p className="tx-item__orig">{primaryText || '—'}</p>
+                            {secondaryText && (
+                              <p className="tx-item__trans">{secondaryText}</p>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                  )
+                })}
+              </ol>
+              </>
+            )}
+          </section>
+        </div>
       </main>
 
       {showSummaryModal && (
@@ -529,10 +770,13 @@ export default function SessionDetailPage({ params }: PageProps) {
             </header>
 
             {aiLoading && !aiSummary ? (
-              <div className="report-loading" role="status">
-                <Loader2 className="animate-spin" aria-hidden="true" />
-                <strong>{t.summaryModalAnalyzingTitle}</strong>
-                <p>{t.summaryModalAnalyzingDesc}</p>
+              <div className="scr-wrap">
+                <AiSummaryProgress
+                  language={language}
+                  entryCount={entries.length}
+                  styleLabel={summaryStyles.find((s) => s.value === selectedStyle)?.label}
+                  startedAtMs={aiStartTimeMs}
+                />
               </div>
             ) : (
               <div className="report-layout">

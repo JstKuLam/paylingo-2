@@ -9,6 +9,16 @@ class SessionRepository(databaseDriverFactory: DatabaseDriverFactory) {
     private val database = AppDatabase(driver)
     private val queries = database.appDatabaseQueries
 
+    init {
+        runCatching {
+            driver.execute(
+                null,
+                "CREATE INDEX IF NOT EXISTS idx_transcript_session_start ON TranscriptMessage(sessionId, startMs)",
+                0
+            )
+        }
+    }
+
     suspend fun saveSession(
         id: String,
         title: String,
@@ -19,13 +29,25 @@ class SessionRepository(databaseDriverFactory: DatabaseDriverFactory) {
         queries.insertSession(id, title, mode, partnerLang, createdAt)
     }
 
+    suspend fun renameSession(
+        id: String,
+        title: String
+    ) = withContext(Dispatchers.IO) {
+        val cleanTitle = title.trim().take(120)
+        if (cleanTitle.isNotEmpty()) {
+            queries.renameSession(cleanTitle, id)
+        }
+    }
+
     suspend fun getAllSessions(): List<Session> = withContext(Dispatchers.IO) {
         queries.getAllSessions().executeAsList()
     }
 
     suspend fun deleteSession(id: String) = withContext(Dispatchers.IO) {
-        queries.deleteSession(id)
-        queries.deleteMessagesForSession(id)
+        queries.transaction {
+            queries.deleteMessagesForSession(id)
+            queries.deleteSession(id)
+        }
     }
 
     suspend fun saveMessage(
@@ -48,6 +70,24 @@ class SessionRepository(databaseDriverFactory: DatabaseDriverFactory) {
             endMs = endMs,
             isFinal = if (isFinal) 1L else 0L
         )
+    }
+
+    suspend fun saveMessagesBatch(messages: List<TranscriptMessage>) = withContext(Dispatchers.IO) {
+        if (messages.isEmpty()) return@withContext
+        queries.transaction {
+            for (msg in messages) {
+                queries.insertMessage(
+                    id = msg.id,
+                    sessionId = msg.sessionId,
+                    text = msg.text,
+                    translation = msg.translation,
+                    speaker = msg.speaker,
+                    startMs = msg.startMs,
+                    endMs = msg.endMs,
+                    isFinal = msg.isFinal
+                )
+            }
+        }
     }
 
     suspend fun getMessagesForSession(sessionId: String): List<TranscriptMessage> = withContext(Dispatchers.IO) {
