@@ -49,6 +49,8 @@ yarn-error.log*
 
 # local d1/sqlite
 .data/
+/scratch/
+/public/report/
 supabase/.temp/
 .hallmark/
 

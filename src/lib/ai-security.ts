@@ -106,10 +106,14 @@ async function deriveAesKeyFromSecret(secretMaterial: string): Promise<CryptoKey
 }
 
 async function deriveAesKey(): Promise<CryptoKey> {
-  const secretMaterial =
+  const secretMaterial = (
     process.env.AI_KEY_ENCRYPTION_SECRET ||
     process.env.ADMIN_SESSION_SECRET ||
-    FALLBACK_VAULT_SECRET
+    ''
+  ).trim()
+  if (!secretMaterial) {
+    throw new Error('AI_KEY_ENCRYPTION_SECRET hoặc ADMIN_SESSION_SECRET chưa được cấu hình')
+  }
   return deriveAesKeyFromSecret(secretMaterial)
 }
 
@@ -133,19 +137,15 @@ function base64ToBytes(b64: string): Uint8Array {
 export async function encryptAiKey(plainKey: string): Promise<string> {
   const trimmed = plainKey.trim()
   if (!trimmed || trimmed.startsWith('enc:v1:')) return trimmed
-  try {
-    const key = await deriveAesKey()
-    const iv = new Uint8Array(12)
-    crypto.getRandomValues(iv)
-    const ciphertext = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      new TextEncoder().encode(trimmed)
-    )
-    return `enc:v1:${bytesToBase64(iv)}:${bytesToBase64(new Uint8Array(ciphertext))}`
-  } catch {
-    return trimmed
-  }
+  const key = await deriveAesKey()
+  const iv = new Uint8Array(12)
+  crypto.getRandomValues(iv)
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(trimmed)
+  )
+  return `enc:v1:${bytesToBase64(iv)}:${bytesToBase64(new Uint8Array(ciphertext))}`
 }
 
 export async function decryptAiKey(storedKey: string | null | undefined): Promise<string> {

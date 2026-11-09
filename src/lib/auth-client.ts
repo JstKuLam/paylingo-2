@@ -104,20 +104,6 @@ function notify(event: 'SIGNED_IN' | 'SIGNED_OUT' | 'INITIAL_SESSION', session: 
   })
 }
 
-function getOrCreateDeviceSecret(): string {
-  if (typeof window === 'undefined') return ''
-  try {
-    let secret = localStorage.getItem(DEVICE_SECRET_KEY)?.trim() || ''
-    if (secret.length < 32) {
-      secret = `${crypto.randomUUID()}-${crypto.randomUUID()}`
-      localStorage.setItem(DEVICE_SECRET_KEY, secret)
-    }
-    return secret
-  } catch {
-    return ''
-  }
-}
-
 function normalizeDisplayName(raw: string): string {
   let out = raw.trim()
   for (let i = 0; i < 3; i++) {
@@ -369,73 +355,6 @@ export const authClient = {
     window.location.assign(`/api/auth/google?mode=${mode}`)
   },
 
-  async signInWithProfile({
-    name,
-    sonioxApiKey,
-  }: {
-    name: string
-    sonioxApiKey?: string
-  }): Promise<{ data: { user: ClientUser | null }; error: Error | null }> {
-    const cleanName = name.trim().slice(0, 80)
-    if (!cleanName) {
-      return { data: { user: null }, error: new Error('Vui lòng nhập tên của bạn') }
-    }
-
-    let userId = ''
-    if (typeof window !== 'undefined') {
-      try {
-        userId = localStorage.getItem(USER_ID_KEY)?.trim() || ''
-        if (!userId || !UUID_V4_REGEX.test(userId)) {
-          userId = crypto.randomUUID()
-          localStorage.setItem(USER_ID_KEY, userId)
-        }
-        localStorage.setItem(USER_NAME_KEY, cleanName)
-        if (typeof sonioxApiKey === 'string') {
-          this.setSonioxApiKey(sonioxApiKey)
-        }
-      } catch {}
-    }
-
-    const localUser = readLocalProfile()
-    const deviceSecret = getOrCreateDeviceSecret()
-    try {
-      const res = await fetch('/api/auth/me', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: cleanName,
-          userId: localUser?.id || userId,
-          deviceSecret,
-        }),
-      })
-      if (res.ok) {
-        const data = await res.json().catch(() => ({}))
-        const prevId = localUser?.id || userId
-        if (data?.user?.id && typeof window !== 'undefined') {
-          if (Boolean(data?.rotated) && prevId && data.user.id !== prevId) {
-            await rekeyLocalDataOwner(prevId, data.user.id)
-          }
-          if (Boolean(data?.rotated) || !prevId || data.user.id === prevId) {
-            try {
-              localStorage.setItem(USER_ID_KEY, data.user.id)
-            } catch {}
-          }
-        }
-        serverSessionSynced = true
-      }
-    } catch {
-      // Offline-first fallback uses localUser
-    }
-
-    const finalUser = readLocalProfile() || localUser
-    cachedUser = finalUser
-    hasFetchedInitial = true
-    if (finalUser) {
-      notify('SIGNED_IN', { user: finalUser, access_token: 'cookie_session' })
-    }
-    return { data: { user: finalUser }, error: null }
-  },
-
   resetServerSessionSync(): void {
     serverSessionSynced = false
     inflightSessionSync = null
@@ -545,46 +464,6 @@ export const authClient = {
     return { data: { session }, error: null }
   },
 
-  async signInWithOtp({ email, lang }: { email: string; lang?: string }): Promise<{ error: Error | null }> {
-    try {
-      const res = await fetch('/api/auth/send-magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, lang }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        return { error: new Error(data.error || 'Gửi mã xác thực thất bại') }
-      }
-      return { error: null }
-    } catch (err: unknown) {
-      return { error: err instanceof Error ? err : new Error(String(err)) }
-    }
-  },
-
-  async verifyOtp({ token, email }: { token: string; email?: string }): Promise<{ data: { user: ClientUser | null }; error: Error | null }> {
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, email }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        return { data: { user: null }, error: new Error(data.error || 'Xác thực thất bại') }
-      }
-      cachedUser = data.user
-      const session: ClientSession = {
-        user: data.user,
-        access_token: 'cookie_session',
-      }
-      notify('SIGNED_IN', session)
-      return { data: { user: cachedUser }, error: null }
-    } catch (err: unknown) {
-      return { data: { user: null }, error: err instanceof Error ? err : new Error(String(err)) }
-    }
-  },
-
   async signOut(): Promise<{ error: Error | null }> {
     void purgeLegacyDemoData()
     if (typeof window !== 'undefined') {
@@ -612,30 +491,7 @@ export const authClient = {
     }
     try {
       const localUser = readLocalProfile()
-      let delRes = await fetch('/api/auth/soniox-key', { method: 'DELETE' })
-      if (delRes.status === 401 && localUser) {
-        const deviceSecret = getOrCreateDeviceSecret()
-        const authRes = await fetch('/api/auth/me', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: localUser.user_metadata?.username || 'User',
-            userId: localUser.id,
-            deviceSecret,
-          }),
-        }).catch(() => null)
-        if (authRes?.ok) {
-          const authData = await authRes.json().catch(() => ({}))
-          if (Boolean(authData?.rotated)) {
-            return {
-              error: new Error(
-                'Phiên xác thực thiết bị không khớp dữ liệu đám mây. Không thể xóa dữ liệu trên máy chủ.'
-              ),
-            }
-          }
-          delRes = await fetch('/api/auth/soniox-key', { method: 'DELETE' })
-        }
-      }
+      const delRes = await fetch('/api/auth/soniox-key', { method: 'DELETE' })
       if (!delRes.ok && delRes.status !== 404 && (delRes.status !== 401 || Boolean(localUser))) {
         return { error: new Error('Không thể xóa dữ liệu đám mây lúc này. Vui lòng thử lại.') }
       }

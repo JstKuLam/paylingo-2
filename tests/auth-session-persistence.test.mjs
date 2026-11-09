@@ -34,17 +34,14 @@ test('Next.js edge middleware checks session cookies on incoming requests', asyn
   assert.ok(middleware.includes('manifest\\\\.json'))
 })
 
-test('auth session operations use atomic batch creation, replay-proof token deletion, and purge expired sessions', async () => {
+test('auth session operations use atomic batch creation, concurrent user upsert, and purge expired sessions', async () => {
   const sessionModule = await readFile(
     new URL('../src/lib/auth/session.ts', import.meta.url),
     'utf8',
   )
 
-  // Atomic batch token creation
-  assert.match(sessionModule, /db\.batch\(\[\s*db\.prepare\('DELETE FROM auth_tokens/)
-
-  // Replay-proof atomic token consumption
-  assert.match(sessionModule, /deleteRes\.meta && deleteRes\.meta\.changes === 0/)
+  // Atomic batch session creation and expired session purge
+  assert.match(sessionModule, /db\.batch\(\[\s*db\.prepare\('DELETE FROM auth_sessions WHERE datetime\(expires_at\) < datetime\(\\?'now\\?'\)'\)/)
 
   // Handles concurrent user insertion
   assert.match(sessionModule, /INSERT INTO auth_users[\s\S]*?catch[\s\S]*?SELECT \* FROM auth_users/)
@@ -53,19 +50,13 @@ test('auth session operations use atomic batch creation, replay-proof token dele
   assert.match(sessionModule, /DELETE FROM auth_sessions WHERE token = \? OR datetime\(expires_at\) < datetime\(\\?'now\\?'\)/)
 })
 
-test('POST /api/auth/me preserves valid cookie user X when client sends new userId R (Safari ITP recovery) and rotates unverified existing UUIDs', async () => {
+test('GET /api/auth/me rejects synthetic @paylingo.app guest profiles and forbids guest creation', async () => {
   const meRoute = await readFile(
     new URL('../src/app/api/auth/me/route.ts', import.meta.url),
     'utf8',
   )
 
-  // Case 1: requestedRecord verified by cookie or matching deviceTag
-  assert.match(meRoute, /if \(requestedRecord && \(isSameAuthenticatedCookie \|\| hasMatchingDeviceTag\)\)/)
-
-  // Case 2: Valid cookie X preserved with rotated: true when requestedUserId R is brand-new after storage eviction
-  assert.match(meRoute, /else if \(existingUser\)[\s\S]*?userId = existingUser\.id[\s\S]*?rotated = Boolean\(requestedUserId && requestedUserId !== existingUser\.id\)/)
-
-  // Case 3: Unverified existing requestedRecord rotates to a fresh UUID
-  assert.match(meRoute, /else if \(requestedRecord\)[\s\S]*?userId = crypto\.randomUUID\(\)[\s\S]*?rotated = true/)
+  assert.match(meRoute, /user\.email\.toLowerCase\(\)\.endsWith\('@paylingo\.app'\)/)
+  assert.doesNotMatch(meRoute, /export async function POST/)
 })
 

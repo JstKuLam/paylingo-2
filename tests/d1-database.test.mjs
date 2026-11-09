@@ -45,8 +45,9 @@ test('D1 batch statements execute within transaction', async () => {
   await db.prepare('DELETE FROM folders WHERE id IN (?, ?)').bind(id1, id2).run()
 })
 
-test('D1 ISO 8601 timestamp comparison with datetime(expires_at) prevents same-day token leakage', async () => {
+test('D1 ISO 8601 timestamp comparison with datetime(expires_at) prevents same-day session leakage', async () => {
   const db = getD1()
+  const testUserId = 'user-iso-' + Date.now()
   const expiredToken = 'expired-iso-' + Date.now()
   const validToken = 'valid-iso-' + Date.now()
 
@@ -55,17 +56,21 @@ test('D1 ISO 8601 timestamp comparison with datetime(expires_at) prevents same-d
   // 15 minutes in the future (same day, ISO format with 'T')
   const futureIso = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
-  await db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
-    .bind(expiredToken, 'audit@example.com', pastIso)
+  await db.prepare('INSERT INTO auth_users (id, email, email_confirmed_at, created_at) VALUES (?, ?, ?, ?)')
+    .bind(testUserId, `${testUserId}@gmail.com`, pastIso, pastIso)
     .run()
 
-  await db.prepare('INSERT INTO auth_tokens (token, email, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
-    .bind(validToken, 'audit@example.com', futureIso)
+  await db.prepare('INSERT INTO auth_sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
+    .bind(expiredToken, testUserId, pastIso)
+    .run()
+
+  await db.prepare('INSERT INTO auth_sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
+    .bind(validToken, testUserId, futureIso)
     .run()
 
   // Verify that datetime(expires_at) > datetime('now') correctly rejects pastIso
   const expiredRecord = await db.prepare(
-    'SELECT * FROM auth_tokens WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
+    'SELECT * FROM auth_sessions WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
   )
     .bind(expiredToken)
     .first()
@@ -74,7 +79,7 @@ test('D1 ISO 8601 timestamp comparison with datetime(expires_at) prevents same-d
 
   // Verify that datetime(expires_at) > datetime('now') correctly accepts futureIso
   const validRecord = await db.prepare(
-    'SELECT * FROM auth_tokens WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
+    'SELECT * FROM auth_sessions WHERE token = ? AND datetime(expires_at) > datetime(\'now\')'
   )
     .bind(validToken)
     .first()
@@ -82,7 +87,8 @@ test('D1 ISO 8601 timestamp comparison with datetime(expires_at) prevents same-d
   assert.ok(validRecord, 'Valid future ISO timestamp must be matched')
 
   // Clean up
-  await db.prepare('DELETE FROM auth_tokens WHERE token IN (?, ?)').bind(expiredToken, validToken).run()
+  await db.prepare('DELETE FROM auth_sessions WHERE token IN (?, ?)').bind(expiredToken, validToken).run()
+  await db.prepare('DELETE FROM auth_users WHERE id = ?').bind(testUserId).run()
 })
 
 test('D1 batch rolls back entire transaction if any statement fails', async () => {
@@ -179,4 +185,57 @@ test('D1 batch and all return proper meta with changes and handles empty batch',
 
   // Clean up
   await db.prepare('DELETE FROM folders WHERE id IN (?, ?)').bind(id1, id2).run()
+})
+
+test('D1 LWW sync upsert preserves newer same-day ISO 8601 PATCH rename against older same-day client sync', async () => {
+  const db = getD1()
+  const sessId = 'lww-sess-' + Date.now()
+  const ownerId = 'lww-owner-' + Date.now()
+
+  const t0 = new Date(Date.now() - 120_000).toISOString() // 2 mins ago
+  const t1 = new Date(Date.now() - 60_000).toISOString()  // 1 min ago (stale client B state)
+  const t2 = new Date().toISOString()                     // now (PATCH rename on server)
+
+  // 1. Initial session insert at t0
+  await db.prepare(`
+    INSERT INTO sessions (id, owner_id, username, name, partner_language, started_at, duration_seconds, updated_at)
+    VALUES (?, ?, ?, ?, 'en', ?, 30, ?)
+  `).bind(sessId, ownerId, 'user', 'Original Name', t0, t0).run()
+
+  // 2. Server PATCH rename binds ISO string t2 (not SQLite datetime('now'))
+  await db.prepare('UPDATE sessions SET name = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
+    .bind('Renamed On Device A', t2, sessId, ownerId)
+    .run()
+
+  // 3. Stale sync from Device B with older same-day ISO timestamp t1 (< t2)
+  await db.prepare(`
+    INSERT INTO sessions (id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at)
+    VALUES (?, ?, ?, NULL, ?, 'en', ?, NULL, 30, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      updated_at = excluded.updated_at
+    WHERE excluded.updated_at >= sessions.updated_at OR sessions.updated_at IS NULL
+  `).bind(sessId, ownerId, 'user', 'Stale Name From Device B', t0, t1).run()
+
+  const afterStaleSync = await db.prepare('SELECT name, updated_at FROM sessions WHERE id = ?').bind(sessId).first()
+  assert.strictEqual(afterStaleSync.name, 'Renamed On Device A', 'Older same-day ISO sync must NOT overwrite newer PATCH rename')
+  assert.strictEqual(afterStaleSync.updated_at, t2)
+
+  // 4. Newer sync from Device A at t3 (> t2) succeeds
+  const t3 = new Date(Date.now() + 5_000).toISOString()
+  await db.prepare(`
+    INSERT INTO sessions (id, owner_id, username, folder_id, name, partner_language, started_at, ended_at, duration_seconds, updated_at)
+    VALUES (?, ?, ?, NULL, ?, 'en', ?, NULL, 30, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      updated_at = excluded.updated_at
+    WHERE excluded.updated_at >= sessions.updated_at OR sessions.updated_at IS NULL
+  `).bind(sessId, ownerId, 'user', 'Newer Name From Device A', t0, t3).run()
+
+  const afterNewerSync = await db.prepare('SELECT name, updated_at FROM sessions WHERE id = ?').bind(sessId).first()
+  assert.strictEqual(afterNewerSync.name, 'Newer Name From Device A', 'Newer ISO sync must update session name')
+  assert.strictEqual(afterNewerSync.updated_at, t3)
+
+  // Clean up
+  await db.prepare('DELETE FROM sessions WHERE id = ?').bind(sessId).run()
 })

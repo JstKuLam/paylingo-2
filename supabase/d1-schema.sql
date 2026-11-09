@@ -8,13 +8,6 @@ CREATE TABLE IF NOT EXISTS auth_users (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS auth_tokens (
-    token TEXT PRIMARY KEY,
-    email TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
 CREATE TABLE IF NOT EXISTS auth_sessions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
@@ -24,7 +17,6 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_token ON auth_sessions(token);
-CREATE INDEX IF NOT EXISTS idx_auth_tokens_token ON auth_tokens(token);
 
 -- 2. Access Codes Table
 CREATE TABLE IF NOT EXISTS access_codes (

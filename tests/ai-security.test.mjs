@@ -41,7 +41,21 @@ test('getAllowedAiHosts and getSafeAiEndpoint respect AI_ALLOWED_HOSTS env', (t)
   assert.equal(getSafeAiEndpoint('https://api.groq.com/openai/v1/'), 'https://api.groq.com/openai/v1')
 })
 
-test('encryptAiKey and decryptAiKey perform AES-256-GCM encryption at rest and redactSensitiveSecrets scrubs keys', async () => {
+test('encryptAiKey and decryptAiKey perform AES-256-GCM encryption at rest and redactSensitiveSecrets scrubs keys', async (t) => {
+  const prevSecret = process.env.AI_KEY_ENCRYPTION_SECRET
+  const prevAdminSecret = process.env.ADMIN_SESSION_SECRET
+  t.after(() => {
+    if (prevSecret === undefined) delete process.env.AI_KEY_ENCRYPTION_SECRET
+    else process.env.AI_KEY_ENCRYPTION_SECRET = prevSecret
+    if (prevAdminSecret === undefined) delete process.env.ADMIN_SESSION_SECRET
+    else process.env.ADMIN_SESSION_SECRET = prevAdminSecret
+  })
+
+  delete process.env.AI_KEY_ENCRYPTION_SECRET
+  delete process.env.ADMIN_SESSION_SECRET
+  await assert.rejects(() => encryptAiKey('sk-should-fail-without-secret'))
+
+  process.env.AI_KEY_ENCRYPTION_SECRET = 'unit-test-vault-secret-at-least-32-bytes'
   const plaintext = 'sk-test-1234567890abcdef-secret'
   const encrypted = await encryptAiKey(plaintext)
   assert.match(encrypted, /^enc:v1:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/)

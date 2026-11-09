@@ -22,14 +22,14 @@ test('privileged Supabase secrets are not embedded in application source', async
   assert.doesNotMatch(combined, /sb_secret_[A-Za-z0-9_-]+/)
 })
 
-test('auth callback never guesses a recently signed-in user and hardens against open redirect', async () => {
-  const callback = await source('src/app/auth/callback/route.ts')
+test('Google OAuth callback hardens against open redirect and validates state and PKCE', async () => {
+  const callback = await source('src/app/api/auth/google/callback/route.ts')
   assert.doesNotMatch(callback, /listUsers|generateLink|last_sign_in_at|createAdminClient/)
-  assert.match(callback, /exchangeCodeForSession/)
-  assert.match(callback, /verifyOtp/)
-  assert.match(callback, /safeNextPath/)
-  assert.match(callback, /nextParam\.includes\('\\\\'\)/)
-  assert.match(callback, /parsed\.origin !== origin/)
+  assert.match(callback, /getGoogleOAuthConfig/)
+  assert.match(callback, /createOrUpdateOAuthSession/)
+  assert.match(callback, /code_verifier:\s*codeVerifier/)
+  assert.match(callback, /savedState !== state/)
+  assert.match(callback, /redirectSecurityHeaders/)
   assert.match(callback, /'Cache-Control': 'no-store, max-age=0'/)
 })
 
@@ -86,27 +86,26 @@ test('local synchronization never reassigns records with an existing owner', asy
   assert.match(history, /safeCloudFolders/)
 })
 
-test('sync route enforces multi-tenant ownership on folders, sessions, and entries', async () => {
+test('sync route enforces multi-tenant ownership on folders, sessions, and entries with batched queries', async () => {
   const syncRoute = await source('src/app/api/sync/route.ts')
-  assert.match(syncRoute, /existingFolder\.owner_id !== user\.id/)
-  assert.match(syncRoute, /existingSession\.owner_id !== user\.id/)
+  assert.match(syncRoute, /existingFolder && existingFolder\.owner_id !== user\.id/)
+  assert.match(syncRoute, /existingSession && existingSession\.owner_id !== user\.id/)
   assert.match(syncRoute, /authorizedSessionIds/)
   assert.match(syncRoute, /syncedFolderIds/)
   assert.match(syncRoute, /'Cache-Control': 'no-store, max-age=0'/)
 })
 
-test('latest RLS migration authorizes by immutable owner id only', async () => {
-  const migration = await source('supabase/migrations/20260803000000_enforce_strict_ownership_rls.sql')
-  assert.doesNotMatch(migration, /user_metadata/)
-  assert.match(migration, /owner_id = auth\.uid\(\)/)
-  assert.match(migration, /Users can read their own active access code/)
-  assert.match(migration, /owner_required/)
+test('D1 schema enforces immutable owner_id columns and indexes across multi-tenant tables', async () => {
+  const schema = await source('supabase/d1-schema.sql')
+  assert.match(schema, /idx_folders_owner/)
+  assert.match(schema, /idx_sessions_owner/)
+  assert.match(schema, /idx_session_summaries_owner/)
+  assert.doesNotMatch(schema, /CREATE TABLE IF NOT EXISTS auth_tokens/)
 })
 
 test('expensive and password-protected APIs have abuse controls', async () => {
   const summarize = await source('src/app/api/ai/summarize/route.ts')
   const shared = await source('src/app/api/shared/summary/route.ts')
-  const magicLink = await source('src/app/api/auth/send-magic-link/route.ts')
   const rateLimit = await source('src/lib/rate-limit.ts')
   assert.match(summarize, /email_confirmed_at/)
   assert.match(summarize, /ai-summary:/)
@@ -119,7 +118,6 @@ test('expensive and password-protected APIs have abuse controls', async () => {
   assert.doesNotMatch(shared, /searchParams\.get\('password'\)/)
   assert.match(shared, /shared-summary:/)
   assert.match(shared, /shared-summary-get:/)
-  assert.match(magicLink, /magic-link-ip:/)
   assert.match(rateLimit, /buckets\.size > 500/)
   assert.match(rateLimit, /buckets\.size > 1000/)
 })
@@ -158,9 +156,9 @@ test('deleting sessions and folders cascades to session_summaries and shared_sum
 
 test('history route enforces multi-tenant ownership on read, update, and delete', async () => {
   const historyRoute = await source('src/app/api/history/route.ts')
-  const verifyRoute = await source('src/app/api/auth/verify/route.ts')
+  const googleRoute = await source('src/app/api/auth/google/route.ts')
   const signoutRoute = await source('src/app/api/auth/signout/route.ts')
-  const magicLinkRoute = await source('src/app/api/auth/send-magic-link/route.ts')
+  const googleCallbackRoute = await source('src/app/api/auth/google/callback/route.ts')
 
   // History GET protects transcripts from cross-user reads
   assert.match(historyRoute, /if \(!session\) \{\s*return NextResponse\.json\(\{ item: null, entries: \[\] \}, \{ status: 404/)
@@ -170,8 +168,10 @@ test('history route enforces multi-tenant ownership on read, update, and delete'
   assert.match(historyRoute, /SELECT id FROM sessions WHERE id = \? AND owner_id = \?/)
   assert.match(historyRoute, /SELECT id FROM folders WHERE id = \? AND owner_id = \?/)
 
-  // History PATCH verifies destination folder belongs to the user
+  // History PATCH verifies destination folder belongs to the user and binds ISO timestamp
   assert.match(historyRoute, /SELECT id FROM folders WHERE id = \? AND owner_id = \?/)
+  assert.match(historyRoute, /const nowIso = new Date\(\)\.toISOString\(\)/)
+  assert.doesNotMatch(historyRoute, /updated_at = datetime\('now'\)/)
 
   // Cache-Control headers on sensitive auth and user data endpoints
   const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
@@ -181,9 +181,9 @@ test('history route enforces multi-tenant ownership on read, update, and delete'
   const historyPage = await source('src/app/history/page.tsx')
 
   assert.match(historyRoute, /'Cache-Control': 'no-store, max-age=0'/)
-  assert.match(verifyRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(googleRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(signoutRoute, /'Cache-Control': 'no-store, max-age=0'/)
-  assert.match(magicLinkRoute, /'Cache-Control': 'no-store, max-age=0'/)
+  assert.match(googleCallbackRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(summarizeRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(sharedSummaryRoute, /'Cache-Control': 'no-store, max-age=0'/)
   assert.match(adminSessionsRoute, /'Cache-Control': 'no-store, max-age=0'/)
@@ -339,30 +339,25 @@ test('admin routes enforce no-store headers, validate session IDs, and prevent m
   assert.match(adminUsage, /safeLimit = Math\.min\(Math\.max\(1,/)
 })
 
-test('auth endpoints enforce CSPRNG OTP, input length bounds, and universal no-store headers', async () => {
+test('auth endpoints enforce CSPRNG session tokens, input length bounds, and universal no-store headers', async () => {
   const sessionModule = await source('src/lib/auth/session.ts')
-  const sendMagicLink = await source('src/app/api/auth/send-magic-link/route.ts')
-  const verifyRoute = await source('src/app/api/auth/verify/route.ts')
   const signoutRoute = await source('src/app/api/auth/signout/route.ts')
-  const callbackRoute = await source('src/app/auth/callback/route.ts')
+  const googleCallback = await source('src/app/api/auth/google/callback/route.ts')
   const rateLimitModule = await source('src/lib/rate-limit.ts')
 
-  // CSPRNG OTP generation
-  assert.match(sessionModule, /crypto\.getRandomValues/)
-  assert.match(sessionModule, /generateSecureOtp/)
+  // CSPRNG token generation
+  assert.match(sessionModule, /crypto\.randomUUID\(\)/)
   assert.doesNotMatch(sessionModule, /Math\.random\(\)/)
 
   // Token bounds checking
-  assert.match(sessionModule, /cleanInput\.length < 6 \|\| cleanInput\.length > 128/)
-  assert.match(verifyRoute, /cleanToken\.length < 6 \|\| cleanToken\.length > 128/)
-  assert.match(callbackRoute, /cleanToken\.length < 6 \|\| cleanToken\.length > 128/)
+  assert.match(sessionModule, /cleanToken\.length < 10 \|\| cleanToken\.length > 256/)
+  assert.match(googleCallback, /code\.length > 512/)
+  assert.match(googleCallback, /state\.length > 128/)
 
   // no-store on rate limiting
   assert.match(rateLimitModule, /'Cache-Control':\s*'no-store,\s*max-age=0'/)
 
   // universal no-store headers
-  assert.match(sendMagicLink, /const noStoreHeader = \{\s*['"]Cache-Control['"]:\s*['"]no-store,\s*max-age=0['"],?\s*\}/)
-  assert.match(verifyRoute, /const noStoreHeader = \{\s*['"]Cache-Control['"]:\s*['"]no-store,\s*max-age=0['"],?\s*\}/)
   assert.match(signoutRoute, /const noStoreHeader = \{\s*['"]Cache-Control['"]:\s*['"]no-store,\s*max-age=0['"],?\s*\}/)
 
   // Signout supports Bearer token as well as cookie
@@ -491,31 +486,20 @@ test('sync route prevents clock skew exploits, enforces LWW, and sync manager pr
   assert.match(syncManager, /current\.updated_at === session\.updated_at/)
 })
 
-test('magic link auth enforces per-email rate limits, CRLF sanitization, dot-stuffing, and callback throttling', async () => {
-  const sendRoute = await source('src/app/api/auth/send-magic-link/route.ts')
-  const smtp = await source('src/lib/auth/smtp.ts')
+test('auth-utils enforces CRLF sanitization and length bounds, and admin session uses 12h TTL', async () => {
   const authUtils = await source('src/lib/auth-utils.ts')
   const sessionAuth = await source('src/lib/auth/session.ts')
-  const callbackRoute = await source('src/app/auth/callback/route.ts')
-
-  // Per-email rate limiting & CRLF stripping
-  assert.match(sendRoute, /magic-link-email:\$\{sanitizedEmail\}/)
-  assert.match(sendRoute, /replace\(\/\[\\r\\n\\x00-\\x1f\]\/g,\s*''\)/)
+  const adminAuth = await source('src/lib/admin-auth.ts')
 
   // Auth utils CRLF defense & length bound
   assert.match(authUtils, /sanitized\.length > 254/)
   assert.match(authUtils, /sanitized\.includes\('\\r'\) \|\| sanitized\.includes\('\\n'\)/)
 
-  // SMTP transport CRLF injection defense & RFC 5321 dot-stuffing
-  assert.match(smtp, /cleanTo = \(options\.to \|\| ''\)\.replace\(\/\[\\r\\n\\x00-\\x1f\]\/g,\s*''\)\.trim\(\)/)
-  assert.match(smtp, /cleanSubject = \(options\.subject \|\| ''\)\.replace\(\/\[\\r\\n\\x00-\\x1f\]\/g,\s*''\)\.trim\(\)/)
-  assert.match(smtp, /cleanHtml = \(options\.html \|\| ''\)\.replace\(\/\^\\\.\/gm,\s*'\.\.'\)/)
+  // Session user verification checks allowed email
+  assert.match(sessionAuth, /if \(!isAllowedEmail\(cleanEmail\)\) return null/)
 
-  // Session token verification checks allowed email
-  assert.match(sessionAuth, /!record \|\| !isAllowedEmail\(record\.email\)/)
-
-  // Callback route rate limits attempts
-  assert.match(callbackRoute, /auth-callback:\$\{getRequestIp\(request\)\}/)
+  // Admin session TTL is capped to 12 hours
+  assert.match(adminAuth, /ADMIN_SESSION_MAX_AGE = 12 \* 3600/)
 })
 
 test('Dexie database version 4 adds compound indexes, sanitizes legacy entries, and sets sync_status pending on claimed records', async () => {
@@ -771,23 +755,18 @@ test('middleware checks token bounds and headers, auth session safely decodes co
   assert.doesNotMatch(authMe, /err\.message/)
 })
 
-test('auth endpoints enforce dual rate limiting, masked errors, and secure redirect headers', async () => {
-  const sendRoute = await source('src/app/api/auth/send-magic-link/route.ts')
-  const verifyRoute = await source('src/app/api/auth/verify/route.ts')
-  const callbackRoute = await source('src/app/auth/callback/route.ts')
+test('admin auth enforces D1-backed persistent brute-force rate limiting across isolates', async () => {
+  const adminRoute = await source('src/app/api/auth/admin/route.ts')
+  const googleCallback = await source('src/app/api/auth/google/callback/route.ts')
 
-  // Masked errors in send route
-  assert.doesNotMatch(sendRoute, /sendRes\.error/)
-  assert.doesNotMatch(sendRoute, /err instanceof Error \? err\.message/)
+  // D1-backed rate limiting on admin login attempts
+  assert.match(adminRoute, /SELECT COUNT\(\*\) AS cnt FROM ai_rate_limits WHERE user_id = 'admin_login'/)
+  assert.match(adminRoute, /INSERT INTO ai_rate_limits \(id, ip, user_id, created_at\)/)
+  assert.match(adminRoute, /DELETE FROM ai_rate_limits WHERE user_id = 'admin_login'/)
 
-  // Dual rate limiting in verify route (by IP and by token)
-  assert.match(verifyRoute, /verify-token:\$\{cleanToken\.slice\(0,\s*32\)\}/)
-  assert.doesNotMatch(verifyRoute, /err instanceof Error \? err\.message/)
-
-  // Security headers on callback redirects
-  assert.match(callbackRoute, /redirectSecurityHeaders/)
-  assert.match(callbackRoute, /['"]X-Frame-Options['"]:\s*['"]DENY['"]/)
-  assert.match(callbackRoute, /['"]X-Content-Type-Options['"]:\s*['"]nosniff['"]/)
+  // Security headers on OAuth callback redirects
+  assert.match(googleCallback, /redirectSecurityHeaders/)
+  assert.match(googleCallback, /'Cache-Control':\s*'no-store,\s*max-age=0'/)
 })
 
 test('session lifecycle ensures entry duration on unexpected stops and releases audio locks on unmount', async () => {
@@ -863,19 +842,20 @@ test('ProfileMenu guards against unmounted updates and ensures logout redirectio
   assert.match(profileMenu, /try\s*\{[\s\S]*?await authClient\.signOut\(\)[\s\S]*?\}\s*catch[\s\S]*?finally\s*\{[\s\S]*?router\.replace\('\/'\)[\s\S]*?\}/)
 })
 
-test('SMTP transport bounds buffer size, cancels edge reader, and enforces connection timeout', async () => {
-  const smtp = await source('src/lib/auth/smtp.ts')
+test('AI summarize releases rate-limit reservations on upstream errors and passes Gemini key in header', async () => {
+  const summarizeRoute = await source('src/app/api/ai/summarize/route.ts')
+  const wsProxyScript = await source('scripts/inject-ws-proxy.mjs')
 
-  // Buffer size bound
-  assert.match(smtp, /buffer\.length > 64 \* 1024/)
-  assert.match(smtp, /SMTP buffer limit exceeded/)
+  // Gemini API key is passed via x-goog-api-key header, never in URL query string
+  assert.match(summarizeRoute, /'x-goog-api-key':\s*apiKey/)
+  assert.doesNotMatch(summarizeRoute, /\?key=/)
 
-  // Reader stream cancellation in edge socket finally
-  assert.match(smtp, /reader\.cancel\(\)\.catch/)
+  // Releases D1 rate-limit reservation on upstream error
+  assert.match(summarizeRoute, /const releaseReservation = async \(\) =>/)
+  assert.match(summarizeRoute, /await releaseReservation\(\)/)
 
-  // Node TLS connection timeout
-  assert.match(smtp, /setTimeout\([\s\S]*?15_000\)/)
-  assert.match(smtp, /SMTP connection timed out/)
+  // WS proxy script matches any minified export variable name
+  assert.match(wsProxyScript, /var \(\[A-Za-z0-9_\$\]\+\)=\\\{async fetch\\\(e,t,r\\\)\\\{/)
 })
 
 test('UI flags have bounded SVG/IMG dimensions, UI languages use single dropdown, layout defaults by viewport, and history supports direct inline edit without h-card__pair', async () => {

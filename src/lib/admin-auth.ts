@@ -99,7 +99,9 @@ export async function verifySignedAdminValue(token: string, passwordHash: string
   return timingSafeEqualStr(expected, signature) ? value : null
 }
 
-export async function createSessionToken(passwordHash: string, maxAgeSeconds = 86400 * 30): Promise<string> {
+export const ADMIN_SESSION_MAX_AGE = 12 * 3600 // 12 hours
+
+export async function createSessionToken(passwordHash: string, maxAgeSeconds = ADMIN_SESSION_MAX_AGE): Promise<string> {
   const expiresAt = Date.now() + maxAgeSeconds * 1000
   return createSignedAdminValue(`${expiresAt}:${crypto.randomUUID()}`, passwordHash)
 }

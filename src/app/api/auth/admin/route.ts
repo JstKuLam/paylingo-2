@@ -5,6 +5,7 @@ import {
   verifyPassword,
   isLegacyAdminHash,
   createSessionToken,
+  ADMIN_SESSION_MAX_AGE,
   createSignedAdminValue,
   verifySignedAdminValue,
   getAdminCredentials,
@@ -14,6 +15,7 @@ import {
   base64ToArrayBuffer,
   timingSafeEqualStr,
 } from '@/lib/admin-auth'
+import { getD1 } from '@/lib/d1-client'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export const runtime = 'edge'
@@ -74,20 +76,48 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Mật khẩu trống hoặc không hợp lệ' }, { status: 400, headers: noStoreHeader })
       }
 
+      const requestIp = getRequestIp(req)
       const loginLimit = checkRateLimit({
-        key: `admin-login:${getRequestIp(req)}`,
+        key: `admin-login:${requestIp}`,
         limit: 5,
         windowMs: 15 * 60_000,
       })
       if (!loginLimit.allowed) return rateLimitResponse(loginLimit.retryAfterSeconds)
+
+      const db = getD1()
+      await db
+        .prepare("DELETE FROM ai_rate_limits WHERE user_id = 'admin_login' AND created_at < datetime('now', '-15 minutes')")
+        .run()
+        .catch(() => {})
+      const failedAttemptsRow = await db
+        .prepare(
+          "SELECT COUNT(*) AS cnt FROM ai_rate_limits WHERE user_id = 'admin_login' AND created_at >= datetime('now', '-15 minutes')"
+        )
+        .first<{ cnt: number }>()
+        .catch(() => null)
+      if ((failedAttemptsRow?.cnt ?? 0) >= 5) {
+        return rateLimitResponse(900)
+      }
 
       if (!creds.configured) {
         return NextResponse.json({ error: 'Admin chưa được cấu hình an toàn' }, { status: 503, headers: noStoreHeader })
       }
 
       if (!(await verifyPassword(password, creds.passwordHash))) {
+        await db
+          .prepare(
+            "INSERT INTO ai_rate_limits (id, ip, user_id, created_at) VALUES (?, ?, 'admin_login', datetime('now'))"
+          )
+          .bind(crypto.randomUUID(), requestIp)
+          .run()
+          .catch(() => {})
         return NextResponse.json({ error: 'Sai mật khẩu' }, { status: 400, headers: noStoreHeader })
       }
+
+      await db
+        .prepare("DELETE FROM ai_rate_limits WHERE user_id = 'admin_login'")
+        .run()
+        .catch(() => {})
 
       let activePasswordHash = creds.passwordHash
       if (isLegacyAdminHash(creds.passwordHash)) {
@@ -107,7 +137,7 @@ export async function POST(req: Request) {
         secure: true,
         path: '/',
         sameSite: 'strict',
-        maxAge: 30 * 86400
+        maxAge: ADMIN_SESSION_MAX_AGE
       })
 
       return NextResponse.json({ success: true }, {
@@ -247,7 +277,7 @@ export async function POST(req: Request) {
           secure: true,
           path: '/',
           sameSite: 'strict',
-          maxAge: 30 * 86400
+          maxAge: ADMIN_SESSION_MAX_AGE
         })
 
         return NextResponse.json({ success: true }, {
@@ -284,7 +314,7 @@ export async function POST(req: Request) {
         secure: true,
         path: '/',
         sameSite: 'strict',
-        maxAge: 30 * 86400
+        maxAge: ADMIN_SESSION_MAX_AGE
       })
 
       return NextResponse.json({ success: true }, {

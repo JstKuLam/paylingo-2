@@ -171,13 +171,15 @@ async function main() {
     return
   }
 
-  const target = 'var ks={async fetch(e,t,r){'
-  if (!source.includes(target)) {
+  const targetRegex = /var ([A-Za-z0-9_$]+)=\{async fetch\(e,t,r\)\{/
+  const match = source.match(targetRegex)
+  if (!match) {
     throw new Error(`Could not find worker fetch target in ${WORKER_PATH}`)
   }
 
-  const replacement = `${PROXY_SNIPPET}\nvar ks={async fetch(e,t,r){if(new URL(e.url).pathname==="/api/ws/soniox")return __handleSonioxWsProxy(e,t);`
-  const updated = source.replace(target, replacement)
+  const workerVar = match[1]
+  const replacement = `${PROXY_SNIPPET}\nvar ${workerVar}={async fetch(e,t,r){if(new URL(e.url).pathname==="/api/ws/soniox")return __handleSonioxWsProxy(e,t);`
+  const updated = source.replace(match[0], replacement)
   await writeFile(WORKER_PATH, updated, 'utf8')
   console.log('✨ Injected Soniox Zero-Exposure Edge WebSocket Proxy (/api/ws/soniox) into _worker.js!')
 }

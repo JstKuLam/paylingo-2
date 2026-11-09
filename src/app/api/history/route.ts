@@ -4,8 +4,6 @@ import { getD1 } from '@/lib/d1-client'
 
 export const runtime = 'edge'
 
-let hasEnsuredSpeakerLabelCol = false
-
 export async function GET(request: Request) {
   const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
   try {
@@ -19,12 +17,6 @@ export async function GET(request: Request) {
     const single = searchParams.get('single') === '1'
     const id = searchParams.get('id')
     const db = getD1()
-
-    if (!hasEnsuredSpeakerLabelCol) {
-      await db.prepare('ALTER TABLE transcript_entries ADD COLUMN speaker_label TEXT').run().catch(() => {})
-      await db.prepare('ALTER TABLE session_summaries ADD COLUMN owner_id TEXT').run().catch(() => {})
-      hasEnsuredSpeakerLabelCol = true
-    }
 
     if (table === 'folders') {
       if (single && id) {
@@ -126,6 +118,7 @@ export async function PATCH(request: Request) {
 
     const cleanValue = value.trim()
     const payloadObj = payload as Record<string, unknown>
+    const nowIso = new Date().toISOString()
 
     if (table === 'sessions' && cleanValue) {
       if ('folder_id' in payloadObj) {
@@ -139,8 +132,8 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ success: false, error: 'Thư mục không tồn tại hoặc không có quyền' }, { status: 400, headers: noStoreHeader })
           }
         }
-        await db.prepare('UPDATE sessions SET folder_id = ?, updated_at = datetime(\'now\') WHERE id = ? AND owner_id = ?')
-          .bind(cleanFolderId, cleanValue, user.id)
+        await db.prepare('UPDATE sessions SET folder_id = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
+          .bind(cleanFolderId, nowIso, cleanValue, user.id)
           .run()
       }
       if ('name' in payloadObj) {
@@ -149,8 +142,8 @@ export async function PATCH(request: Request) {
         if (!cleanName) {
           return NextResponse.json({ success: false, error: 'Tên không được để trống' }, { status: 400, headers: noStoreHeader })
         }
-        await db.prepare('UPDATE sessions SET name = ?, updated_at = datetime(\'now\') WHERE id = ? AND owner_id = ?')
-          .bind(cleanName, cleanValue, user.id)
+        await db.prepare('UPDATE sessions SET name = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
+          .bind(cleanName, nowIso, cleanValue, user.id)
           .run()
       }
       return NextResponse.json({ success: true }, { headers: noStoreHeader })
@@ -163,8 +156,8 @@ export async function PATCH(request: Request) {
         if (!cleanName) {
           return NextResponse.json({ success: false, error: 'Tên thư mục không được để trống' }, { status: 400, headers: noStoreHeader })
         }
-        await db.prepare('UPDATE folders SET name = ?, updated_at = datetime(\'now\') WHERE id = ? AND owner_id = ?')
-          .bind(cleanName, cleanValue, user.id)
+        await db.prepare('UPDATE folders SET name = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
+          .bind(cleanName, nowIso, cleanValue, user.id)
           .run()
       }
       return NextResponse.json({ success: true }, { headers: noStoreHeader })
