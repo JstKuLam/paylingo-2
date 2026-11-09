@@ -18,6 +18,7 @@ function errorKind(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
+  let releaseReservation: () => Promise<void> = async () => {}
   try {
     if (request.headers.get('sec-fetch-site') === 'cross-site') {
       return NextResponse.json(
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const requestIp = getRequestIp(request)
     const userKeyLimit = checkRateLimit({
       key: `soniox-key-user:${user.id}`,
       limit: 30,
@@ -52,16 +54,38 @@ export async function POST(request: NextRequest) {
     if (!userKeyLimit.allowed) return rateLimitResponse(userKeyLimit.retryAfterSeconds)
 
     const ipKeyLimit = checkRateLimit({
-      key: `soniox-key-ip:${getRequestIp(request)}`,
+      key: `soniox-key-ip:${requestIp}`,
       limit: 60,
       windowMs: 60 * 60_000,
     })
     if (!ipKeyLimit.allowed) return rateLimitResponse(ipKeyLimit.retryAfterSeconds)
 
+    const db = getD1()
+    const rateReservationId = crypto.randomUUID()
+    const sonioxRateUserKey = `soniox:${user.id}`
+    const reservationRes = await db
+      .prepare(`
+        INSERT INTO ai_rate_limits (id, ip, user_id, created_at)
+        SELECT ?1, ?2, ?3, datetime('now')
+        WHERE (SELECT COUNT(*) FROM ai_rate_limits WHERE user_id = ?3 AND created_at >= datetime('now', '-1 hour')) < 30
+          AND (SELECT COUNT(*) FROM ai_rate_limits WHERE ip = ?2 AND user_id LIKE 'soniox:%' AND created_at >= datetime('now', '-1 hour')) < 60
+      `)
+      .bind(rateReservationId, requestIp, sonioxRateUserKey)
+      .run()
+    if (!reservationRes.meta || reservationRes.meta.changes === 0) {
+      return rateLimitResponse(3600)
+    }
+    releaseReservation = async () => {
+      await db.prepare('DELETE FROM ai_rate_limits WHERE id = ?').bind(rateReservationId).run().catch(() => {})
+    }
+    await db
+      .prepare("DELETE FROM ai_rate_limits WHERE created_at < datetime('now', '-2 hours')")
+      .run()
+      .catch(() => {})
+
     // 3. Resolve encrypted D1 Soniox key or SONIOX_API_KEY env
     let sonioxMasterKey = (process.env.SONIOX_API_KEY || '').trim()
     try {
-      const db = getD1()
       const row = await db
         .prepare('SELECT api_key FROM api_settings WHERE key = ?')
         .bind('soniox')
@@ -77,6 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!sonioxMasterKey) {
+      await releaseReservation()
       return NextResponse.json(
         { error: 'Chưa cấu hình Soniox API Key trên máy chủ' },
         { status: 500, headers: noStoreHeader }
@@ -119,6 +144,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
+      await releaseReservation()
       console.error('Soniox temporary key request failed:', response.status)
       const retryAfter = response.headers.get('Retry-After')
       return NextResponse.json(
@@ -137,6 +163,7 @@ export async function POST(request: NextRequest) {
     try {
       tempKeyResponse = await response.json()
     } catch {
+      await releaseReservation()
       console.error('Soniox temporary key response was not valid JSON')
       return NextResponse.json(
         { error: 'Dịch vụ nhận dạng giọng nói trả về dữ liệu không hợp lệ' },
@@ -145,6 +172,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!tempKeyResponse.api_key) {
+      await releaseReservation()
       console.error('Soniox temporary key response did not include api_key')
       return NextResponse.json(
         { error: 'Dịch vụ nhận dạng giọng nói trả về dữ liệu không hợp lệ' },
@@ -160,6 +188,7 @@ export async function POST(request: NextRequest) {
       headers: noStoreHeader,
     })
   } catch (error: unknown) {
+    await releaseReservation()
     console.error('Unable to mint Soniox temporary key:', errorKind(error))
     return NextResponse.json(
       { error: 'Không thể tạo khóa Soniox tạm thời' },

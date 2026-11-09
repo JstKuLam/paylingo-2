@@ -523,7 +523,9 @@ test('Soniox key route enforces dual per-user and per-IP rate limits and throttl
 
   // Dual rate limits on key minting
   assert.match(sonioxRoute, /soniox-key-user:\$\{user\.id\}/)
-  assert.match(sonioxRoute, /soniox-key-ip:\$\{getRequestIp\(request\)\}/)
+  assert.match(sonioxRoute, /soniox-key-ip:\$\{requestIp\}/)
+  assert.match(sonioxRoute, /INSERT INTO ai_rate_limits \(id, ip, user_id, created_at\)/)
+  assert.match(sonioxRoute, /soniox:\$\{user\.id\}/)
 
   // Account deletion rate limit
   assert.match(sonioxRoute, /account-delete:\$\{user\.id\}:\$\{getRequestIp\(request\)\}/)

@@ -116,7 +116,7 @@ export async function POST(req: Request) {
       .prepare(`
         INSERT INTO ai_rate_limits (id, ip, user_id, created_at)
         SELECT ?1, ?2, ?3, datetime('now')
-        WHERE (SELECT COUNT(*) FROM ai_rate_limits WHERE ip = ?2 AND user_id NOT LIKE 'share_pwd:%' AND user_id <> 'admin_login' AND created_at >= datetime('now', '-1 hour')) < 25
+        WHERE (SELECT COUNT(*) FROM ai_rate_limits WHERE ip = ?2 AND user_id NOT LIKE 'share_pwd:%' AND user_id NOT LIKE 'soniox:%' AND user_id <> 'admin_login' AND created_at >= datetime('now', '-1 hour')) < 25
           AND (SELECT COUNT(*) FROM ai_rate_limits WHERE user_id = ?3 AND created_at >= datetime('now', '-1 hour')) < 15
           AND (SELECT COUNT(*) FROM session_summaries WHERE owner_id = ?3 AND created_at >= datetime('now', '-1 hour')) < 15
       `)
