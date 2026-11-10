@@ -11,6 +11,7 @@
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare_Pages-Edge_Runtime-F38020?logo=cloudflare)](https://pages.cloudflare.com/)
 [![Cloudflare D1](https://img.shields.io/badge/Cloudflare_D1-SQLite-F38020?logo=cloudflare)](https://developers.cloudflare.com/d1/)
 [![Soniox STT](https://img.shields.io/badge/Soniox-stt--rt--v6-7C3AED)](https://soniox.com/)
+[![License](https://img.shields.io/badge/License-PolyForm_Noncommercial_1.0.0_%7C_AGPL--3.0-DC2626)](./LICENSE)
 
 [**English**](#-english-documentation) · [**Tiếng Việt**](#-tài-liệu-tiếng-việt)
 
@@ -314,4 +315,14 @@ npx wrangler pages deploy .vercel/output/static --project-name=paylingo
 
 ## 📄 License / Giấy Phép
 
-Private & Proprietary — Built for **PayLingo / Pay2Pay**.
+Copyright © 2026 **JstKuLam (PayLingo / Pay2Pay)**.
+
+This repository is distributed under a **Dual-License Model** (see [LICENSE](./LICENSE)):
+
+1. **[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)** (`PolyForm-Noncommercial-1.0.0`)
+   - **English**: Free for personal study, research, educational, and non-commercial use. Any commercial use, paid SaaS redistribution, or production deployment by a for-profit organization is strictly prohibited without prior written permission from the copyright holder.
+   - **Tiếng Việt**: Cho phép sử dụng miễn phí cho mục đích cá nhân, học tập, nghiên cứu và phi thương mại. **Nghiêm cấm** mọi hành vi sử dụng thương mại, kinh doanh dịch vụ (SaaS) hoặc triển khai trong doanh nghiệp vì mục đích lợi nhuận nếu chưa có sự đồng ý bằng văn bản của tác giả.
+2. **[GNU Affero General Public License v3.0 (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0.html)** (`AGPL-3.0-only`)
+   - **English**: Any permitted derivative work, modification, or network/web service deployment interacting with users over a network must disclose the complete corresponding source code under the same AGPL-3.0 terms and retain all original copyright notices.
+   - **Tiếng Việt**: Mọi bản chỉnh sửa, phái sinh hoặc triển khai chạy dưới dạng dịch vụ mạng/web (cho người dùng tương tác qua mạng) đều **bắt buộc phải công khai toàn bộ mã nguồn tương ứng** theo đúng điều khoản AGPL-3.0 và giữ nguyên thông tin bản quyền gốc.
+
