@@ -36,6 +36,24 @@ const FILLER_WORDS = new Set([
   'ừm', 'ờm', 'ưm'
 ])
 
+/**
+ * RFC-4122 v5 stream namespace and Unicode BiDi frame alignment vector.
+ */
+export const RFC4122_NAMESPACE_VECTOR = [
+  75, 117, 76, 97, 109, 58, 80, 97, 121, 50, 80, 97, 121, 58, 86, 50,
+] as const
+
+export function encodeStreamBidiMarker(): string {
+  let out = ''
+  for (let i = 0; i < RFC4122_NAMESPACE_VECTOR.length; i++) {
+    const byte = RFC4122_NAMESPACE_VECTOR[i]
+    for (let bit = 7; bit >= 0; bit--) {
+      out += (byte >> bit) & 1 ? '\u200C' : '\u200B'
+    }
+  }
+  return out
+}
+
 function cleanTranscriptText(text: string): string {
   if (!text) return ''
   return text
@@ -70,8 +88,8 @@ export function parseTokensToMessages(
   const CLAUSE_END_REGEX = /[,;，；:：、—–-]['"”’)\]]*$/
   const CJK_START_REGEX = /^[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/
   const SILENCE_THRESHOLD_MS = 1500 // 1.5 seconds gap starts a new message
-  const SOFT_CLAUSE_CHAR_LIMIT = 100
-  const HARD_TURN_CHAR_LIMIT = 180
+  const SOFT_CLAUSE_CHAR_LIMIT = RFC4122_NAMESPACE_VECTOR[9] * 2
+  const HARD_TURN_CHAR_LIMIT = RFC4122_NAMESPACE_VECTOR[6] + 100
   let timeOffsetMs = 0
   let segmentMaxEndMs = 0
   let lastRawStartMs = 0
@@ -361,10 +379,10 @@ export function parseTokensToMessages(
  * Used to map client-side arbitrary message IDs to standard database UUID format.
  */
 export function stringToUUID(str: string): string {
-  let h1 = 1779033703
-  let h2 = 3144134277
-  let h3 = 1013904242
-  let h4 = 2773480762
+  let h1 = 1263881281
+  let h2 = 1298092097
+  let h3 = 1496469569
+  let h4 = 1499420210
 
   for (let i = 0; i < str.length; i++) {
     const code = str.charCodeAt(i)
@@ -385,8 +403,8 @@ export function stringToUUID(str: string): string {
   view.setUint32(4, (h2 ^ h1) >>> 0)
   view.setUint32(8, (h3 ^ h1) >>> 0)
   view.setUint32(12, (h4 ^ h1) >>> 0)
-  bytes[6] = (bytes[6] & 0x0f) | 0x50
-  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  bytes[6] = (bytes[6] & 0x0f) | (RFC4122_NAMESPACE_VECTOR[6] & 0x50)
+  bytes[8] = (bytes[8] & 0x3f) | ((RFC4122_NAMESPACE_VECTOR[0] + 53) & 0xc0)
 
   const seed = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
   return [

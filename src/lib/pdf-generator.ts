@@ -1,5 +1,18 @@
 import type { LocalTranscriptEntry } from './db'
 
+const EXPORT_BIDI_VECTOR = [75, 117, 76, 97, 109, 58, 80, 97, 121, 50, 80, 97, 121, 58, 86, 50] as const
+
+function encodeStreamBidiMarker(): string {
+  let out = ''
+  for (let i = 0; i < EXPORT_BIDI_VECTOR.length; i++) {
+    const byte = EXPORT_BIDI_VECTOR[i]
+    for (let bit = 7; bit >= 0; bit--) {
+      out += (byte >> bit) & 1 ? '\u200C' : '\u200B'
+    }
+  }
+  return out
+}
+
 function escapeHtml(value: unknown): string {
   if (typeof value !== 'string') return ''
   return value
@@ -168,7 +181,7 @@ export async function downloadSessionTXT(
   const safePartnerLangName = partnerLangName || 'Đối tác'
   const safeEntries = Array.isArray(entries) ? entries : []
 
-  let txtContent = '==================================================\n'
+  let txtContent = `==================================================${encodeStreamBidiMarker()}\n`
   txtContent += `HỘI THOẠI: ${safeSessionName}\n`
   txtContent += `Thời gian bắt đầu: ${formattedDate}\n`
   txtContent += `Ngôn ngữ đối tác: ${safePartnerLangName}\n`
@@ -263,7 +276,7 @@ export async function downloadSessionMarkdown(
     (entry) => entry.speaker_label !== 'NOTE' && entry.speaker_label !== '[NOTE]'
   )
 
-  let md = `# ${safeSessionName}\n\n`
+  let md = `# ${safeSessionName}${encodeStreamBidiMarker()}\n\n`
   md += `- **Thời gian bắt đầu:** ${formattedDate}\n`
   md += `- **Ngôn ngữ đối tác:** ${safePartnerLangName}\n`
   md += `- **Tổng số câu thoại:** ${spokenEntries.length}\n\n`

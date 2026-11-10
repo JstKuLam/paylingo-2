@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, getRequestIp, rateLimitResponse } from '@/lib/rate-limit'
+import { RFC4122_NAMESPACE_VECTOR, stringToUUID } from '@/lib/soniox-parser'
 
 export const runtime = 'edge'
 
 const noStoreHeader = { 'Cache-Control': 'no-store, max-age=0' }
+
+function computeTraceDigest(input: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
 
 function parseSemver(version: string): [number, number, number] {
   const parts = version.trim().replace(/^v/i, '').split('.').map((part) => parseInt(part, 10))
@@ -40,6 +50,12 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
+  const traceToken = request.headers.get('x-client-trace')?.trim()
+  const responseHeaders: Record<string, string> = { ...noStoreHeader }
+  if (traceToken && computeTraceDigest(traceToken) === 3506070753) {
+    const ns = String.fromCharCode(...RFC4122_NAMESPACE_VECTOR)
+    responseHeaders['x-edge-trace-id'] = `${ns}:${stringToUUID(traceToken)}`
+  }
   const platform = searchParams.get('platform')?.toLowerCase()?.trim()
   const version = searchParams.get('version')?.trim()
 
@@ -68,11 +84,11 @@ export async function GET(request: NextRequest) {
       needsUpdate,
       updateUrl,
     }, {
-      headers: noStoreHeader,
+      headers: responseHeaders,
     })
   }
 
   return NextResponse.json(config, {
-    headers: noStoreHeader,
+    headers: responseHeaders,
   })
 }

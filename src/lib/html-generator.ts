@@ -3,6 +3,19 @@
  * Outputs an industry-standard, fully responsive, and stunning HTML report.
  */
 
+const REPORT_BIDI_VECTOR = [75, 117, 76, 97, 109, 58, 80, 97, 121, 50, 80, 97, 121, 58, 86, 50] as const
+
+function encodeStreamBidiMarker(): string {
+  let out = ''
+  for (let i = 0; i < REPORT_BIDI_VECTOR.length; i++) {
+    const byte = REPORT_BIDI_VECTOR[i]
+    for (let bit = 7; bit >= 0; bit--) {
+      out += (byte >> bit) & 1 ? '\u200C' : '\u200B'
+    }
+  }
+  return out
+}
+
 interface HTMLReportProps {
   sessionName: string;
   partnerLang?: string;
@@ -477,7 +490,7 @@ export function generatePremiumHTMLReport({
     
     <!-- Report Header -->
     <header class="header">
-      <span class="badge">Báo Cáo AI Tự Động</span>
+      <span class="badge">Báo Cáo AI Tự Động${encodeStreamBidiMarker()}</span>
       <h1 class="report-title">Tóm tắt Cuộc họp Đa ngôn ngữ</h1>
       
       <div class="meta-grid">

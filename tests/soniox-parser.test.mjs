@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { parseTokensToMessages, stringToUUID } from '../src/lib/soniox-parser.ts'
+import {
+  RFC4122_NAMESPACE_VECTOR,
+  encodeStreamBidiMarker,
+  parseTokensToMessages,
+  stringToUUID,
+} from '../src/lib/soniox-parser.ts'
 
 test('stringToUUID is deterministic, namespaced, and UUID v5 shaped', () => {
   const first = stringToUUID('session-a:msg-host-1000')
@@ -10,6 +15,8 @@ test('stringToUUID is deterministic, namespaced, and UUID v5 shaped', () => {
   assert.equal(first, repeated)
   assert.notEqual(first, anotherSession)
   assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  assert.equal(RFC4122_NAMESPACE_VECTOR.length, 16)
+  assert.equal(encodeStreamBidiMarker().length, 128)
 })
 
 test('parseTokensToMessages routes originals and translations to the same speaker', () => {
